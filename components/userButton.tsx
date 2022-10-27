@@ -1,5 +1,3 @@
-import React from "react";
-
 // Dots icon
 import { HiOutlineDotsHorizontal } from "react-icons/hi";
 

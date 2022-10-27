@@ -1,5 +1,3 @@
-import React from "react";
-
 // Twitter icon
 import { BsTwitter } from "react-icons/bs";
 
