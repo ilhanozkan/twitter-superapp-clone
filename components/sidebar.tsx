@@ -12,7 +12,9 @@ const Sidebar = () => {
       <div>
         <div className="max-w-fit cursor-pointer rounded-full p-3 transition-colors duration-200 hover:bg-primary/10">
           <Link href="/">
-            <TwitterLogo />
+            <a>
+              <TwitterLogo />
+            </a>
           </Link>
         </div>
         <Navigation />
