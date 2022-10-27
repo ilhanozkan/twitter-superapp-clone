@@ -21,7 +21,6 @@ const Sidebar = () => {
         <MoreButton />
         <TweetButton />
       </div>
-
       <UserButton />
     </div>
   );
