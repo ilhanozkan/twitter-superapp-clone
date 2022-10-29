@@ -2,6 +2,7 @@ import type { NextPage } from "next";
 import Head from "next/head";
 
 import Sidebar from "../components/sidebar";
+import Feed from "../components/feed";
 
 const Home: NextPage = () => {
   return (
@@ -16,6 +17,7 @@ const Home: NextPage = () => {
       </Head>
       <main className="flex justify-center">
         <Sidebar />
+        <Feed />
       </main>
     </div>
   );
