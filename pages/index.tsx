@@ -1,10 +1,12 @@
-import type { NextPage } from "next";
+import type { GetServerSideProps } from "next";
 import Head from "next/head";
 
 import Sidebar from "../components/sidebar";
-import Feed from "../components/feed";
+import Feed from "../components/Feed";
+import fetchTweets from "../utils/fetchTweets";
+import { ITweetsData } from "../types/Tweet";
 
-const Home: NextPage = () => {
+const Home = ({ tweets }: ITweetsData) => {
   return (
     <div>
       <Head>
@@ -17,10 +19,16 @@ const Home: NextPage = () => {
       </Head>
       <main className="flex justify-center">
         <Sidebar />
-        <Feed />
+        <Feed tweets={tweets} />
       </main>
     </div>
   );
 };
 
 export default Home;
+
+export const getServerSideProps: GetServerSideProps = async (context) => {
+  const tweets = await fetchTweets();
+
+  return { props: { tweets } };
+};

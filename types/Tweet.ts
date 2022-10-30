@@ -1,4 +1,4 @@
-export interface Tweet extends TweetBody {
+export interface ITweet extends TweetBody {
   _id: string;
   _createdAt: string;
   _updatedAt: string;
@@ -8,8 +8,17 @@ export interface Tweet extends TweetBody {
 }
 
 export type TweetBody = {
+  fullname: string;
   username: string;
-  message: string;
+  tweet: string;
   userImage: string;
-  image?: string;
+  tweetImage?: string;
 };
+
+export interface ITweetsData {
+  tweets: ITweet[];
+}
+
+export interface ITweetData {
+  tweet: ITweet;
+}

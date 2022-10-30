@@ -30,15 +30,8 @@ import {
   HiOutlineMail,
   HiMail,
 } from "react-icons/hi";
-import { IconType } from "react-icons/lib";
 
-interface INavItem {
-  icon: IconType;
-  activeIcon: IconType;
-  name: string;
-  link: string;
-  active: boolean;
-}
+import { INavItem } from "../types/Nav";
 
 const Navigation = () => {
   const router = useRouter();
@@ -115,7 +108,7 @@ const Navigation = () => {
 
               {navItem.active ? (
                 <p className="ml-4 text-lg">
-                  <b>{navItem.name}</b>
+                  <strong>{navItem.name}</strong>
                 </p>
               ) : (
                 <p className="ml-4 text-lg">{navItem.name}</p>

@@ -14,6 +14,11 @@ export default {
       type: "string",
     },
     {
+      name: "fullname",
+      title: "Fullname",
+      type: "string",
+    },
+    {
       name: "userImage",
       title: "User's profile image",
       type: "string",
@@ -30,4 +35,5 @@ export default {
       type: "boolean",
     },
   ],
+  initialValue: { blockTweet: false },
 };

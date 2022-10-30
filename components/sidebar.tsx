@@ -8,7 +8,7 @@ import UserButton from "./userButton";
 
 const Sidebar = () => {
   return (
-    <div className="flex h-screen w-72 flex-col justify-between border-r border-gray-100 px-4">
+    <div className="sticky top-0 flex h-screen w-72 flex-col justify-between border-r border-gray-100 px-4">
       <div>
         <div className="max-w-fit cursor-pointer rounded-full p-3 transition-colors duration-200 hover:bg-primary/10">
           <Link href="/">

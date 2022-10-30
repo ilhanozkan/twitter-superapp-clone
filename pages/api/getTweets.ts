@@ -1,11 +1,11 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { groq } from "next-sanity";
 
-import { Tweet } from "../../types/Tweet";
+import { ITweet } from "../../types/Tweet";
 import { sanityClient } from "../../sanity";
 
 type Data = {
-  tweet: Tweet[];
+  tweet: ITweet[];
 };
 
 const feedQuery = groq`
@@ -19,7 +19,7 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<Data>
 ) {
-  const tweets: Tweet[] = await sanityClient.fetch(feedQuery);
+  const tweets: ITweet[] = await sanityClient.fetch(feedQuery);
 
   res.status(200).json({ tweets });
 }
