@@ -15,7 +15,7 @@ const Tweet = ({ tweet }: ITweetData) => {
           className="cursor-pointer rounded-full"
         />
       </div>
-      <div>
+      <div className="w-full">
         <div className="ml-2 w-tweet">
           <div>
             <div className="flex items-center gap-1">
