@@ -1,15 +1,16 @@
-import { useState } from "react";
+import { useSelector } from "react-redux";
+import { RootState } from "../../store";
 
-import { ITweet, ITweetsData } from "../../types/Tweet";
+import { ITweet } from "../../types/Tweet";
 import CreateTweet from "../createTweet";
 import Tweet from "./tweet";
 
-const Feed = ({ tweets }: ITweetsData) => {
-  const [feed, setFeed] = useState(tweets);
+const Feed = () => {
+  const feed = useSelector((state: RootState) => state.feed.value);
 
   return (
     <div className="border-r border-gray-100">
-      <CreateTweet setFeed={setFeed} />
+      <CreateTweet />
 
       {feed.map((tweet: ITweet) => (
         <Tweet key={tweet._id} tweet={tweet} />

@@ -36,7 +36,5 @@ export default async function handler(
 
   const jsonData = await result.json();
 
-  console.log(jsonData);
-
   res.status(200).json("Ok");
 }

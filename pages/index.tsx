@@ -1,12 +1,21 @@
 import type { GetServerSideProps } from "next";
 import Head from "next/head";
+import { useEffect } from "react";
+import { useDispatch } from "react-redux";
 
 import Sidebar from "../components/sidebar";
 import Feed from "../components/Feed";
 import fetchTweets from "../utils/fetchTweets";
 import { ITweetsData } from "../types/Tweet";
+import { setFeed } from "../slices/feedSlice";
 
 const Home = ({ tweets }: ITweetsData) => {
+  const dispatch = useDispatch();
+
+  useEffect(() => {
+    dispatch(setFeed(tweets));
+  });
+
   return (
     <div>
       <Head>
@@ -19,7 +28,7 @@ const Home = ({ tweets }: ITweetsData) => {
       </Head>
       <main className="flex justify-center">
         <Sidebar />
-        <Feed tweets={tweets} />
+        <Feed />
       </main>
     </div>
   );

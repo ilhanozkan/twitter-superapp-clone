@@ -1,14 +1,13 @@
-import { useState, FormEvent, SetStateAction, Dispatch } from "react";
+import { useState, FormEvent } from "react";
+import { useDispatch } from "react-redux";
 
-import { ITweet, TweetBody } from "../types/Tweet";
+import { TweetBody } from "../types/Tweet";
 import fetchTweets from "../utils/fetchTweets";
+import { setFeed } from "../slices/feedSlice";
 
-interface Props {
-  setFeed: Dispatch<SetStateAction<ITweet[]>>;
-}
-
-const CreateTweet = ({ setFeed }: Props) => {
+const CreateTweet = () => {
   const [tweetMsg, setTweetMsg] = useState("");
+  const dispatch = useDispatch();
 
   const postTweet = async () => {
     const tweetInfo: TweetBody = {
@@ -30,7 +29,7 @@ const CreateTweet = ({ setFeed }: Props) => {
     const json = await result.json();
     const newTweets = await fetchTweets();
 
-    setFeed(newTweets);
+    dispatch(setFeed(newTweets));
   };
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
