@@ -5,6 +5,7 @@ import { useDispatch } from "react-redux";
 
 import Sidebar from "../components/sidebar";
 import Feed from "../components/Feed";
+import RightBar from "../components/RightBar";
 import fetchTweets from "../utils/fetchTweets";
 import { ITweetsData } from "../types/Tweet";
 import { setFeed } from "../slices/feedSlice";
@@ -29,6 +30,7 @@ const Home = ({ tweets }: ITweetsData) => {
       <main className="flex justify-center">
         <Sidebar />
         <Feed />
+        <RightBar />
       </main>
     </div>
   );
