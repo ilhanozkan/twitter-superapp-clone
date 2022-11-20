@@ -39,7 +39,7 @@ const CreateTweet = () => {
   };
 
   return (
-    <form onSubmit={handleSubmit}>
+    <form onSubmit={handleSubmit} className="px-4">
       <input
         type="text"
         placeholder="What's happening?"
