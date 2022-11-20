@@ -22,12 +22,28 @@ const TweetActions = () => {
       {icons.map((icon) => (
         <button className="group mt-1 flex cursor-pointer items-center justify-center text-xl text-gray-600">
           <div
-            className={`rounded-full fill-primary p-2 group-hover:bg-primary group-hover:bg-opacity-10`}
+            className={`rounded-full p-2 ${
+              icon.name == "Retweet"
+                ? "group-hover:bg-green group-hover:text-green"
+                : icon.name == "Like"
+                ? "group-hover:bg-pink group-hover:text-pink"
+                : "group-hover:bg-primary group-hover:text-primary"
+            } transition-colors duration-150 group-hover:bg-opacity-10`}
           >
             {React.createElement(icon.icon, null, null)}
           </div>
           {icon.name != "Share" && (
-            <p className={`ml-3 text-sm group-hover:text-primary`}>5</p>
+            <p
+              className={`ml-3 text-sm ${
+                icon.name == "Retweet"
+                  ? "group-hover:text-green"
+                  : icon.name == "Like"
+                  ? "group-hover:text-pink"
+                  : "group-hover:text-primary"
+              } transition-colors duration-150`}
+            >
+              5
+            </p>
           )}
         </button>
       ))}
