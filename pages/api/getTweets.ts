@@ -1,25 +1,14 @@
 import type { NextApiRequest, NextApiResponse } from "next";
-import { groq } from "next-sanity";
 
-import { ITweet } from "../../types/Tweet";
-import { sanityClient } from "../../sanity";
-
-type Data = {
-  tweet: ITweet[];
-};
-
-const feedQuery = groq`
-  *[_type == "tweet" && !blockTweet] {
-    _id,
-    ...
-  } | order(_createdAt desc)
-`;
+import { MAX_PAGE_SIZE } from "../../lib/constants";
+import { getRepository } from "../../lib/db";
+import { ITweetsData } from "../../types/Tweet";
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<Data>
+  res: NextApiResponse<ITweetsData>
 ) {
-  const tweets: ITweet[] = await sanityClient.fetch(feedQuery);
+  const { items } = await getRepository().listTweets({ limit: MAX_PAGE_SIZE });
 
-  res.status(200).json({ tweets });
+  res.status(200).json({ tweets: items });
 }

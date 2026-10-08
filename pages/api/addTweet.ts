@@ -1,40 +1,48 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
+import { textLength, TWEET_MAX_LENGTH } from "../../lib/constants";
+import { getRepository } from "../../lib/db";
 import { TweetBody } from "../../types/Tweet";
+
+export const config = { api: { bodyParser: { sizeLimit: "16kb" } } };
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<string>
 ) {
-  const API_ENDPOINT = `https://${process.env.NEXT_PUBLIC_SANITY_PROJECT_ID}.api.sanity.io/v2021-06-07/data/mutate/${process.env.NEXT_PUBLIC_SANITY_DATASET}`;
-  const data: TweetBody = JSON.parse(req.body);
+  let data: Partial<TweetBody>;
+  try {
+    data = typeof req.body === "string" ? JSON.parse(req.body) : req.body;
+  } catch {
+    return res.status(400).json("Invalid JSON");
+  }
 
-  const mutations = {
-    mutations: [
-      {
-        create: {
-          _type: "tweet",
-          blockTweet: false,
-          fullname: data.fullname,
-          username: data.username,
-          tweet: data.tweet,
-          userImage: data.userImage,
-          tweetImage: data.tweetImage,
-        },
-      },
-    ],
-  };
+  const optionalString = (value: unknown) =>
+    value === undefined || value === null || typeof value === "string";
 
-  const result = await fetch(API_ENDPOINT, {
-    method: "post",
-    headers: {
-      "content-type": "application/json",
-      Authorization: `Bearer ${process.env.SANITY_API_TOKEN}`,
+  if (
+    typeof data?.tweet !== "string" ||
+    !data.tweet.trim() ||
+    textLength(data.tweet) > TWEET_MAX_LENGTH ||
+    typeof data.username !== "string" ||
+    typeof data.fullname !== "string" ||
+    !optionalString(data.userImage) ||
+    !optionalString(data.tweetImage)
+  ) {
+    return res
+      .status(400)
+      .json("tweet (1-280 characters), username and fullname are required");
+  }
+
+  await getRepository().createTweet({
+    text: data.tweet,
+    image: data.tweetImage || null,
+    author: {
+      username: data.username,
+      fullname: data.fullname,
+      image: data.userImage || null,
     },
-    body: JSON.stringify(mutations),
   });
-
-  const jsonData = await result.json();
 
   res.status(200).json("Ok");
 }

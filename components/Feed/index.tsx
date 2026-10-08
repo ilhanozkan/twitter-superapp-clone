@@ -13,7 +13,7 @@ const Feed = () => {
       <CreateTweet />
 
       {feed.map((tweet: ITweet) => (
-        <Tweet key={tweet._id} tweet={tweet} />
+        <Tweet key={tweet.id} tweet={tweet} />
       ))}
     </div>
   );

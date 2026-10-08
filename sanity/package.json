@@ -1,31 +1,34 @@
 {
-  "name": "twitter-superapp-clone",
+  "name": "twitter-superapp-studio",
   "private": true,
-  "version": "1.0.0",
-  "description": "This example shows how to use [Tailwind CSS](https://tailwindcss.com/) [(v3.0)](https://tailwindcss.com/blog/tailwindcss-v3) with Next.js. It follows the steps outlined in the official [Tailwind docs](https://tailwindcss.com/docs/guides/nextjs)",
-  "main": "package.json",
+  "version": "2.0.0",
+  "description": "Sanity Studio (content backend) for the Twitter SuperApp clone",
   "author": "Ilhan Ozkan <20010310032@ogrenci.bartin.edu.tr>",
   "license": "UNLICENSED",
+  "engines": {
+    "node": ">=22.20"
+  },
   "scripts": {
-    "start": "sanity start",
-    "build": "sanity build"
+    "dev": "sanity dev",
+    "start": "sanity dev",
+    "build": "sanity build",
+    "preview": "sanity preview",
+    "deploy": "sanity deploy",
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit"
   },
   "keywords": [
     "sanity"
   ],
   "dependencies": {
-    "@sanity/base": "^2.35.0",
-    "@sanity/core": "^2.35.0",
-    "@sanity/default-layout": "^2.35.0",
-    "@sanity/default-login": "^2.35.0",
-    "@sanity/desk-tool": "^2.35.0",
-    "@sanity/eslint-config-studio": "^2.0.0",
-    "@sanity/vision": "^2.35.0",
-    "eslint": "^8.6.0",
-    "prop-types": "^15.7",
-    "react": "^17.0",
-    "react-dom": "^17.0",
-    "styled-components": "^5.2.0"
+    "@sanity/vision": "6.15.0",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0",
+    "sanity": "6.15.0",
+    "styled-components": "^6.1.15"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "@types/node": "^22.18.0",
+    "@types/react": "^19.2.0",
+    "typescript": "^5.9.3"
+  }
 }

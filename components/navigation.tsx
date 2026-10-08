@@ -88,7 +88,9 @@ const Navigation = () => {
     },
   ];
 
-  navigation.find((nav) => router.pathname == nav.link)!.active = true;
+  // Pages outside the menu (e.g. /lists) have no active item.
+  const activeItem = navigation.find((nav) => router.pathname == nav.link);
+  if (activeItem) activeItem.active = true;
 
   return (
     <ul>

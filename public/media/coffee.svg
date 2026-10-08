@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="A cup of Turkish coffee">
+  <rect width="1200" height="675" fill="#fef3c7"/>
+  <circle cx="600" cy="390" r="250" fill="#fde68a"/>
+  <ellipse cx="600" cy="520" rx="230" ry="40" fill="#92400e" fill-opacity=".25"/>
+  <path d="M470 330 H730 L705 500 Q600 540 495 500Z" fill="#b91c1c"/>
+  <ellipse cx="600" cy="330" rx="130" ry="26" fill="#451a03"/>
+  <path d="M730 360 q70 10 60 70 q-10 50 -80 40" fill="none" stroke="#b91c1c" stroke-width="18"/>
+  <ellipse cx="600" cy="510" rx="190" ry="26" fill="#e5e7eb"/>
+  <g fill="none" stroke="#78350f" stroke-width="10" stroke-linecap="round" stroke-opacity=".5">
+    <path d="M560 270 q-20 -40 10 -70 q30 -30 0 -70"/><path d="M640 270 q-20 -40 10 -70 q30 -30 0 -70"/>
+  </g>
+</svg>
