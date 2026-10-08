@@ -147,8 +147,11 @@ describe("POST /api/tweets", () => {
     expect(plain.statusCode).toBe(415);
     expect(plain.body.error.code).toBe("unsupported_media_type");
 
-    const array = await call(api.tweets, { method: "POST", ...json(["hi"]) });
-    expect(array.statusCode).toBe(400);
+    for (const body of [["hi"], null, "hi"]) {
+      const res = await call(api.tweets, { method: "POST", ...json(body) });
+      expect(res.statusCode, JSON.stringify(body)).toBe(400);
+      expect(res.body.error.code).toBe("bad_request");
+    }
   });
 
   it("rejects cross-origin writes", async () => {
@@ -171,6 +174,10 @@ describe("/api/tweets/:id", () => {
     expect(
       (await call(api.tweet, { query: { id: "seed-t03" } })).body.tweet.id
     ).toBe("seed-t03");
+    // With the current user's reactions.
+    expect(
+      (await call(api.tweet, { query: { id: "seed-t01" } })).body.tweet.viewer
+    ).toMatchObject({ retweeted: true });
     expect(
       (await call(api.tweet, { query: { id: "missing" } })).statusCode
     ).toBe(404);
@@ -296,6 +303,38 @@ describe("reactions", () => {
   });
 });
 
+describe("read-only mode", () => {
+  it("rejects every write route", async () => {
+    vi.stubEnv("READ_ONLY", "true");
+    const id = { id: "seed-t05" };
+    const writes: [
+      string,
+      Parameters<typeof call>[0],
+      Parameters<typeof call>[1]
+    ][] = [
+      ["POST /tweets", api.tweets, { method: "POST", ...json({ text: "hi" }) }],
+      ["DELETE /tweets/:id", api.tweet, { method: "DELETE", query: id }],
+      [
+        "POST /replies",
+        api.replies,
+        { method: "POST", query: id, ...json({ text: "hi" }) },
+      ],
+      ["PUT /like", api.like, { method: "PUT", query: id }],
+      ["DELETE /like", api.like, { method: "DELETE", query: id }],
+      ["PUT /retweet", api.retweet, { method: "PUT", query: id }],
+      ["DELETE /retweet", api.retweet, { method: "DELETE", query: id }],
+      ["PUT /bookmark", api.bookmark, { method: "PUT", query: id }],
+      ["DELETE /bookmark", api.bookmark, { method: "DELETE", query: id }],
+    ];
+    for (const [name, handler, request] of writes) {
+      const res = await call(handler, request);
+      expect(res.statusCode, name).toBe(403);
+      expect(res.body.error.code, name).toBe("read_only");
+    }
+    expect((await call(api.tweet, { query: id })).statusCode).toBe(200);
+  });
+});
+
 describe("users, me, trends, notifications, health", () => {
   it("returns profiles", async () => {
     const res = await call(api.user, { query: { username: "LenaFrames" } });
@@ -318,6 +357,9 @@ describe("users, me, trends, notifications, health", () => {
       fullname: "Ilhan Ozkan",
     });
     expect(me.body.readOnly).toBe(false);
+    vi.stubEnv("READ_ONLY", "true");
+    expect((await call(api.me)).body.readOnly).toBe(true);
+    vi.stubEnv("READ_ONLY", "");
 
     vi.stubEnv("DEMO_USERNAME", "sarahcodes");
     expect((await call(api.me)).body.user).toMatchObject({

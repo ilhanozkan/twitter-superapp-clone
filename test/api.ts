@@ -86,12 +86,30 @@ export const json = (body: unknown, headers: Record<string, string> = {}) => ({
 });
 
 /**
+ * Pins every setting the API reads to its default, so variables exported in
+ * the developer's shell (READ_ONLY, DEMO_USERNAME, ...) cannot change results.
+ * Tests that need another value stub it explicitly.
+ */
+export function stubDefaultEnv() {
+  vi.stubEnv("DATA_SOURCE", "memory");
+  for (const name of [
+    "READ_ONLY",
+    "DEMO_USERNAME",
+    "WRITE_RATE_LIMIT",
+    "TRUST_PROXY",
+    "VERCEL",
+  ]) {
+    vi.stubEnv(name, "");
+  }
+}
+
+/**
  * Imports API routes against a fresh in-memory dataset: module state (the
  * repository, the rate limiter) and the seeded store are reset.
  */
 export async function freshRoutes() {
   vi.resetModules();
-  vi.stubEnv("DATA_SOURCE", "memory");
+  stubDefaultEnv();
   const globals = globalThis as {
     __superappMemoryState?: unknown;
     __superappWriteLimiters?: unknown;

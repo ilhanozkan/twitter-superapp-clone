@@ -4,6 +4,7 @@ import {
   createTweetBody,
   isSafeImageUrl,
   listTweetsQuery,
+  routeId,
   tweetText,
 } from "./validation";
 
@@ -68,5 +69,20 @@ describe("listTweetsQuery", () => {
     expect(listTweetsQuery.safeParse({ bookmarked: "yes" }).success).toBe(
       false
     );
+  });
+});
+
+describe("routeId", () => {
+  const req = (id: unknown) => ({ query: { id } } as never);
+
+  it("accepts document ids", () => {
+    expect(routeId(req("seed-t01"))).toBe("seed-t01");
+    expect(routeId(req("a.b_c-1"))).toBe("a.b_c-1");
+  });
+
+  it("reports anything else as not found", () => {
+    for (const id of ["../etc", "a/b", "", "x".repeat(129), ["a"], undefined]) {
+      expect(() => routeId(req(id)), String(id)).toThrow("Tweet not found");
+    }
   });
 });

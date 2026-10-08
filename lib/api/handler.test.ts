@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
-import { call } from "../../test/api";
+import { call, stubDefaultEnv } from "../../test/api";
 
 let createHandler: typeof import("./handler").createHandler;
 // Imported after resetModules so `instanceof` checks see the same classes as the handler.
@@ -10,6 +10,9 @@ let dbErrors: typeof import("../db/errors");
 
 beforeEach(async () => {
   vi.resetModules();
+  stubDefaultEnv();
+  delete (globalThis as { __superappWriteLimiters?: unknown })
+    .__superappWriteLimiters;
   ({ createHandler } = await import("./handler"));
   errors = await import("./errors");
   dbErrors = await import("../db/errors");
@@ -179,6 +182,23 @@ describe("createHandler", () => {
     expect((await call(handler, from("2.2.2.2"))).statusCode).toBe(201);
   });
 
+  it("shares one write budget across methods and routes", async () => {
+    vi.stubEnv("WRITE_RATE_LIMIT", "3");
+    const post = createHandler({ POST: (req, res) => res.status(201).end() });
+    const reaction = createHandler({
+      PUT: (req, res) => res.status(200).end(),
+      DELETE: (req, res) => res.status(200).end(),
+    });
+
+    expect((await call(post, { method: "POST" })).statusCode).toBe(201);
+    expect((await call(reaction, { method: "PUT" })).statusCode).toBe(200);
+    expect((await call(reaction, { method: "DELETE" })).statusCode).toBe(200);
+    expect((await call(reaction, { method: "PUT" })).statusCode).toBe(429);
+    // Reads are never limited.
+    const read = createHandler({ GET: (req, res) => res.status(200).end() });
+    expect((await call(read)).statusCode).toBe(200);
+  });
+
   it("ignores forwarding headers unless a proxy is trusted", async () => {
     const { clientAddress } = await import("./handler");
     const req = (headers: Record<string, string>) =>
@@ -235,12 +255,16 @@ describe("createHandler", () => {
       const handler = createHandler({
         GET: (req, res) => res.status(200).json({}),
         POST: (req, res) => res.status(201).json({}),
+        PUT: (req, res) => res.status(200).json({}),
+        DELETE: (req, res) => res.status(204).end(),
       });
 
       expect((await call(handler)).statusCode).toBe(200);
-      const res = await call(handler, { method: "POST" });
-      expect(res.statusCode).toBe(403);
-      expect(res.body.error.code).toBe("read_only");
+      for (const method of ["POST", "PUT", "DELETE"]) {
+        const res = await call(handler, { method });
+        expect(res.statusCode, method).toBe(403);
+        expect(res.body.error.code).toBe("read_only");
+      }
     }
   );
 
