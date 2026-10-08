@@ -6,7 +6,8 @@ import { useDispatch } from "react-redux";
 import Sidebar from "../components/sidebar";
 import Feed from "../components/Feed";
 import RightBar from "../components/RightBar";
-import fetchTweets from "../utils/fetchTweets";
+import { MAX_PAGE_SIZE } from "../lib/constants";
+import { getRepository } from "../lib/db";
 import { ITweetsData } from "../types/Tweet";
 import { setFeed } from "../slices/feedSlice";
 
@@ -38,8 +39,8 @@ const Home = ({ tweets }: ITweetsData) => {
 
 export default Home;
 
-export const getServerSideProps: GetServerSideProps = async (context) => {
-  const tweets = await fetchTweets();
+export const getServerSideProps: GetServerSideProps<ITweetsData> = async () => {
+  const { items } = await getRepository().listTweets({ limit: MAX_PAGE_SIZE });
 
-  return { props: { tweets } };
+  return { props: { tweets: items } };
 };

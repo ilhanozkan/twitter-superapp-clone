@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="675" viewBox="0 0 1200 675" role="img" aria-label="Mountains at sunrise">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fb923c"/><stop offset=".55" stop-color="#fda4af"/><stop offset="1" stop-color="#fde68a"/></linearGradient>
+    <linearGradient id="m1" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#7c3aed"/><stop offset="1" stop-color="#4c1d95"/></linearGradient>
+    <linearGradient id="m2" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#312e81"/><stop offset="1" stop-color="#1e1b4b"/></linearGradient>
+  </defs>
+  <rect width="1200" height="675" fill="url(#sky)"/>
+  <circle cx="820" cy="300" r="90" fill="#fff7ed" fill-opacity=".9"/>
+  <path d="M0 470 L180 300 L330 420 L520 220 L720 430 L880 330 L1200 500 L1200 675 L0 675Z" fill="url(#m1)" fill-opacity=".85"/>
+  <path d="M0 560 L220 420 L420 540 L640 380 L860 560 L1040 470 L1200 560 L1200 675 L0 675Z" fill="url(#m2)"/>
+</svg>

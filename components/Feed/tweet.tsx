@@ -10,9 +10,9 @@ const Tweet = ({ tweet }: ITweetData) => {
     <article className="ml-4 flex">
       <div className="h-full">
         <img
-          src={tweet.userImage}
-          alt={tweet.userImage}
-          className="cursor-pointer rounded-full"
+          src={tweet.author.image ?? undefined}
+          alt={tweet.author.fullname}
+          className="h-12 w-12 cursor-pointer rounded-full"
         />
       </div>
       <div className="w-full">
@@ -22,31 +22,31 @@ const Tweet = ({ tweet }: ITweetData) => {
               <Link href="/">
                 <a className="hover:underline">
                   <p>
-                    <strong>{tweet.fullname}</strong>
+                    <strong>{tweet.author.fullname}</strong>
                   </p>
                 </a>
               </Link>
               <Link href="/">
                 <a className="text-sm text-gray-600">
-                  <p>@{tweet.username}</p>
+                  <p>@{tweet.author.username}</p>
                 </a>
               </Link>
               <p className="mb-2">.</p>
               <Link href="/">
                 <a className="text-sm text-gray-600 hover:underline">
                   <p>
-                    <TimeAgo date={tweet._createdAt} />
+                    <TimeAgo date={tweet.createdAt} />
                   </p>
                 </a>
               </Link>
             </div>
 
-            <p className="block">{tweet.tweet}</p>
+            <p className="block">{tweet.text}</p>
           </div>
-          {tweet.tweetImage && (
+          {tweet.image && (
             <img
-              src={tweet.tweetImage}
-              alt={tweet.tweet}
+              src={tweet.image}
+              alt=""
               className="mt-3 max-h-mh max-w-md rounded-2xl"
             />
           )}
