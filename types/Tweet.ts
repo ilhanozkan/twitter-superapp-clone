@@ -32,11 +32,3 @@ export interface IReply {
 }
 
 export type ReactionKind = "like" | "retweet" | "bookmark";
-
-export interface ITweetsData {
-  tweets: ITweet[];
-}
-
-export interface ITweetData {
-  tweet: ITweet;
-}

@@ -116,8 +116,8 @@ export const USER_QUERY = `{
     "joinedAt": coalesce(joinedAt, _createdAt)
   },
   "latest": *[${TWEET_FILTER} && lower(username) == $username] | order(_createdAt desc)[0] ${author(
-  "userImage"
-)},
+    "userImage"
+  )},
   "firstTweetAt": *[${TWEET_FILTER} && lower(username) == $username] | order(_createdAt asc)[0]._createdAt,
   "tweetCount": count(*[${TWEET_FILTER} && lower(username) == $username])
 }`;

@@ -1,0 +1,43 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      next:
+        patterns:
+          [
+            "next",
+            "eslint-config-next",
+            "react",
+            "react-dom",
+            "@types/react",
+            "@types/react-dom",
+          ]
+      tooling:
+        patterns:
+          [
+            "eslint*",
+            "prettier*",
+            "vitest",
+            "@vitest/*",
+            "@playwright/test",
+            "@testing-library/*",
+            "typescript",
+            "tsx",
+            "jsdom",
+          ]
+
+  - package-ecosystem: npm
+    directory: /sanity
+    schedule:
+      interval: weekly
+    groups:
+      sanity:
+        patterns: ["sanity", "@sanity/*"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
