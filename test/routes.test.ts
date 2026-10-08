@@ -312,10 +312,12 @@ describe("users, me, trends, notifications, health", () => {
   });
 
   it("returns the current user, configurable with DEMO_USERNAME", async () => {
-    expect((await call(api.me)).body.user).toMatchObject({
+    const me = await call(api.me);
+    expect(me.body.user).toMatchObject({
       username: "illlhanozkan",
       fullname: "Ilhan Ozkan",
     });
+    expect(me.body.readOnly).toBe(false);
 
     vi.stubEnv("DEMO_USERNAME", "sarahcodes");
     expect((await call(api.me)).body.user).toMatchObject({

@@ -139,6 +139,7 @@ describe("createHandler", () => {
   it("rate-limits writes per client", async () => {
     vi.resetModules();
     vi.stubEnv("WRITE_RATE_LIMIT", "2");
+    vi.stubEnv("TRUST_PROXY", "true");
     ({ createHandler } = await import("./handler"));
 
     const handler = createHandler({
@@ -157,6 +158,31 @@ describe("createHandler", () => {
     expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
 
     expect((await call(handler, from("2.2.2.2"))).statusCode).toBe(201);
+  });
+
+  it("ignores forwarding headers unless a proxy is trusted", async () => {
+    const { clientAddress } = await import("./handler");
+    const req = {
+      headers: { "x-forwarded-for": "6.6.6.6", "x-real-ip": "7.7.7.7" },
+      socket: { remoteAddress: "10.0.0.2" },
+    } as never;
+
+    expect(clientAddress(req, {})).toBe("10.0.0.2");
+    expect(clientAddress(req, { TRUST_PROXY: "true" })).toBe("7.7.7.7");
+    expect(clientAddress(req, { VERCEL: "1" })).toBe("7.7.7.7");
+  });
+
+  it("rejects every write in read-only mode", async () => {
+    vi.stubEnv("READ_ONLY", "true");
+    const handler = createHandler({
+      GET: (req, res) => res.status(200).json({}),
+      POST: (req, res) => res.status(201).json({}),
+    });
+
+    expect((await call(handler)).statusCode).toBe(200);
+    const res = await call(handler, { method: "POST" });
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error.code).toBe("read_only");
   });
 
   it("can disable rate limiting", async () => {

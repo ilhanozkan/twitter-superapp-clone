@@ -24,6 +24,11 @@ export interface UserResponse {
   user: IUserProfile;
 }
 
+export interface MeResponse extends UserResponse {
+  /** True when the server rejects writes (READ_ONLY=true). */
+  readOnly: boolean;
+}
+
 export interface TrendsResponse {
   items: ITrend[];
 }

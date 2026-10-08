@@ -21,6 +21,17 @@ export function getCurrentUsername(
   return username;
 }
 
+/**
+ * READ_ONLY=true turns every write into a 403. Without sign-in every visitor
+ * acts as DEMO_USERNAME, so public deployments with a write token should
+ * enable it (or add authentication).
+ */
+export function isReadOnly(
+  env: Record<string, string | undefined> = process.env
+): boolean {
+  return env.READ_ONLY === "true";
+}
+
 /** The current user's profile; a minimal one if the data source has none yet. */
 export async function getCurrentProfile(): Promise<IUserProfile> {
   const username = getCurrentUsername();

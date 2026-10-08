@@ -5,12 +5,20 @@ All endpoints live under `/api`, take and return JSON, and act as the
 named by `DEMO_USERNAME` (default `illlhanozkan`). Identity is decided on the
 server (`lib/auth.ts`) and is never read from request bodies.
 
+> **Public deployments:** without sign-in, every visitor acts as
+> `DEMO_USERNAME`. With a Sanity write token that means anyone can post, react
+> and delete that account's tweets. Set `READ_ONLY=true` to reject all writes
+> (403 `read_only`; `GET /api/me` reports `readOnly`) until authentication is
+> added.
+
 ## Conventions
 
 - **Writes** (`POST`, `PUT`, `DELETE`) must come from the same origin (checked
   with the `Origin` header) and are rate limited per client
-  (`WRITE_RATE_LIMIT` per minute, default 30; `0` disables it). Request bodies
-  must be `Content-Type: application/json` and at most 16 KB.
+  (`WRITE_RATE_LIMIT` per minute, default 30; `0` disables it). The client is
+  identified by its socket address, or by `X-Real-IP`/`X-Forwarded-For` when
+  `TRUST_PROXY=true` (automatic on Vercel). Request bodies must be
+  `Content-Type: application/json` and at most 16 KB.
 - **Errors** share one shape. `requestId` is also sent as the `X-Request-Id`
   header and appears in server logs:
 
@@ -30,6 +38,7 @@ server (`lib/auth.ts`) and is never read from request bodies.
   | 400    | `validation_error`       | Invalid body or query (see `details`)                   |
   | 400    | `bad_request`            | The body is not a JSON object                           |
   | 403    | `forbidden`              | Cross-origin write, or deleting someone else's tweet    |
+  | 403    | `read_only`              | Any write while `READ_ONLY=true`                        |
   | 404    | `not_found`              | Unknown or moderated tweet, unknown user                |
   | 405    | `method_not_allowed`     | See the `Allow` header                                  |
   | 415    | `unsupported_media_type` | Body is not `application/json`                          |
@@ -79,7 +88,7 @@ server (`lib/auth.ts`) and is never read from request bodies.
 | `PUT /api/tweets/:id/retweet`   | Retweet (idempotent); `DELETE` undoes it                             | `200 { tweet }`              |
 | `PUT /api/tweets/:id/bookmark`  | Bookmark (idempotent); `DELETE` removes it                           | `200 { tweet }`              |
 | `GET /api/users/:username`      | Profile with `tweetCount` (case-insensitive)                         | `200 { user }`               |
-| `GET /api/me`                   | The current user's profile                                           | `200 { user }`               |
+| `GET /api/me`                   | The current user's profile and whether writes are allowed            | `200 { user, readOnly }`     |
 | `GET /api/notifications?limit=` | Likes, retweets and replies others made on your tweets, newest first | `200 { items }`              |
 | `GET /api/trends?limit=`        | Most used hashtags (default 10, max 20); cacheable for 60 s          | `200 { items }`              |
 | `GET /api/health`               | Liveness and the configured data source                              | `200 { status, dataSource }` |

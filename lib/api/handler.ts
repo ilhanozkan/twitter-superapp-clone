@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ZodError } from "zod";
 
+import { isReadOnly } from "../auth";
 import { ConfigurationError, NotFoundError } from "../db/errors";
 import { ApiError, ErrorCode, ValidationIssue } from "./errors";
 import { createRateLimiter } from "./rateLimit";
@@ -24,25 +25,46 @@ export interface ApiErrorBody {
 const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 const REQUEST_ID = /^[A-Za-z0-9_-]{1,64}$/;
 
-const writesPerMinute = Number(process.env.WRITE_RATE_LIMIT ?? 30);
-const checkWriteLimit =
-  writesPerMinute > 0
-    ? createRateLimiter({ limit: writesPerMinute, windowMs: 60_000 })
-    : null;
+// Kept on globalThis: Next.js bundles every API route separately, and a
+// module-level limiter would give each route its own budget.
+const globalLimiters = globalThis as typeof globalThis & {
+  __superappWriteLimiters?: Map<number, ReturnType<typeof createRateLimiter>>;
+};
+
+function writeLimiter() {
+  const perMinute = Number(process.env.WRITE_RATE_LIMIT ?? 30);
+  if (!(perMinute > 0)) return null;
+
+  const limiters = (globalLimiters.__superappWriteLimiters ??= new Map());
+  let limiter = limiters.get(perMinute);
+  if (!limiter) {
+    limiter = createRateLimiter({ limit: perMinute, windowMs: 60_000 });
+    limiters.set(perMinute, limiter);
+  }
+  return limiter;
+}
 
 export function headerValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
-/** Best-effort client address: the first X-Forwarded-For hop set by the proxy, else the socket. */
-export function clientAddress(req: NextApiRequest): string {
-  const forwarded = headerValue(req.headers["x-forwarded-for"]);
-  if (forwarded) return forwarded.split(",")[0].trim();
-  return (
-    headerValue(req.headers["x-real-ip"]) ??
-    req.socket?.remoteAddress ??
-    "unknown"
-  );
+/**
+ * The client address used for rate limiting. Forwarding headers are only
+ * trusted behind a proxy that sets them (TRUST_PROXY=true, or on Vercel);
+ * otherwise any client could pick a new address for every request.
+ */
+export function clientAddress(
+  req: NextApiRequest,
+  env: Record<string, string | undefined> = process.env
+): string {
+  if (env.TRUST_PROXY === "true" || env.VERCEL === "1") {
+    const realIp = headerValue(req.headers["x-real-ip"])?.trim();
+    if (realIp) return realIp;
+
+    const forwarded = headerValue(req.headers["x-forwarded-for"]);
+    if (forwarded) return forwarded.split(",")[0].trim();
+  }
+  return req.socket?.remoteAddress ?? "unknown";
 }
 
 /**
@@ -137,9 +159,12 @@ export function createHandler(routes: Routes) {
 
       if (WRITE_METHODS.has(method)) {
         res.setHeader("Cache-Control", "no-store");
+        if (isReadOnly()) {
+          throw new ApiError(403, "read_only", "This site is read-only");
+        }
         assertSameOrigin(req);
 
-        const limit = checkWriteLimit?.(clientAddress(req));
+        const limit = writeLimiter()?.(clientAddress(req));
         if (limit && !limit.allowed) {
           res.setHeader("Retry-After", String(limit.retryAfter));
           throw new ApiError(

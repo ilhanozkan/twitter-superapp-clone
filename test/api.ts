@@ -92,8 +92,12 @@ export const json = (body: unknown, headers: Record<string, string> = {}) => ({
 export async function freshRoutes() {
   vi.resetModules();
   vi.stubEnv("DATA_SOURCE", "memory");
-  delete (globalThis as { __superappMemoryState?: unknown })
-    .__superappMemoryState;
+  const globals = globalThis as {
+    __superappMemoryState?: unknown;
+    __superappWriteLimiters?: unknown;
+  };
+  delete globals.__superappMemoryState;
+  delete globals.__superappWriteLimiters;
 
   const load = async (path: string) => (await import(path)).default as Handler;
   return {

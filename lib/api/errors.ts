@@ -2,6 +2,7 @@ export type ErrorCode =
   | "bad_request"
   | "validation_error"
   | "forbidden"
+  | "read_only"
   | "not_found"
   | "method_not_allowed"
   | "unsupported_media_type"
