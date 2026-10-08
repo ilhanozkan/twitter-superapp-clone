@@ -240,40 +240,54 @@ test("navigation uses real links and marks the current page", async ({
 });
 
 test.describe("review fixes", () => {
-  test("Back from a tweet returns to the same place in the timeline", async ({
-    page,
-    request,
-  }) => {
-    // Enough tweets for a second page on the home timeline.
-    for (let i = 0; i < 22; i++) {
-      const res = await request.post("/api/tweets", {
-        data: { text: unique(`Filler ${i}`) },
-      });
-      expect(res.status()).toBe(201);
-    }
+  // Back to Home through a page without a timeline (a tweet) and through one
+  // with its own timeline (the author's profile).
+  for (const via of ["tweet", "profile"] as const) {
+    test(`Back from a ${via} returns to the same place in the timeline`, async ({
+      page,
+      request,
+    }) => {
+      // Enough tweets for a second page on the home timeline.
+      const { items } = await (
+        await request.get("/api/tweets?limit=50")
+      ).json();
+      for (let i = items.length; i < 45; i++) {
+        const res = await request.post("/api/tweets", {
+          data: { text: unique(`Filler ${i}`) },
+        });
+        expect(res.status()).toBe(201);
+      }
 
-    await page.goto("/");
-    const articles = page.locator("main article");
-    await expect(articles).toHaveCount(20);
-    await articles.last().scrollIntoViewIfNeeded();
-    await expect.poll(() => articles.count()).toBeGreaterThan(20);
+      await page.goto("/");
+      const articles = page.locator("main article");
+      await expect(articles).toHaveCount(20);
+      await articles.last().scrollIntoViewIfNeeded();
+      await expect.poll(() => articles.count()).toBeGreaterThan(20);
 
-    const target = articles.nth(30);
-    await target.scrollIntoViewIfNeeded();
-    const text = (await target.locator('p[dir="auto"]').innerText()).trim();
-    await target.locator('p[dir="auto"]').click();
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Tweet" })
-    ).toBeVisible();
+      const target = articles.nth(30);
+      await target.scrollIntoViewIfNeeded();
+      const text = (await target.locator('p[dir="auto"]').innerText()).trim();
+      if (via === "tweet") {
+        await target.locator('p[dir="auto"]').click();
+        await expect(
+          page.getByRole("heading", { level: 1, name: "Tweet" })
+        ).toBeVisible();
+      } else {
+        await target.locator('a[id$="-author"]').click();
+        await expect(
+          page.getByRole("navigation", { name: "Profile timelines" })
+        ).toBeVisible();
+      }
 
-    await page.goBack();
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Home" })
-    ).toBeVisible();
-    // The pages loaded before are still there, and so is the reader.
-    await expect.poll(() => articles.count()).toBeGreaterThan(30);
-    await expect(articles.filter({ hasText: text })).toBeInViewport();
-  });
+      await page.goBack();
+      await expect(
+        page.getByRole("heading", { level: 1, name: "Home" })
+      ).toBeVisible();
+      // The pages loaded before are still there, and so is the reader.
+      await expect.poll(() => articles.count()).toBeGreaterThan(30);
+      await expect(articles.filter({ hasText: text })).toBeInViewport();
+    });
+  }
 
   test("a text selection dragged out of a dialog does not close it", async ({
     page,

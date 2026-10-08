@@ -1,4 +1,9 @@
-import { combineReducers, configureStore } from "@reduxjs/toolkit";
+import {
+  combineReducers,
+  configureStore,
+  isAction,
+  Middleware,
+} from "@reduxjs/toolkit";
 import { useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
@@ -7,7 +12,10 @@ import repliesReducer from "./slices/repliesSlice";
 import sessionReducer from "./slices/sessionSlice";
 import timelinesReducer, { TimelinesState } from "./slices/timelinesSlice";
 import trendsReducer from "./slices/trendsSlice";
-import tweetsReducer, { tweetsAdapter } from "./slices/tweetsSlice";
+import tweetsReducer, {
+  setReaction,
+  tweetsAdapter,
+} from "./slices/tweetsSlice";
 import uiReducer from "./slices/uiSlice";
 
 const rootReducer = combineReducers({
@@ -25,8 +33,38 @@ export type RootState = ReturnType<typeof rootReducer>;
 /** Server data a page hands to the store through `pageProps.initialState`. */
 export type InitialState = Partial<RootState>;
 
+// Outcomes of requests started before a navigation: they settle in the store
+// that was current when they started (see followNavigation).
+const FOLLOWS_NAVIGATION = new Set<string>([
+  setReaction.fulfilled.type,
+  setReaction.rejected.type,
+]);
+
+/**
+ * A navigation replaces the client store, but a request started before it
+ * still settles in the old one. Replay its outcome in the current store, so
+ * the page shows what the server confirmed rather than the optimistic guess.
+ */
+const followNavigation: Middleware = (api) => (next) => (action) => {
+  const result = next(action);
+  if (
+    clientStore &&
+    clientStore.getState !== api.getState &&
+    isAction(action) &&
+    FOLLOWS_NAVIGATION.has(action.type)
+  ) {
+    clientStore.dispatch(action);
+  }
+  return result;
+};
+
 export function makeStore(preloadedState?: InitialState) {
-  return configureStore({ reducer: rootReducer, preloadedState });
+  return configureStore({
+    reducer: rootReducer,
+    preloadedState,
+    middleware: (getDefaultMiddleware) =>
+      getDefaultMiddleware().concat(followNavigation),
+  });
 }
 
 export type AppStore = ReturnType<typeof makeStore>;
@@ -36,6 +74,7 @@ export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
 export const useAppSelector = useSelector.withTypes<RootState>();
 
 let clientStore: AppStore | undefined;
+let lastInitialState: InitialState | undefined;
 let historyNavigation = false;
 
 /**
@@ -88,8 +127,15 @@ export function mergeServerState(
       Object.values(incoming.tweets.entities)
     );
   }
-  if (history && incoming.timelines) {
-    merged.timelines = restoreTimelines(current.timelines, incoming.timelines);
+  // Timelines of other pages stay too, so going Back to them can restore
+  // their loaded pages; the incoming page's own timelines are fresh.
+  if (incoming.timelines) {
+    merged.timelines = {
+      ...current.timelines,
+      ...(history
+        ? restoreTimelines(current.timelines, incoming.timelines)
+        : incoming.timelines),
+    };
   }
   return merged;
 }
@@ -104,6 +150,10 @@ export function mergeServerState(
 export function initializeStore(initialState?: InitialState): AppStore {
   if (typeof window === "undefined") return makeStore(initialState);
 
+  // The same page data again (React StrictMode calls useMemo twice): keep
+  // the store, so the one React renders with is the one tracked here.
+  if (clientStore && initialState === lastInitialState) return clientStore;
+
   if (!clientStore) {
     clientStore = makeStore(initialState);
   } else if (initialState) {
@@ -111,6 +161,7 @@ export function initializeStore(initialState?: InitialState): AppStore {
       mergeServerState(clientStore.getState(), initialState, historyNavigation)
     );
   }
+  lastInitialState = initialState;
   return clientStore;
 }
 

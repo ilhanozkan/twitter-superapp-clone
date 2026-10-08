@@ -400,4 +400,57 @@ describe("navigation state", () => {
     const link = initializeStore(pageState(ids(1, 3), "after-t3"));
     expect(link.getState().timelines.home.ids).toEqual(ids(1, 3));
   });
+
+  it("Back restores pages even when the page in between had a timeline", () => {
+    vi.stubGlobal("window", {});
+    setHistoryNavigation(false);
+    initializeStore(pageState(ids(1, 9), "after-t9"));
+
+    // A profile: its own timeline, not Home's.
+    initializeStore({
+      tweets: tweetsAdapter.setAll(tweetsAdapter.getInitialState(), [
+        tweet("p1", "someone"),
+      ]),
+      timelines: {
+        "author:someone": timelineFromPage(
+          { author: "someone" },
+          { items: [tweet("p1", "someone")], nextCursor: null }
+        ),
+      },
+    });
+
+    setHistoryNavigation(true);
+    const back = initializeStore(pageState(ids(1, 3), "after-t3"));
+    expect(back.getState().timelines.home.ids).toEqual(ids(1, 9));
+    setHistoryNavigation(false);
+  });
+
+  it("settles a reaction in the current store after a navigation", async () => {
+    vi.stubGlobal("window", {});
+    setHistoryNavigation(false);
+    const before = initializeStore(pageState(ids(1, 3), null));
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        respond(
+          { error: { code: "internal_error", message: "x", requestId: "r" } },
+          { status: 503, delay: 10 }
+        )
+      )
+    );
+
+    const like = before.dispatch(
+      setReaction({ id: "t2", kind: "like", active: true })
+    );
+    // Navigate while the request is in flight: the optimistic like is
+    // carried into the new store.
+    const after = initializeStore({
+      session: { viewer: null, readOnly: false },
+    });
+    expect(after.getState().tweets.entities.t2.viewer.liked).toBe(true);
+
+    await like;
+    expect(after.getState().tweets.entities.t2.viewer.liked).toBe(false);
+    expect(after.getState().tweets.entities.t2.stats.likes).toBe(3);
+  });
 });
