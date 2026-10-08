@@ -49,9 +49,15 @@ export function createRateLimiter({
   return function check(key: string): RateLimitResult {
     const time = now();
     const recent = (hits.get(key) ?? []).filter((t) => t > time - windowMs);
+    const remember = () => {
+      // Re-insert so the Map's order tracks when each client was last seen:
+      // a client being throttled must not be the first one forgotten.
+      hits.delete(key);
+      hits.set(key, recent);
+    };
 
     if (recent.length >= limit) {
-      hits.set(key, recent);
+      remember();
       return {
         allowed: false,
         retryAfter: Math.max(
@@ -63,9 +69,7 @@ export function createRateLimiter({
 
     if (!hits.has(key) && hits.size >= maxKeys) makeRoom(time);
     recent.push(time);
-    // Re-insert so the Map's order tracks recent activity.
-    hits.delete(key);
-    hits.set(key, recent);
+    remember();
     return { allowed: true, retryAfter: 0 };
   };
 }
