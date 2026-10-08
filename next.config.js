@@ -18,7 +18,6 @@ const contentSecurityPolicy = [
 
 const securityHeaders = [
   { key: "Content-Security-Policy", value: contentSecurityPolicy },
-  { key: "X-Content-Type-Options", value: "nosniff" },
   { key: "X-Frame-Options", value: "DENY" },
   { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
   {
@@ -32,7 +31,23 @@ const securityHeaders = [
 module.exports = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Don't write AGENTS.md/CLAUDE.md into the repo when an AI agent runs
+  // `next dev`: untracked generated files are easy to commit by accident.
+  agentRules: false,
+  experimental: {
+    // Back/Forward return to the same scroll position (timelines keep their
+    // loaded pages, see restoreTimelines in store.ts).
+    scrollRestoration: true,
+  },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      {
+        // The dev server serves some scripts as JSON
+        // (_clientMiddlewareManifest.js), which nosniff would block.
+        source: isDev ? "/:path((?!_next/static/development/).*)" : "/:path*",
+        headers: [{ key: "X-Content-Type-Options", value: "nosniff" }],
+      },
+    ];
   },
 };

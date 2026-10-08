@@ -1,0 +1,12 @@
+.next
+node_modules
+coverage
+playwright-report
+test-results
+public
+package-lock.json
+sanity/node_modules
+sanity/dist
+sanity/.sanity
+sanity/package-lock.json
+sanity/seed

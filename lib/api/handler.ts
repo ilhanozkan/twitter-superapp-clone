@@ -216,7 +216,7 @@ export function createHandler(routes: Routes) {
             status: apiError.status,
             error:
               error instanceof Error
-                ? error.stack ?? error.message
+                ? (error.stack ?? error.message)
                 : String(error),
           })
         );

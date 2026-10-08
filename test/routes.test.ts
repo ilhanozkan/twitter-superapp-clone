@@ -310,7 +310,7 @@ describe("read-only mode", () => {
     const writes: [
       string,
       Parameters<typeof call>[0],
-      Parameters<typeof call>[1]
+      Parameters<typeof call>[1],
     ][] = [
       ["POST /tweets", api.tweets, { method: "POST", ...json({ text: "hi" }) }],
       ["DELETE /tweets/:id", api.tweet, { method: "DELETE", query: id }],

@@ -75,7 +75,7 @@ describe("listTweetsQuery", () => {
 });
 
 describe("routeId", () => {
-  const req = (id: unknown) => ({ query: { id } } as never);
+  const req = (id: unknown) => ({ query: { id } }) as never;
 
   it("accepts document ids", () => {
     expect(routeId(req("seed-t01"))).toBe("seed-t01");

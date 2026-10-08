@@ -1,50 +1,42 @@
-import type { GetServerSideProps } from "next";
 import Head from "next/head";
-import { useEffect } from "react";
-import { useDispatch } from "react-redux";
 
-import Sidebar from "../components/sidebar";
-import Feed from "../components/Feed";
-import RightBar from "../components/RightBar";
-import { MAX_PAGE_SIZE } from "../lib/constants";
-import { getCurrentUsername } from "../lib/auth";
-import { getRepository } from "../lib/db";
-import { ITweetsData } from "../types/Tweet";
-import { setFeed } from "../slices/feedSlice";
+import EmptyState from "../components/common/EmptyState";
+import PageHeader from "../components/layout/PageHeader";
+import Composer from "../components/tweet/Composer";
+import Timeline from "../components/tweet/Timeline";
+import { timelineState, withPageState } from "../lib/server/pageState";
+import { timelines } from "../lib/timelines";
 
-const Home = ({ tweets }: ITweetsData) => {
-  const dispatch = useDispatch();
+const home = timelines.home();
 
-  useEffect(() => {
-    dispatch(setFeed(tweets));
-  });
-
+export default function Home() {
   return (
-    <div>
+    <>
       <Head>
-        <title>Twitter SuperApp</title>
-        <meta
-          name="description"
-          content="Twitter Clone but Twitter as a SuperApp"
-        />
-        <link rel="icon" href="/favicon.ico" />
+        <title>Home / Twitter SuperApp</title>
       </Head>
-      <main className="flex justify-center">
-        <Sidebar />
-        <Feed />
-        <RightBar />
-      </main>
-    </div>
+      <PageHeader title="Home" />
+      <div className="border-b border-line">
+        <Composer />
+      </div>
+      <Timeline
+        timelineKey={home.key}
+        label="Home timeline"
+        empty={
+          <EmptyState title="Welcome to Twitter SuperApp!">
+            This is the best place to see what’s happening. Post your first
+            Tweet to get started.
+          </EmptyState>
+        }
+      />
+    </>
   );
-};
+}
 
-export default Home;
-
-export const getServerSideProps: GetServerSideProps<ITweetsData> = async () => {
-  const { items } = await getRepository().listTweets({
-    viewer: getCurrentUsername(),
-    limit: MAX_PAGE_SIZE,
+export const getServerSideProps = withPageState(async ({ repo, viewer }) => {
+  const page = await repo.listTweets({
+    ...home.query,
+    viewer: viewer.username,
   });
-
-  return { props: { tweets: items } };
-};
+  return { state: timelineState(home.key, home.query, page) };
+});
