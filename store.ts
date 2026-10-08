@@ -16,7 +16,7 @@ import tweetsReducer, {
   setReaction,
   tweetsAdapter,
 } from "./slices/tweetsSlice";
-import uiReducer from "./slices/uiSlice";
+import uiReducer, { showToast } from "./slices/uiSlice";
 
 const rootReducer = combineReducers({
   session: sessionReducer,
@@ -34,10 +34,12 @@ export type RootState = ReturnType<typeof rootReducer>;
 export type InitialState = Partial<RootState>;
 
 // Outcomes of requests started before a navigation: they settle in the store
-// that was current when they started (see followNavigation).
+// that was current when they started (see followNavigation). Toasts about
+// them (e.g. a failed like) follow too, so they show on the current page.
 const FOLLOWS_NAVIGATION = new Set<string>([
   setReaction.fulfilled.type,
   setReaction.rejected.type,
+  showToast.type,
 ]);
 
 /**

@@ -7,6 +7,7 @@ import { RiChat1Line } from "react-icons/ri";
 
 import { formatCount } from "../../lib/format";
 import { setReaction } from "../../slices/tweetsSlice";
+import { showToast } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { ITweet } from "../../types/Tweet";
 import { statusPath } from "./paths";
@@ -62,17 +63,48 @@ export default function TweetActions({
 }: TweetActionsProps) {
   const dispatch = useAppDispatch();
   const readOnly = useAppSelector((state) => state.session.readOnly);
-  const [copied, setCopied] = useState(false);
+  // Animate the heart only when the user likes, not when a liked tweet renders.
+  const [popped, setPopped] = useState(false);
 
-  const toggle = (kind: "like" | "retweet" | "bookmark", active: boolean) =>
-    dispatch(setReaction({ id: tweet.id, kind, active }));
+  const toggle = async (
+    kind: "like" | "retweet" | "bookmark",
+    active: boolean
+  ) => {
+    if (kind === "like") setPopped(active);
+    const result = await dispatch(setReaction({ id: tweet.id, kind, active }));
+
+    // Clicks merged into a later one are "stale": only the last one reports.
+    if (setReaction.rejected.match(result) && !result.payload?.stale) {
+      dispatch(
+        showToast({
+          tone: "error",
+          message:
+            result.payload?.message ?? "Something went wrong. Try again.",
+        })
+      );
+    } else if (
+      setReaction.fulfilled.match(result) &&
+      !result.payload.stale &&
+      kind === "bookmark"
+    ) {
+      dispatch(
+        showToast(
+          active
+            ? {
+                message: "Added to your Bookmarks",
+                action: { label: "View", href: "/i/bookmarks" },
+              }
+            : { message: "Removed from your Bookmarks" }
+        )
+      );
+    }
+  };
 
   const share = async () => {
     const url = `${window.location.origin}${statusPath(tweet)}`;
     try {
       await navigator.clipboard.writeText(url);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
+      dispatch(showToast({ message: "Copied to clipboard" }));
     } catch {
       window.prompt("Copy the link to this Tweet", url);
     }
@@ -130,7 +162,11 @@ export default function TweetActions({
         <ActionContent
           icon={
             liked ? (
-              <AiFillHeart aria-hidden="true" />
+              <AiFillHeart
+                aria-hidden="true"
+                className={popped ? "animate-pop" : ""}
+                onAnimationEnd={() => setPopped(false)}
+              />
             ) : (
               <AiOutlineHeart aria-hidden="true" />
             )
@@ -164,25 +200,15 @@ export default function TweetActions({
 
       <button
         type="button"
-        aria-label={copied ? "Link copied" : "Copy link to Tweet"}
+        aria-label="Copy link to Tweet"
         onClick={share}
-        className={`${base} ${tones.primary} relative text-muted`}
+        className={`${base} ${tones.primary} text-muted`}
       >
         <ActionContent
           icon={<HiOutlineUpload aria-hidden="true" />}
           showCount={false}
           size={size}
         />
-        <span
-          role="status"
-          className={
-            copied
-              ? "absolute -top-6 right-0 whitespace-nowrap rounded bg-fg px-2 py-0.5 text-xs text-surface"
-              : "sr-only"
-          }
-        >
-          {copied ? "Copied" : ""}
-        </span>
       </button>
     </div>
   );
