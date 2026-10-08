@@ -37,6 +37,27 @@ describe("createRateLimiter", () => {
     expect(check("c").allowed).toBe(false); // still tracked
   });
 
+  it("keeps throttled clients tracked while idle ones are forgotten", () => {
+    let time = 0;
+    const check = createRateLimiter({
+      limit: 2,
+      windowMs: 60_000,
+      now: () => time,
+      maxKeys: 3,
+    });
+
+    check("a");
+    check("a");
+    expect(check("a").allowed).toBe(false);
+    check("b");
+    check("c");
+    time = 30_000;
+    expect(check("a").allowed).toBe(false); // still hammering: most recent
+    expect(check("d").allowed).toBe(true); // evicts "b", the least recent
+    expect(check("a").allowed).toBe(false); // no fresh budget for "a"
+    expect(check("b").allowed).toBe(true); // "b" was forgotten
+  });
+
   it("stays bounded in memory", () => {
     let time = 0;
     const check = createRateLimiter({
