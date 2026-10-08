@@ -79,7 +79,7 @@ server (`lib/auth.ts`) and is never read from request bodies.
   `viewer` describes the current user's reactions.
 
 - **Text** (tweets and replies) is trimmed, line endings are normalized, and
-  control characters are removed. It must be 1–280 characters, counted as
+  control characters and bidi overrides/isolates are removed. It must be 1–280 characters, counted as
   Unicode code points: most emoji count once, but flags, skin tones and joined
   emoji (such as families) are several code points. **Images** must be `https://`
   URLs or paths on this site such as `/media/coffee.svg`.

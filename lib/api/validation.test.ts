@@ -13,6 +13,8 @@ describe("tweetText", () => {
     expect(tweetText.parse("  a\r\nb\rc\u0000\u001b[31m\t ")).toBe(
       "a\nb\nc[31m"
     );
+    // Bidi overrides and isolates, but not the LTR/RTL marks.
+    expect(tweetText.parse("a\u202Eb\u2066c\u200Fd")).toBe("abc\u200Fd");
     // C1 controls too (U+0085 NEXT LINE, U+009B CSI), but not tabs inside text.
     expect(tweetText.parse("a\u0085b\u009b2Jc\td")).toBe("ab2Jc\td");
   });

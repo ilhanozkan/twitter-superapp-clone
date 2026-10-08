@@ -13,8 +13,12 @@ import { ApiError, notFound } from "./errors";
 import { headerValue } from "./handler";
 
 // Control characters other than tab and newline (C0, DEL and C1) never
-// belong in a tweet.
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
+// belong in a tweet. Neither do bidi embeddings, overrides and isolates
+// (U+202A-U+202E, U+2066-U+2069): they can make text, links included, read
+// as something else ("https://x.co/\u202Emoc.lapyap" displays as paypal.com).
+// The left-to-right and right-to-left marks stay; RTL writing needs them.
+const CONTROL_CHARACTERS =
+  /[\u0000-\u0008\u000B-\u001F\u007F-\u009F\u202A-\u202E\u2066-\u2069]/g;
 
 export const tweetText = z
   .string({ error: "Text is required" })
