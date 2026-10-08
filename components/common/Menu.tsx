@@ -1,8 +1,10 @@
 import {
+  CSSProperties,
   ReactNode,
   useCallback,
   useEffect,
   useId,
+  useLayoutEffect,
   useRef,
   useState,
   KeyboardEvent as ReactKeyboardEvent,
@@ -25,6 +27,11 @@ interface MenuProps {
   align?: "left" | "right";
   /** Open above the trigger (for buttons at the bottom of the screen). */
   placement?: "below" | "above";
+  /**
+   * "fixed" positions the menu against the viewport, so a scrolling or
+   * narrow container (the sidebar rail) cannot clip it.
+   */
+  strategy?: "absolute" | "fixed";
 }
 
 /**
@@ -39,8 +46,10 @@ export default function Menu({
   triggerClassName = "",
   align = "right",
   placement = "below",
+  strategy = "absolute",
 }: MenuProps) {
   const [open, setOpen] = useState(false);
+  const [fixedStyle, setFixedStyle] = useState<CSSProperties>();
   const id = useId();
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -50,6 +59,29 @@ export default function Menu({
     setOpen(false);
     if (focusTrigger) button.current?.focus();
   }, []);
+
+  // Fixed menus sit next to the trigger and close when the page moves.
+  useLayoutEffect(() => {
+    if (!open || strategy !== "fixed" || !button.current) return;
+    const rect = button.current.getBoundingClientRect();
+    setFixedStyle({
+      position: "fixed",
+      ...(align === "right"
+        ? { right: window.innerWidth - rect.right }
+        : { left: rect.left }),
+      ...(placement === "above"
+        ? { bottom: window.innerHeight - rect.top + 8 }
+        : { top: rect.bottom + 4 }),
+    });
+
+    const dismiss = () => close(false);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("scroll", dismiss, true);
+    return () => {
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("scroll", dismiss, true);
+    };
+  }, [open, strategy, align, placement, close]);
 
   useEffect(() => {
     if (!open) return;
@@ -112,9 +144,14 @@ export default function Menu({
           aria-label={label}
           onKeyDown={onMenuKeyDown}
           onClick={(event) => event.stopPropagation()}
-          className={`absolute z-30 min-w-56 overflow-hidden rounded-xl bg-surface py-1 shadow-[0_0_15px_rgb(0_0_0/0.15),0_0_3px_1px_rgb(0_0_0/0.1)] ${
-            align === "right" ? "right-0" : "left-0"
-          } ${placement === "above" ? "bottom-full mb-2" : "top-full mt-1"}`}
+          style={strategy === "fixed" ? fixedStyle : undefined}
+          className={`z-30 min-w-56 overflow-hidden rounded-xl bg-surface py-1 shadow-menu ${
+            strategy === "fixed"
+              ? "fixed"
+              : `absolute ${align === "right" ? "right-0" : "left-0"} ${
+                  placement === "above" ? "bottom-full mb-2" : "top-full mt-1"
+                }`
+          }`}
         >
           {items.map((item, index) => (
             <button
@@ -129,8 +166,8 @@ export default function Menu({
                 close();
                 item.onSelect();
               }}
-              className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-bold hover:bg-fg/5 focus:bg-fg/5 focus:outline-none ${
-                item.danger ? "text-red-600" : ""
+              className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-bold outline-offset-[-2px] hover:bg-fg/5 focus:bg-fg/10 ${
+                item.danger ? "text-danger" : ""
               }`}
             >
               {item.icon && (

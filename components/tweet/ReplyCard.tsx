@@ -4,7 +4,7 @@ import { IReply } from "../../types/Tweet";
 import Avatar from "../common/Avatar";
 import RelativeTime from "../common/RelativeTime";
 import { profilePath } from "./paths";
-import TweetText from "./TweetText";
+import TweetText, { inlineLinkClass } from "./TweetText";
 
 export default function ReplyCard({
   reply,
@@ -49,10 +49,7 @@ export default function ReplyCard({
         </div>
         <p className="text-[15px] text-muted">
           Replying to{" "}
-          <Link
-            href={profilePath(replyingTo)}
-            className="text-primary hover:underline"
-          >
+          <Link href={profilePath(replyingTo)} className={inlineLinkClass}>
             @{replyingTo}
           </Link>
         </p>

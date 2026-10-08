@@ -3,16 +3,92 @@
 @tailwind utilities;
 
 @layer base {
+  /* Light */
   :root {
     --color-surface: 255 255 255;
     --color-subtle: 247 249 249;
     --color-fg: 15 20 25;
     --color-muted: 83 100 113;
     --color-line: 239 243 244;
+    --color-primary: 21 112 194;
+    --color-like: 212 20 106;
+    --color-retweet: 0 127 85;
+    --color-danger: 220 38 38;
+    --color-warning: 180 83 9;
+    --color-banner: 207 217 222;
+    --shadow-menu:
+      0 0 15px rgb(101 119 134 / 0.2), 0 0 3px 1px rgb(101 119 134 / 0.15);
     color-scheme: light;
+  }
+
+  /* Dark ("Lights out"), chosen in Display settings or following the system. */
+  :root[data-theme="dark"] {
+    --color-surface: 0 0 0;
+    --color-subtle: 22 24 28;
+    --color-fg: 231 233 234;
+    --color-muted: 139 152 165;
+    --color-line: 47 51 54;
+    --color-primary: 29 155 240;
+    --color-like: 249 24 128;
+    --color-retweet: 0 186 124;
+    --color-danger: 244 33 46;
+    --color-warning: 255 212 0;
+    --color-banner: 51 54 57;
+    --shadow-menu:
+      0 0 15px rgb(255 255 255 / 0.2), 0 0 3px 1px rgb(255 255 255 / 0.15);
+    color-scheme: dark;
+  }
+
+  /* Without JavaScript the theme script cannot run: follow the system. */
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme]) {
+      --color-surface: 0 0 0;
+      --color-subtle: 22 24 28;
+      --color-fg: 231 233 234;
+      --color-muted: 139 152 165;
+      --color-line: 47 51 54;
+      --color-primary: 29 155 240;
+      --color-like: 249 24 128;
+      --color-retweet: 0 186 124;
+      --color-danger: 244 33 46;
+      --color-warning: 255 212 0;
+      --color-banner: 51 54 57;
+      --shadow-menu:
+        0 0 15px rgb(255 255 255 / 0.2), 0 0 3px 1px rgb(255 255 255 / 0.15);
+      color-scheme: dark;
+    }
   }
 
   body {
     @apply bg-surface text-fg antialiased;
+  }
+
+  /* One visible focus style for keyboard users everywhere, in the themed
+     primary color (at least 3:1 on the page and panels in both themes). */
+  :focus-visible {
+    outline: 2px solid rgb(var(--color-primary));
+    outline-offset: 2px;
+  }
+
+  /* Keep focused elements clear of the sticky page header and, on phones,
+     the bottom tab bar when the browser scrolls them into view. */
+  html {
+    scroll-padding-top: 4rem;
+  }
+  @media (max-width: 499px) {
+    html {
+      scroll-padding-bottom: calc(53px + 1rem + env(safe-area-inset-bottom));
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.01ms !important;
+      scroll-behavior: auto !important;
+    }
   }
 }

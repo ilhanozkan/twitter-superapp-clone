@@ -115,7 +115,7 @@ test.describe("tweeting", () => {
   }) => {
     await page.goto("/");
     await page.getByLabel("Tweet text").fill("x".repeat(281));
-    await expect(page.getByText("-1 characters left").first()).toBeVisible();
+    await expect(page.getByText("-1", { exact: true })).toBeVisible();
     await expect(
       page.getByRole("main").getByRole("button", { name: "Tweet", exact: true })
     ).toBeDisabled();
