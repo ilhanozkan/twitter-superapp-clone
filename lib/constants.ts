@@ -10,7 +10,10 @@ export const MAX_PAGE_SIZE = 50;
 export const DEFAULT_TRENDS_LIMIT = 10;
 export const DEFAULT_NOTIFICATIONS_LIMIT = 50;
 
-/** Counts characters the way users see them (emoji and astral symbols count once). */
+/**
+ * Counts Unicode code points, so astral symbols and most emoji count once.
+ * Flags, skin tones and joined emoji are several code points and count as such.
+ */
 export function textLength(text: string): number {
   return Array.from(text).length;
 }

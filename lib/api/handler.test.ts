@@ -101,6 +101,7 @@ describe("createHandler", () => {
   });
 
   it("checks the origin of writes only", async () => {
+    vi.stubEnv("TRUST_PROXY", "true");
     const handler = createHandler({
       GET: (req, res) => res.status(200).json({}),
       DELETE: (req, res) => res.status(204).end(),
@@ -136,6 +137,23 @@ describe("createHandler", () => {
     ).toBe(204);
   });
 
+  it("only believes X-Forwarded-Host behind a trusted proxy", async () => {
+    const handler = createHandler({
+      DELETE: (req, res) => res.status(204).end(),
+    });
+    const forwarded = {
+      method: "DELETE",
+      headers: {
+        origin: "https://app.example",
+        "x-forwarded-host": "app.example",
+      },
+    };
+
+    expect((await call(handler, forwarded)).statusCode).toBe(403);
+    vi.stubEnv("TRUST_PROXY", "true");
+    expect((await call(handler, forwarded)).statusCode).toBe(204);
+  });
+
   it("rate-limits writes per client", async () => {
     vi.resetModules();
     vi.stubEnv("WRITE_RATE_LIMIT", "2");
@@ -147,7 +165,8 @@ describe("createHandler", () => {
     });
     const from = (ip: string) => ({
       method: "POST",
-      headers: { "x-forwarded-for": `${ip}, 10.0.0.1` },
+      // The trusted proxy appends the address it saw: the right-most entry.
+      headers: { "x-forwarded-for": `10.0.0.1, ${ip}` },
     });
 
     expect((await call(handler, from("1.1.1.1"))).statusCode).toBe(201);
@@ -162,28 +181,68 @@ describe("createHandler", () => {
 
   it("ignores forwarding headers unless a proxy is trusted", async () => {
     const { clientAddress } = await import("./handler");
-    const req = {
-      headers: { "x-forwarded-for": "6.6.6.6", "x-real-ip": "7.7.7.7" },
-      socket: { remoteAddress: "10.0.0.2" },
-    } as never;
-
-    expect(clientAddress(req, {})).toBe("10.0.0.2");
-    expect(clientAddress(req, { TRUST_PROXY: "true" })).toBe("7.7.7.7");
-    expect(clientAddress(req, { VERCEL: "1" })).toBe("7.7.7.7");
-  });
-
-  it("rejects every write in read-only mode", async () => {
-    vi.stubEnv("READ_ONLY", "true");
-    const handler = createHandler({
-      GET: (req, res) => res.status(200).json({}),
-      POST: (req, res) => res.status(201).json({}),
+    const req = (headers: Record<string, string>) =>
+      ({ headers, socket: { remoteAddress: "10.0.0.2" } } as never);
+    // The client controls everything left of the hop its proxy appended.
+    const spoofed = req({
+      "x-forwarded-for": "1.2.3.4, 6.6.6.6",
+      "x-real-ip": "7.7.7.7",
     });
 
-    expect((await call(handler)).statusCode).toBe(200);
-    const res = await call(handler, { method: "POST" });
-    expect(res.statusCode).toBe(403);
-    expect(res.body.error.code).toBe("read_only");
+    expect(clientAddress(spoofed, {})).toBe("10.0.0.2");
+    expect(clientAddress(spoofed, { TRUST_PROXY: "true" })).toBe("6.6.6.6");
+    expect(clientAddress(spoofed, { TRUST_PROXY: "1" })).toBe("6.6.6.6");
+    expect(clientAddress(spoofed, { TRUST_PROXY: "false" })).toBe("10.0.0.2");
+    // On Vercel the platform sets X-Real-IP and clients cannot override it.
+    expect(clientAddress(spoofed, { VERCEL: "1" })).toBe("7.7.7.7");
+    expect(
+      clientAddress(req({ "x-forwarded-for": "1.2.3.4, 6.6.6.6" }), {
+        VERCEL: "1",
+      })
+    ).toBe("6.6.6.6");
+    expect(clientAddress(req({}), { TRUST_PROXY: "true" })).toBe("10.0.0.2");
   });
+
+  it("reads WRITE_RATE_LIMIT, falling back to the default when invalid", async () => {
+    const { writesPerMinute } = await import("./handler");
+
+    expect(writesPerMinute(undefined)).toBe(30);
+    expect(writesPerMinute("")).toBe(30);
+    expect(writesPerMinute(" 5 ")).toBe(5);
+    expect(writesPerMinute("0")).toBe(0);
+    for (const invalid of ["-1", "1.5", "ten", "Infinity"]) {
+      expect(writesPerMinute(invalid), invalid).toBe(30);
+    }
+  });
+
+  it("never lets an error response be cached", async () => {
+    const handler = createHandler({
+      GET: (req, res) => {
+        res.setHeader("Cache-Control", "public, s-maxage=60");
+        throw new errors.ApiError(404, "not_found", "gone");
+      },
+    });
+    const res = await call(handler);
+
+    expect(res.statusCode).toBe(404);
+    expect(res.headers["cache-control"]).toBe("no-store");
+  });
+
+  it.each(["true", "1", "YES", "on"])(
+    "rejects every write when READ_ONLY=%s",
+    async (value) => {
+      vi.stubEnv("READ_ONLY", value);
+      const handler = createHandler({
+        GET: (req, res) => res.status(200).json({}),
+        POST: (req, res) => res.status(201).json({}),
+      });
+
+      expect((await call(handler)).statusCode).toBe(200);
+      const res = await call(handler, { method: "POST" });
+      expect(res.statusCode).toBe(403);
+      expect(res.body.error.code).toBe("read_only");
+    }
+  );
 
   it("can disable rate limiting", async () => {
     vi.resetModules();

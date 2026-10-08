@@ -12,6 +12,8 @@ describe("tweetText", () => {
     expect(tweetText.parse("  a\r\nb\rc\u0000\u001b[31m\t ")).toBe(
       "a\nb\nc[31m"
     );
+    // C1 controls too (U+0085 NEXT LINE, U+009B CSI), but not tabs inside text.
+    expect(tweetText.parse("a\u0085b\u009b2Jc\td")).toBe("ab2Jc\td");
   });
 
   it("normalizes to NFC before counting", () => {
@@ -36,6 +38,11 @@ describe("isSafeImageUrl", () => {
     ["javascript:alert(1)", false],
     ["data:image/svg+xml,<svg/>", false],
     ["not a url", false],
+    // Browsers strip tabs and newlines from URLs, turning these into "//".
+    ["/\t/evil.example/a.png", false],
+    ["/\n/evil.example/a.png", false],
+    ["/media/a b.png", false],
+    ["https://cdn.example/a.png\u0000", false],
   ])("%s -> %s", (value, expected) => {
     expect(isSafeImageUrl(value)).toBe(expected);
   });

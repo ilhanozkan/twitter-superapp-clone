@@ -351,4 +351,60 @@ describe("users, me, trends, notifications, health", () => {
       dataSource: "memory",
     });
   });
+
+  it("answers 503, not 500, when the data source is misconfigured", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.stubEnv("DATA_SOURCE", "sanity");
+    vi.stubEnv("SANITY_PROJECT_ID", "");
+    vi.stubEnv("NEXT_PUBLIC_SANITY_PROJECT_ID", "");
+    vi.resetModules();
+    const health = (await import("../pages/api/health")).default;
+
+    const res = await call(health);
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error.code).toBe("service_unavailable");
+    expect(res.headers["cache-control"]).toBe("no-store");
+    vi.restoreAllMocks();
+  });
+
+  it("answers unknown endpoints with a JSON 404", async () => {
+    const unknown = (await import("../pages/api/[...path]")).default;
+
+    for (const method of ["GET", "POST", "DELETE"]) {
+      const res = await call(unknown, { method, url: "/api/getTweets" });
+      expect(res.statusCode, method).toBe(404);
+      expect(res.body.error.code).toBe("not_found");
+      expect(res.headers["x-request-id"]).toBeTruthy();
+    }
+  });
+
+  it("does not parse bodies on routes that take none", async () => {
+    const withoutBody = {
+      health: import("../pages/api/health"),
+      me: import("../pages/api/me"),
+      notifications: import("../pages/api/notifications"),
+      trends: import("../pages/api/trends"),
+      tweet: import("../pages/api/tweets/[id]/index"),
+      like: import("../pages/api/tweets/[id]/like"),
+      retweet: import("../pages/api/tweets/[id]/retweet"),
+      bookmark: import("../pages/api/tweets/[id]/bookmark"),
+      user: import("../pages/api/users/[username]"),
+      unknown: import("../pages/api/[...path]"),
+    };
+    for (const [name, route] of Object.entries(withoutBody)) {
+      expect((await route).config, name).toEqual({
+        api: { bodyParser: false },
+      });
+    }
+
+    const withBody = {
+      tweets: import("../pages/api/tweets/index"),
+      replies: import("../pages/api/tweets/[id]/replies"),
+    };
+    for (const [name, route] of Object.entries(withBody)) {
+      expect((await route).config, name).toEqual({
+        api: { bodyParser: { sizeLimit: "16kb" } },
+      });
+    }
+  });
 });

@@ -21,6 +21,11 @@ export function getCurrentUsername(
   return username;
 }
 
+/** Boolean env vars: "true", "1", "yes" and "on" (any case) mean on. */
+export function envFlag(value: string | undefined): boolean {
+  return ["true", "1", "yes", "on"].includes(value?.trim().toLowerCase() ?? "");
+}
+
 /**
  * READ_ONLY=true turns every write into a 403. Without sign-in every visitor
  * acts as DEMO_USERNAME, so public deployments with a write token should
@@ -29,7 +34,7 @@ export function getCurrentUsername(
 export function isReadOnly(
   env: Record<string, string | undefined> = process.env
 ): boolean {
-  return env.READ_ONLY === "true";
+  return envFlag(env.READ_ONLY);
 }
 
 /** The current user's profile; a minimal one if the data source has none yet. */

@@ -12,8 +12,9 @@ import { decodeCursor } from "../db/cursor";
 import { ApiError, notFound } from "./errors";
 import { headerValue } from "./handler";
 
-// Control characters other than tab and newline never belong in a tweet.
-const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F]/g;
+// Control characters other than tab and newline (C0, DEL and C1) never
+// belong in a tweet.
+const CONTROL_CHARACTERS = /[\u0000-\u0008\u000B-\u001F\u007F-\u009F]/g;
 
 export const tweetText = z
   .string({ error: "Text is required" })
@@ -32,6 +33,9 @@ export const tweetText = z
 
 /** https URLs, or paths served by this app ("/media/x.svg"); never javascript:, data: or //host. */
 export function isSafeImageUrl(value: string): boolean {
+  // Browsers drop tabs and newlines inside URLs, so "/\t/evil.example" would
+  // load from //evil.example: refuse whitespace and control characters.
+  if (/[\s\u0000-\u001F\u007F-\u009F]/.test(value)) return false;
   if (value.startsWith("/"))
     return !value.startsWith("//") && !value.includes("\\");
   try {

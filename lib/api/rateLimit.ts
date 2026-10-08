@@ -8,7 +8,7 @@ export interface RateLimiterOptions {
   limit: number;
   windowMs: number;
   now?: () => number;
-  /** Stop tracking new keys past this many, so memory stays bounded. */
+  /** Track at most this many clients; beyond it the least recently seen are forgotten. */
   maxKeys?: number;
 }
 
@@ -24,13 +24,26 @@ export function createRateLimiter({
   maxKeys = 10_000,
 }: RateLimiterOptions) {
   const hits = new Map<string, number[]>();
+  let lastPrune = 0;
 
   const prune = (time: number) => {
+    lastPrune = time;
     hits.forEach((timestamps, key) => {
       const recent = timestamps.filter((t) => t > time - windowMs);
       if (recent.length) hits.set(key, recent);
       else hits.delete(key);
     });
+  };
+
+  /** Makes room for a new key: drop expired keys (at most once per window), then the oldest. */
+  const makeRoom = (time: number) => {
+    if (time - lastPrune >= windowMs) prune(time);
+    // Maps iterate in insertion order, so the first key is the oldest.
+    while (hits.size >= maxKeys) {
+      const oldest = hits.keys().next().value;
+      if (oldest === undefined) break;
+      hits.delete(oldest);
+    }
   };
 
   return function check(key: string): RateLimitResult {
@@ -48,8 +61,10 @@ export function createRateLimiter({
       };
     }
 
-    if (!hits.has(key) && hits.size >= maxKeys) prune(time);
+    if (!hits.has(key) && hits.size >= maxKeys) makeRoom(time);
     recent.push(time);
+    // Re-insert so the Map's order tracks recent activity.
+    hits.delete(key);
     hits.set(key, recent);
     return { allowed: true, retryAfter: 0 };
   };

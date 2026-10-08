@@ -16,9 +16,18 @@ server (`lib/auth.ts`) and is never read from request bodies.
 - **Writes** (`POST`, `PUT`, `DELETE`) must come from the same origin (checked
   with the `Origin` header) and are rate limited per client
   (`WRITE_RATE_LIMIT` per minute, default 30; `0` disables it). The client is
-  identified by its socket address, or by `X-Real-IP`/`X-Forwarded-For` when
-  `TRUST_PROXY=true` (automatic on Vercel). Request bodies must be
-  `Content-Type: application/json` and at most 16 KB.
+  identified by its socket address; behind a proxy, set `TRUST_PROXY=true` to
+  use the right-most `X-Forwarded-For` entry (the address the proxy saw) and
+  `X-Forwarded-Host` for the origin check. On Vercel the platform's headers
+  are used automatically. A proxy without `TRUST_PROXY` must pass the
+  original `Host` header on, or every browser write is rejected as
+  cross-origin. Request bodies must
+  be `Content-Type: application/json` and at most 16 KB; routes that take no
+  body do not read one.
+- **Flags** (`READ_ONLY`, `TRUST_PROXY`) accept `true`, `1`, `yes` or `on`.
+- **Caching**: responses that depend on the current user are
+  `private, no-store`; trends may be cached by shared caches for a minute.
+  Error responses are never cached.
 - **Errors** share one shape. `requestId` is also sent as the `X-Request-Id`
   header and appears in server logs:
 
@@ -39,7 +48,7 @@ server (`lib/auth.ts`) and is never read from request bodies.
   | 400    | `bad_request`            | The body is not a JSON object                           |
   | 403    | `forbidden`              | Cross-origin write, or deleting someone else's tweet    |
   | 403    | `read_only`              | Any write while `READ_ONLY=true`                        |
-  | 404    | `not_found`              | Unknown or moderated tweet, unknown user                |
+  | 404    | `not_found`              | Unknown or moderated tweet, unknown user or endpoint    |
   | 405    | `method_not_allowed`     | See the `Allow` header                                  |
   | 415    | `unsupported_media_type` | Body is not `application/json`                          |
   | 429    | `rate_limited`           | See the `Retry-After` header                            |
@@ -71,7 +80,8 @@ server (`lib/auth.ts`) and is never read from request bodies.
 
 - **Text** (tweets and replies) is trimmed, line endings are normalized, and
   control characters are removed. It must be 1–280 characters, counted as
-  Unicode code points (an emoji counts once). **Images** must be `https://`
+  Unicode code points: most emoji count once, but flags, skin tones and joined
+  emoji (such as families) are several code points. **Images** must be `https://`
   URLs or paths on this site such as `/media/coffee.svg`.
 
 ## Endpoints

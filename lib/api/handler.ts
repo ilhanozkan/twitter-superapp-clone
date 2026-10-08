@@ -2,7 +2,7 @@ import { randomUUID } from "crypto";
 import type { NextApiRequest, NextApiResponse } from "next";
 import { ZodError } from "zod";
 
-import { isReadOnly } from "../auth";
+import { envFlag, isReadOnly } from "../auth";
 import { ConfigurationError, NotFoundError } from "../db/errors";
 import { ApiError, ErrorCode, ValidationIssue } from "./errors";
 import { createRateLimiter } from "./rateLimit";
@@ -31,9 +31,21 @@ const globalLimiters = globalThis as typeof globalThis & {
   __superappWriteLimiters?: Map<number, ReturnType<typeof createRateLimiter>>;
 };
 
+const DEFAULT_WRITES_PER_MINUTE = 30;
+
+/** WRITE_RATE_LIMIT: unset, empty or invalid fall back to the default; only "0" disables. */
+export function writesPerMinute(value = process.env.WRITE_RATE_LIMIT): number {
+  if (value === undefined || value.trim() === "")
+    return DEFAULT_WRITES_PER_MINUTE;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed >= 0
+    ? parsed
+    : DEFAULT_WRITES_PER_MINUTE;
+}
+
 function writeLimiter() {
-  const perMinute = Number(process.env.WRITE_RATE_LIMIT ?? 30);
-  if (!(perMinute > 0)) return null;
+  const perMinute = writesPerMinute();
+  if (perMinute === 0) return null;
 
   const limiters = (globalLimiters.__superappWriteLimiters ??= new Map());
   let limiter = limiters.get(perMinute);
@@ -48,21 +60,35 @@ export function headerValue(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;
 }
 
+type Env = Record<string, string | undefined>;
+
+/** Forwarding headers are only believed behind a proxy: TRUST_PROXY, or on Vercel. */
+function trustsProxy(env: Env) {
+  return envFlag(env.TRUST_PROXY) || env.VERCEL === "1";
+}
+
 /**
  * The client address used for rate limiting. Forwarding headers are only
- * trusted behind a proxy that sets them (TRUST_PROXY=true, or on Vercel);
- * otherwise any client could pick a new address for every request.
+ * trusted behind a proxy, and only the parts that proxy controls:
+ * - on Vercel, X-Real-IP, which the platform sets and clients cannot;
+ * - with TRUST_PROXY, the right-most X-Forwarded-For entry, which is the
+ *   address the proxy itself saw (entries to its left come from the client).
+ * Otherwise any client could pick a new address for every request.
  */
 export function clientAddress(
   req: NextApiRequest,
-  env: Record<string, string | undefined> = process.env
+  env: Env = process.env
 ): string {
-  if (env.TRUST_PROXY === "true" || env.VERCEL === "1") {
+  if (env.VERCEL === "1") {
     const realIp = headerValue(req.headers["x-real-ip"])?.trim();
     if (realIp) return realIp;
-
-    const forwarded = headerValue(req.headers["x-forwarded-for"]);
-    if (forwarded) return forwarded.split(",")[0].trim();
+  }
+  if (trustsProxy(env)) {
+    const hops = headerValue(req.headers["x-forwarded-for"])
+      ?.split(",")
+      .map((hop) => hop.trim())
+      .filter(Boolean);
+    if (hops?.length) return hops[hops.length - 1];
   }
   return req.socket?.remoteAddress ?? "unknown";
 }
@@ -70,16 +96,17 @@ export function clientAddress(
 /**
  * Rejects writes from other sites. Browsers always send Origin on
  * cross-origin POST/PUT/DELETE requests; clients without one (curl, server
- * to server) are not a CSRF vector and are allowed.
+ * to server) are not a CSRF vector and are allowed. Behind a proxy, the proxy
+ * must pass the original Host on, or set X-Forwarded-Host with TRUST_PROXY.
  */
-function assertSameOrigin(req: NextApiRequest) {
+function assertSameOrigin(req: NextApiRequest, env: Env = process.env) {
   const origin = headerValue(req.headers.origin);
   if (!origin) return;
 
-  const host = (
-    headerValue(req.headers["x-forwarded-host"]) ??
-    headerValue(req.headers.host)
-  )
+  const forwardedHost = trustsProxy(env)
+    ? headerValue(req.headers["x-forwarded-host"])
+    : undefined;
+  const host = (forwardedHost ?? headerValue(req.headers.host))
     ?.split(",")[0]
     .trim();
 
@@ -196,6 +223,8 @@ export function createHandler(routes: Routes) {
       }
 
       if (res.headersSent) return;
+      // Error responses must never be cached, whatever the route set before.
+      res.setHeader("Cache-Control", "no-store");
 
       const body: ApiErrorBody = {
         error: {
