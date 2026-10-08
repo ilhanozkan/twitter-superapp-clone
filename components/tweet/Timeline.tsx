@@ -3,7 +3,6 @@ import { ReactNode, useEffect, useRef } from "react";
 import { loadMoreTimeline } from "../../slices/timelinesSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { Button } from "../common/Button";
-import Spinner from "../common/Spinner";
 import TweetCard from "./TweetCard";
 
 interface TimelineProps {
@@ -22,8 +21,28 @@ export default function Timeline({ timelineKey, empty, label }: TimelineProps) {
   const timeline = useAppSelector((state) => state.timelines[timelineKey]);
   const entities = useAppSelector((state) => state.tweets.entities);
   const sentinel = useRef<HTMLDivElement>(null);
+  const retry = useRef<HTMLButtonElement>(null);
+  // How many tweets were shown when the user asked for more with a button.
+  const requestedAt = useRef<number | null>(null);
   const hasMore = !!timeline?.nextCursor;
+  const loading = timeline?.status === "loading";
   const failed = timeline?.status === "failed";
+
+  const loadMore = () => {
+    if (loading || !timeline) return;
+    requestedAt.current = timeline.ids.length;
+    dispatch(loadMoreTimeline(timelineKey));
+  };
+
+  // After a button-triggered load, move focus to the first new tweet, so the
+  // next Tab continues with it instead of skipping everything that loaded.
+  useEffect(() => {
+    if (requestedAt.current === null || loading || !timeline) return;
+    const firstNew = timeline.ids[requestedAt.current];
+    requestedAt.current = null;
+    if (firstNew) document.getElementById(`tweet-${firstNew}-author`)?.focus();
+    else if (failed) retry.current?.focus();
+  }, [timeline, loading, failed]);
 
   useEffect(() => {
     const element = sentinel.current;
@@ -56,29 +75,40 @@ export default function Timeline({ timelineKey, empty, label }: TimelineProps) {
         <TweetCard key={tweet!.id} tweet={tweet!} />
       ))}
 
-      <div ref={sentinel}>
-        {timeline.status === "loading" && (
-          <Spinner label="Loading more Tweets" />
-        )}
-        {failed && (
+      <div ref={sentinel} aria-busy={loading}>
+        {failed ? (
           <div
             role="alert"
             className="flex flex-col items-center gap-3 p-6 text-[15px] text-muted"
           >
             <p>{timeline.error}</p>
-            <Button onClick={() => dispatch(loadMoreTimeline(timelineKey))}>
+            <Button ref={retry} onClick={loadMore}>
               Retry
             </Button>
           </div>
-        )}
-        {hasMore && timeline.status === "idle" && (
-          <button
-            type="button"
-            onClick={() => dispatch(loadMoreTimeline(timelineKey))}
-            className="w-full p-4 text-[15px] text-primary transition-colors hover:bg-fg/[0.03]"
-          >
-            Show more Tweets
-          </button>
+        ) : (
+          (hasMore || loading) && (
+            // Stays mounted while loading (aria-disabled, not disabled), so
+            // a keyboard user's focus is not dropped to the page.
+            <button
+              type="button"
+              aria-disabled={loading}
+              onClick={loadMore}
+              className="flex w-full justify-center p-4 text-[15px] text-primary transition-colors hover:bg-fg/[0.03] aria-disabled:cursor-progress"
+            >
+              {loading ? (
+                <>
+                  <span
+                    aria-hidden="true"
+                    className="h-7 w-7 animate-spin rounded-full border-[3px] border-primary/25 border-t-primary"
+                  />
+                  <span className="sr-only">Loading more Tweets</span>
+                </>
+              ) : (
+                "Show more Tweets"
+              )}
+            </button>
+          )
         )}
       </div>
     </section>

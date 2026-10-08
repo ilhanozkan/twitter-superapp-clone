@@ -7,10 +7,13 @@ import Timeline from "../../components/tweet/Timeline";
 import { pluralize } from "../../lib/format";
 import { loadProfile } from "../../lib/server/profile";
 import { timelines } from "../../lib/timelines";
+import { selectTweetCount } from "../../slices/profilesSlice";
+import { useAppSelector } from "../../store";
 import { IUserProfile } from "../../types/User";
 
 export default function ProfileLikes({ user }: { user: IUserProfile }) {
   const timeline = timelines.likes(user.username);
+  const tweetCount = useAppSelector((state) => selectTweetCount(state, user));
 
   return (
     <>
@@ -19,7 +22,7 @@ export default function ProfileLikes({ user }: { user: IUserProfile }) {
       </Head>
       <PageHeader
         title={user.fullname}
-        subtitle={pluralize(user.tweetCount, "Tweet")}
+        subtitle={pluralize(tweetCount, "Tweet")}
         back
       />
       <ProfileHeader user={user} tab="likes" />

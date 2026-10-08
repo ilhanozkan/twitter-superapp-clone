@@ -50,9 +50,11 @@ test.describe("pages", () => {
   }
 
   test("the home timeline is server-rendered", async ({ request }) => {
+    const newest = (await (await request.get("/api/tweets?limit=1")).json())
+      .items[0];
     const html = await (await request.get("/")).text();
-    expect(html).toContain("Welcome to Twitter SuperApp");
     expect(html).toContain("<article");
+    expect(html).toContain(`/status/${newest.id}"`);
   });
 
   test("unknown profiles are 404s and usernames are case-insensitive", async ({
@@ -113,7 +115,7 @@ test.describe("tweeting", () => {
   }) => {
     await page.goto("/");
     await page.getByLabel("Tweet text").fill("x".repeat(281));
-    await expect(page.getByText("-1")).toBeVisible();
+    await expect(page.getByText("-1 characters left").first()).toBeVisible();
     await expect(
       page.getByRole("main").getByRole("button", { name: "Tweet", exact: true })
     ).toBeDisabled();
@@ -151,23 +153,25 @@ test.describe("reactions", () => {
     await expect(like).toHaveAttribute("aria-pressed", "false");
 
     await like.click();
-    const unlike = page.getByRole("button", { name: /^Unlike\./ });
-    await expect(unlike).toHaveAttribute("aria-pressed", "true");
+    await expect(like).toHaveAttribute("aria-pressed", "true");
     await expect(page.getByText("1 Like", { exact: true })).toBeVisible();
 
     await page.reload();
-    await expect(page.getByRole("button", { name: /^Unlike\./ })).toBeVisible();
+    await expect(like).toHaveAttribute("aria-pressed", "true");
 
-    await page.getByRole("button", { name: /^Unlike\./ }).click();
-    await expect(page.getByRole("button", { name: /^Like\./ })).toBeVisible();
+    await like.click();
+    await expect(like).toHaveAttribute("aria-pressed", "false");
   });
 
-  test("bookmarked tweets show up on the Bookmarks page", async ({ page }) => {
+  test("bookmarked tweets show up on the Bookmarks page", async ({
+    page,
+    request,
+  }) => {
     await page.goto("/devmarco/status/seed-t18");
-    await page.getByRole("button", { name: "Bookmark", exact: true }).click();
-    await expect(
-      page.getByRole("button", { name: "Remove Bookmark" })
-    ).toBeVisible();
+    const bookmark = page.getByRole("button", { name: "Bookmark" });
+    await expect(bookmark).toHaveAttribute("aria-pressed", "false");
+    await bookmark.click();
+    await expect(bookmark).toHaveAttribute("aria-pressed", "true");
 
     await page.getByRole("link", { name: "Bookmarks" }).click();
     await expect(
@@ -176,6 +180,12 @@ test.describe("reactions", () => {
     await expect(
       page.locator("main article").filter({ hasText: "zero downtime" })
     ).toBeVisible();
+
+    // Leave the demo store as it was, so the suite can run again on a
+    // reused server.
+    expect(
+      (await request.delete("/api/tweets/seed-t18/bookmark")).status()
+    ).toBe(200);
   });
 });
 
@@ -227,4 +237,146 @@ test("navigation uses real links and marks the current page", async ({
     "aria-current",
     "page"
   );
+});
+
+test.describe("review fixes", () => {
+  test("Back from a tweet returns to the same place in the timeline", async ({
+    page,
+    request,
+  }) => {
+    // Enough tweets for a second page on the home timeline.
+    for (let i = 0; i < 22; i++) {
+      const res = await request.post("/api/tweets", {
+        data: { text: unique(`Filler ${i}`) },
+      });
+      expect(res.status()).toBe(201);
+    }
+
+    await page.goto("/");
+    const articles = page.locator("main article");
+    await expect(articles).toHaveCount(20);
+    await articles.last().scrollIntoViewIfNeeded();
+    await expect.poll(() => articles.count()).toBeGreaterThan(20);
+
+    const target = articles.nth(30);
+    await target.scrollIntoViewIfNeeded();
+    const text = (await target.locator('p[dir="auto"]').innerText()).trim();
+    await target.locator('p[dir="auto"]').click();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Tweet" })
+    ).toBeVisible();
+
+    await page.goBack();
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Home" })
+    ).toBeVisible();
+    // The pages loaded before are still there, and so is the reader.
+    await expect.poll(() => articles.count()).toBeGreaterThan(30);
+    await expect(articles.filter({ hasText: text })).toBeInViewport();
+  });
+
+  test("a text selection dragged out of a dialog does not close it", async ({
+    page,
+  }) => {
+    await page.goto("/");
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Tweet", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Compose Tweet" });
+    const box = dialog.getByLabel("Tweet text");
+    await box.fill("A draft worth keeping");
+
+    const area = (await box.boundingBox())!;
+    await page.mouse.move(area.x + area.width - 5, area.y + 10);
+    await page.mouse.down();
+    await page.mouse.move(5, 5, { steps: 5 });
+    await page.mouse.up();
+    await expect(dialog).toBeVisible();
+    await expect(box).toHaveValue("A draft worth keeping");
+
+    // A real click on the backdrop still closes it.
+    await page.mouse.click(5, 5);
+    await expect(dialog).toBeHidden();
+  });
+
+  test("an image path on this site can be attached", async ({ page }) => {
+    const text = unique("With a local image");
+    await page.goto("/");
+    await page.getByLabel("Tweet text").fill(text);
+    await page.getByRole("button", { name: "Add image" }).click();
+    await page.getByLabel("Image URL").fill("/media/mountains.svg");
+    await page
+      .getByRole("main")
+      .getByRole("button", { name: "Tweet", exact: true })
+      .click();
+
+    const tweet = page.locator("main article").first();
+    await expect(tweet).toContainText(text);
+    await expect(
+      tweet.locator('img[src="/media/mountains.svg"]')
+    ).toBeVisible();
+  });
+
+  test("Ctrl or middle click on a tweet opens it in a new tab", async ({
+    page,
+    context,
+  }) => {
+    await page.goto("/lenaframes");
+    const text = page
+      .locator("main article")
+      .filter({ hasText: "Sunrise over the Dolomites" })
+      .locator('p[dir="auto"]');
+
+    const [ctrlTab] = await Promise.all([
+      context.waitForEvent("page"),
+      text.click({ modifiers: ["ControlOrMeta"], position: { x: 4, y: 8 } }),
+    ]);
+    await expect(ctrlTab).toHaveURL(/\/lenaframes\/status\/seed-t03$/);
+    await ctrlTab.close();
+
+    const [middleTab] = await Promise.all([
+      context.waitForEvent("page"),
+      text.click({ button: "middle", position: { x: 4, y: 8 } }),
+    ]);
+    await expect(middleTab).toHaveURL(/\/lenaframes\/status\/seed-t03$/);
+    await expect(page).toHaveURL("/lenaframes");
+  });
+
+  test("the profile's tweet count follows posts and deletes", async ({
+    page,
+  }) => {
+    await page.goto("/illlhanozkan");
+    const subtitle = page.locator("header, main").getByText(/^\d+ Tweets?$/);
+    const count = Number((await subtitle.first().innerText()).split(" ")[0]);
+
+    const text = unique("Counted");
+    await page
+      .getByRole("banner")
+      .getByRole("button", { name: "Tweet", exact: true })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Compose Tweet" });
+    await dialog.getByLabel("Tweet text").fill(text);
+    await dialog.getByRole("button", { name: "Tweet" }).click();
+    await expect(subtitle.first()).toHaveText(`${count + 1} Tweets`);
+
+    const tweet = page.locator("main article").filter({ hasText: text });
+    await tweet.getByRole("button", { name: "More options" }).click();
+    await page.getByRole("menuitem", { name: "Delete" }).click();
+    await page
+      .getByRole("dialog", { name: "Delete Tweet?" })
+      .getByRole("button", { name: "Delete" })
+      .click();
+    await expect(subtitle.first()).toHaveText(
+      `${count} Tweet${count === 1 ? "" : "s"}`
+    );
+  });
+
+  test("the Lists page redirects to the canonical username", async ({
+    page,
+  }) => {
+    await page.goto("/ILLLHANOZKAN/lists");
+    await expect(page).toHaveURL(/\/illlhanozkan\/lists$/);
+    expect((await page.goto("/not valid/lists"))?.status()).toBe(404);
+  });
 });

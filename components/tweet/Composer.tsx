@@ -3,6 +3,7 @@ import { HiOutlinePhoto } from "react-icons/hi2";
 
 import { errorMessage } from "../../lib/client/api";
 import { textLength, TWEET_MAX_LENGTH } from "../../lib/constants";
+import { isSafeImageUrl } from "../../lib/imageUrl";
 import { postReply, postTweet } from "../../slices/tweetsSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import Avatar from "../common/Avatar";
@@ -15,16 +16,6 @@ interface ComposerProps {
   autoFocus?: boolean;
   onPosted?: () => void;
   id?: string;
-}
-
-/** Mirrors the server: https URLs or paths on this site. */
-function isValidImageUrl(value: string) {
-  if (value.startsWith("/")) return !value.startsWith("//");
-  try {
-    return new URL(value).protocol === "https:";
-  } catch {
-    return false;
-  }
 }
 
 export default function Composer({
@@ -48,7 +39,7 @@ export default function Composer({
   const trimmed = text.trim();
   const remaining = TWEET_MAX_LENGTH - textLength(trimmed);
   const imageValue = image.trim();
-  const imageInvalid = !!imageValue && !isValidImageUrl(imageValue);
+  const imageInvalid = !!imageValue && !isSafeImageUrl(imageValue);
   const canPost =
     trimmed.length > 0 && remaining >= 0 && !imageInvalid && !posting;
 
@@ -116,16 +107,25 @@ export default function Composer({
             </label>
             <input
               id={`${fieldId}-image`}
-              type="url"
+              // Not type="url": paths on this site are valid too, and the
+              // browser's own URL check would silently block the submit.
+              type="text"
               inputMode="url"
+              autoComplete="off"
               value={image}
               onChange={(event) => setImage(event.target.value)}
               placeholder="https://… image URL"
               aria-invalid={imageInvalid}
+              aria-describedby={
+                imageInvalid ? `${fieldId}-image-error` : undefined
+              }
               className="w-full rounded-md border border-line bg-transparent px-3 py-2 text-[15px] placeholder:text-muted focus:border-primary focus:outline-none"
             />
             {imageInvalid && (
-              <p className="mt-1 text-[13px] text-red-600">
+              <p
+                id={`${fieldId}-image-error`}
+                className="mt-1 text-[13px] text-red-600"
+              >
                 Use an https:// URL or a path on this site.
               </p>
             )}
@@ -144,7 +144,6 @@ export default function Composer({
               <button
                 type="button"
                 aria-label={showImage ? "Remove image" : "Add image"}
-                aria-pressed={showImage}
                 onClick={() => {
                   setShowImage((value) => !value);
                   setImage("");
@@ -158,7 +157,6 @@ export default function Composer({
           <div className="flex items-center gap-3">
             {trimmed.length > 0 && (
               <span
-                aria-live="polite"
                 className={`text-[13px] tabular-nums ${
                   remaining < 0
                     ? "text-red-600"
@@ -171,6 +169,10 @@ export default function Composer({
                 <span className="sr-only"> characters left</span>
               </span>
             )}
+            {/* Announced only near the limit, not on every keystroke. */}
+            <span aria-live="polite" className="sr-only">
+              {remaining <= 20 ? `${remaining} characters left` : ""}
+            </span>
             <Button type="submit" disabled={!canPost}>
               {posting ? "Posting…" : replyTo ? "Reply" : "Tweet"}
             </Button>

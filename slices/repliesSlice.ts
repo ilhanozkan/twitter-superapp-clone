@@ -17,7 +17,7 @@ const repliesSlice = createSlice({
         (state[reply.tweetId] ??= []).push(reply);
       })
       .addCase(deleteTweet.fulfilled, (state, action) => {
-        delete state[action.payload];
+        delete state[action.payload.id];
       });
   },
 });

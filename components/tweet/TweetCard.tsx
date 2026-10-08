@@ -23,6 +23,16 @@ export default function TweetCard({ tweet }: { tweet: ITweet }) {
     if (target.closest(INTERACTIVE)) return;
     // Selecting text should not navigate away.
     if (window.getSelection()?.toString()) return;
+    // Like a link: modifier and middle clicks open the tweet in a new tab.
+    if (
+      event.metaKey ||
+      event.ctrlKey ||
+      event.shiftKey ||
+      event.button === 1
+    ) {
+      window.open(statusPath(tweet), "_blank", "noopener");
+      return;
+    }
     router.push(statusPath(tweet));
   };
 
@@ -30,6 +40,9 @@ export default function TweetCard({ tweet }: { tweet: ITweet }) {
     <article
       aria-labelledby={`tweet-${tweet.id}-author`}
       onClick={openTweet}
+      onAuxClick={(event) => {
+        if (event.button === 1) openTweet(event);
+      }}
       className="flex cursor-pointer gap-3 border-b border-line px-4 pb-2 pt-3 transition-colors duration-200 hover:bg-fg/[0.03]"
     >
       <Link

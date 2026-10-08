@@ -46,6 +46,9 @@ export default function TweetText({ text, className = "" }: TweetTextProps) {
               <a
                 key={index}
                 href={token.href}
+                // Isolated left-to-right, so bidi controls around the link
+                // cannot make its text read as a different address.
+                dir="ltr"
                 target="_blank"
                 rel="noopener noreferrer nofollow ugc"
                 className={linkClass}

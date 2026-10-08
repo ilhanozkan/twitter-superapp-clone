@@ -106,7 +106,7 @@ export default function TweetActions({
       <button
         type="button"
         aria-pressed={retweeted}
-        aria-label={`${retweeted ? "Undo Retweet" : "Retweet"}. ${tweet.stats.retweets} Retweets`}
+        aria-label={`Retweet. ${tweet.stats.retweets} Retweets`}
         disabled={readOnly}
         onClick={() => toggle("retweet", !retweeted)}
         className={`${base} ${tones.retweet} ${color(retweeted, "text-retweet")}`}
@@ -122,7 +122,7 @@ export default function TweetActions({
       <button
         type="button"
         aria-pressed={liked}
-        aria-label={`${liked ? "Unlike" : "Like"}. ${tweet.stats.likes} Likes`}
+        aria-label={`Like. ${tweet.stats.likes} Likes`}
         disabled={readOnly}
         onClick={() => toggle("like", !liked)}
         className={`${base} ${tones.like} ${color(liked, "text-like")}`}
@@ -144,7 +144,7 @@ export default function TweetActions({
       <button
         type="button"
         aria-pressed={bookmarked}
-        aria-label={bookmarked ? "Remove Bookmark" : "Bookmark"}
+        aria-label="Bookmark"
         disabled={readOnly}
         onClick={() => toggle("bookmark", !bookmarked)}
         className={`${base} ${tones.primary} ${color(bookmarked, "text-primary")}`}

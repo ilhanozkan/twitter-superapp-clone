@@ -1,3 +1,4 @@
+import { profileState } from "../../slices/profilesSlice";
 import { IUserProfile } from "../../types/User";
 import { USERNAME_PATTERN } from "../constants";
 import { timelines } from "../timelines";
@@ -37,7 +38,10 @@ export function loadProfile(tab: "tweets" | "likes") {
       );
       return {
         props: { user },
-        state: timelineState(spec.key, spec.query, page),
+        state: {
+          ...timelineState(spec.key, spec.query, page),
+          profiles: profileState(user),
+        },
       };
     }
   );

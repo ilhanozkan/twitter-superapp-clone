@@ -73,7 +73,7 @@ export default function Sidebar() {
 
       {viewer && (
         <Menu
-          label="Account menu"
+          label={`${viewer.fullname} @${viewer.username}, account menu`}
           align="left"
           placement="above"
           triggerClassName="flex w-full items-center gap-3 rounded-full p-3 text-left transition-colors duration-200 hover:bg-fg/10"

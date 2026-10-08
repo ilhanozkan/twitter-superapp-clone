@@ -25,6 +25,7 @@ export default function Dialog({
   className = "",
 }: DialogProps) {
   const dialog = useRef<HTMLDialogElement>(null);
+  const pressedBackdrop = useRef(false);
 
   useEffect(() => {
     const element = dialog.current;
@@ -43,9 +44,16 @@ export default function Dialog({
       ref={dialog}
       aria-label={title}
       onClose={onClose}
+      onPointerDown={(event) => {
+        pressedBackdrop.current = event.target === event.currentTarget;
+      }}
       onClick={(event) => {
-        // Clicks on the ::backdrop target the dialog element itself.
-        if (event.target === event.currentTarget) onClose();
+        // Clicks on the ::backdrop target the dialog element itself. So does
+        // a drag from inside to outside (selecting text), which must not
+        // close it: the press has to start on the backdrop too.
+        if (pressedBackdrop.current && event.target === event.currentTarget)
+          onClose();
+        pressedBackdrop.current = false;
       }}
       className={`w-[min(600px,calc(100vw-2rem))] rounded-2xl bg-surface p-0 text-fg shadow-xl backdrop:bg-[rgb(91_112_131/0.4)] ${className}`}
     >

@@ -202,7 +202,7 @@ describe("createHandler", () => {
   it("ignores forwarding headers unless a proxy is trusted", async () => {
     const { clientAddress } = await import("./handler");
     const req = (headers: Record<string, string>) =>
-      ({ headers, socket: { remoteAddress: "10.0.0.2" } } as never);
+      ({ headers, socket: { remoteAddress: "10.0.0.2" } }) as never;
     // The client controls everything left of the hop its proxy appended.
     const spoofed = req({
       "x-forwarded-for": "1.2.3.4, 6.6.6.6",

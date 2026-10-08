@@ -2,6 +2,7 @@ import Head from "next/head";
 
 import EmptyState from "../../components/common/EmptyState";
 import PageHeader from "../../components/layout/PageHeader";
+import { USERNAME_PATTERN } from "../../lib/constants";
 import { withPageState } from "../../lib/server/pageState";
 import { useAppSelector } from "../../store";
 import { IUserProfile } from "../../types/User";
@@ -33,8 +34,20 @@ export default function Lists({ user }: { user: IUserProfile }) {
 export const getServerSideProps = withPageState<{ user: IUserProfile }>(
   async ({ ctx, repo }) => {
     const username = ctx.params?.username;
-    const user =
-      typeof username === "string" ? await repo.getUser(username) : null;
-    return user ? { props: { user } } : { notFound: true };
+    if (typeof username !== "string" || !USERNAME_PATTERN.test(username)) {
+      return { notFound: true };
+    }
+
+    const user = await repo.getUser(username);
+    if (!user) return { notFound: true };
+    if (user.username !== username) {
+      return {
+        redirect: {
+          destination: `/${user.username}/lists`,
+          permanent: false,
+        },
+      };
+    }
+    return { props: { user } };
   }
 );

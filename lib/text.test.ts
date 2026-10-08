@@ -33,6 +33,19 @@ describe("tokenizeTweet", () => {
     ]);
   });
 
+  it("ends URLs at bidi controls and leaves URLs with credentials as text", () => {
+    expect(tokenizeTweet("Log in: https://x.co/\u202Emoc.lapyap")[1]).toEqual({
+      type: "url",
+      value: "https://x.co/",
+      href: "https://x.co/",
+    });
+    const phishing =
+      "https://www.google.com.accounts.signin@evil.example/login";
+    expect(tokenizeTweet(phishing)).toEqual([
+      { type: "text", value: phishing },
+    ]);
+  });
+
   it("returns nothing for empty text", () => {
     expect(tokenizeTweet("")).toEqual([]);
   });
@@ -45,6 +58,21 @@ describe("displayUrl", () => {
       displayUrl("https://example.com/a/very/long/path/that/keeps/going", 20)
     ).toBe("example.com/a/very/…");
   });
+
+  it("always shows the whole host", () => {
+    expect(
+      displayUrl("https://www.google.com.accounts.signin.secure.example/login")
+    ).toBe("google.com.accounts.signin.secure.example/…");
+    // Internationalized hosts as punycode, so look-alike letters show.
+    expect(displayUrl("https://аpple.com/")).toBe("xn--pple-43d.com/");
+  });
+
+  it("shows readable paths without invisible controls", () => {
+    expect(displayUrl("https://example.com/%C3%A7ay")).toBe("example.com/çay");
+    expect(displayUrl("https://example.com/a%E2%80%AEb")).toBe(
+      "example.com/ab"
+    );
+  });
 });
 
 describe("safeHref", () => {
@@ -54,5 +82,6 @@ describe("safeHref", () => {
     expect(safeHref("data:text/html,hi")).toBeNull();
     expect(safeHref("not a url")).toBeNull();
     expect(safeHref(null)).toBeNull();
+    expect(safeHref("https://bank.com@evil.example/")).toBeNull();
   });
 });

@@ -112,7 +112,7 @@ const timelinesSlice = createSlice({
       })
       .addCase(deleteTweet.fulfilled, (state, action) => {
         for (const timeline of Object.values(state)) {
-          timeline.ids = timeline.ids.filter((id) => id !== action.payload);
+          timeline.ids = timeline.ids.filter((id) => id !== action.payload.id);
         }
       });
   },
