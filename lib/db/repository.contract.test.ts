@@ -12,27 +12,44 @@ import { Repository } from "./types";
 // the in-memory store and the Sanity repository (real GROQ via groq-js).
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 
-const factories: [string, () => Repository][] = [
+interface Subject {
+  repo: Repository;
+  /** Moderates a tweet the way a Studio editor would (blockTweet = true). */
+  block: (tweetId: string) => void;
+}
+
+const factories: [string, () => Subject][] = [
   [
     "memory",
     () => {
       let counter = 0;
-      return createMemoryRepository(createMemoryState(createSeedData(NOW)), {
-        now: () => NOW,
-        generateId: () => `new-${++counter}`,
-      });
+      const state = createMemoryState(createSeedData(NOW));
+      return {
+        repo: createMemoryRepository(state, {
+          now: () => NOW,
+          generateId: () => `new-${++counter}`,
+        }),
+        block: (id) => {
+          state.tweets.get(id)!.blocked = true;
+        },
+      };
     },
   ],
   [
     "sanity",
-    () =>
-      createSanityRepository(
-        new FakeSanityClient(
-          seedToSanityDocuments(createSeedData(NOW)),
-          () => NOW
-        ),
-        { canWrite: true }
-      ),
+    () => {
+      const client = new FakeSanityClient(
+        seedToSanityDocuments(createSeedData(NOW)),
+        () => NOW
+      );
+      return {
+        repo: createSanityRepository(client, { canWrite: true }),
+        block: (id) => {
+          client.documents.find((document) => document._id === id)!.blockTweet =
+            true;
+        },
+      };
+    },
   ],
 ];
 
@@ -45,9 +62,10 @@ const stranger = { username: "newcomer", fullname: "New Comer", image: null };
 
 describe.each(factories)("%s repository", (_name, create) => {
   let repo: Repository;
+  let block: Subject["block"];
 
   beforeEach(() => {
-    repo = create();
+    ({ repo, block } = create());
   });
 
   describe("listTweets", () => {
@@ -138,6 +156,34 @@ describe.each(factories)("%s repository", (_name, create) => {
       expect((await repo.listTweets({ search: "   " })).items).toHaveLength(20);
     });
 
+    it("matches whole words by prefix, ignoring punctuation (like GROQ match)", async () => {
+      const ids = async (search: string) =>
+        (await repo.listTweets({ search, limit: 50 })).items.map((t) => t.id);
+
+      expect(await ids("app")).toEqual(["seed-t09"]); // "apps", not "SuperApp"
+      expect(await ids("@devmarco")).toEqual([
+        "seed-t04",
+        "seed-t11",
+        "seed-t18",
+      ]);
+      expect(await ids("#SuperApp")).toEqual([
+        "seed-t01",
+        "seed-t05",
+        "seed-t06",
+        "seed-t12",
+        "seed-t15",
+        "seed-t19",
+      ]);
+      expect(await ids("downtime zero")).toEqual(["seed-t18"]);
+      expect(await ids("Rossi Marco")).toEqual([
+        "seed-t04",
+        "seed-t11",
+        "seed-t18",
+      ]);
+      expect(await ids("nightowl_dev")).toEqual(["seed-t07", "seed-t14"]);
+      expect(await ids("!!!")).toEqual([]);
+    });
+
     it("lists a user's bookmarks and likes", async () => {
       expect(
         (await repo.listTweets({ bookmarkedBy: DEMO_USERNAME })).items.map(
@@ -209,6 +255,20 @@ describe.each(factories)("%s repository", (_name, create) => {
       expect(notifications.some((n) => n.tweet.id === "seed-t05")).toBe(false);
 
       expect(await repo.deleteTweet("seed-t05")).toBe(false);
+    });
+  });
+
+  describe("deleteTweet scope", () => {
+    it("never deletes documents that are not tweets", async () => {
+      expect(await repo.deleteTweet("seed-r01")).toBe(false);
+      expect(await repo.deleteTweet("user-sarahcodes")).toBe(false);
+      expect(await repo.deleteTweet("like-seed-t01-sarahcodes")).toBe(false);
+
+      expect((await repo.listReplies("seed-t01")).map((r) => r.id)).toContain(
+        "seed-r01"
+      );
+      expect(await repo.getUser("sarahcodes")).not.toBeNull();
+      expect((await repo.getTweet("seed-t01"))!.stats.likes).toBe(6);
     });
   });
 
@@ -332,6 +392,16 @@ describe.each(factories)("%s repository", (_name, create) => {
       });
     });
 
+    it("does not derive profiles from moderated tweets", async () => {
+      const tweet = await repo.createTweet({
+        text: "something offensive",
+        author: { username: "troll", fullname: "OFFENSIVE NAME", image: null },
+      });
+      block(tweet.id);
+
+      expect(await repo.getUser("troll")).toBeNull();
+    });
+
     it("returns null for unknown users", async () => {
       expect(await repo.getUser("ghost")).toBeNull();
     });
@@ -389,7 +459,7 @@ describe.each(factories)("%s repository", (_name, create) => {
 
 describe("memory and sanity repositories agree", () => {
   it("on every read of the seed data", async () => {
-    const [memory, sanity] = factories.map(([, create]) => create());
+    const [memory, sanity] = factories.map(([, create]) => create().repo);
 
     for (const repo of [memory, sanity]) {
       await repo.setReaction("like", "seed-t08", me, true);

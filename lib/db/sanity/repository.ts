@@ -13,6 +13,7 @@ import {
   encodeCursor,
 } from "../cursor";
 import { ConfigurationError, NotFoundError } from "../errors";
+import { searchTerms } from "../search";
 import { ListTweetsQuery, NewReply, NewTweet, Repository } from "../types";
 import {
   notificationsQuery,
@@ -65,13 +66,6 @@ export const reactionDocumentId = (
   username: string
 ) => `${kind}-${tweetId}-${username.toLowerCase()}`;
 
-const searchTerms = (search: string) =>
-  search
-    .trim()
-    .split(/\s+/)
-    .filter(Boolean)
-    .map((term) => `${term}*`);
-
 export function createSanityRepository(
   client: SanityClientLike,
   { canWrite }: SanityRepositoryOptions
@@ -99,11 +93,15 @@ export function createSanityRepository(
     async listTweets(query: ListTweetsQuery = {}) {
       const limit = clampLimit(query.limit);
       const cursor = decodeCursor(query.cursor);
-      const terms = query.search ? searchTerms(query.search) : [];
+      // Blank searches are ignored; punctuation-only ones ("!!!") match nothing.
+      const searching = !!query.search?.trim();
+      const terms = searchTerms(query.search ?? "");
+      if (searching && terms.length === 0)
+        return { items: [], nextCursor: null };
 
       const params: Params = { viewer: viewerParam(query.viewer) };
       if (query.author) params.author = query.author.toLowerCase();
-      if (terms.length) params.search = terms;
+      if (searching) params.search = terms.map((term) => `${term}*`);
       if (query.bookmarkedBy)
         params.bookmarkedBy = query.bookmarkedBy.toLowerCase();
       if (query.likedBy) params.likedBy = query.likedBy.toLowerCase();
@@ -115,7 +113,7 @@ export function createSanityRepository(
       const groq = tweetListQuery(
         {
           author: !!query.author,
-          search: terms.length > 0,
+          search: searching,
           bookmarkedBy: !!query.bookmarkedBy,
           likedBy: !!query.likedBy,
           cursor: !!cursor,
@@ -169,17 +167,16 @@ export function createSanityRepository(
     async deleteTweet(id) {
       assertWritable();
 
-      const ids =
-        (await client.fetch<string[]>(TWEET_AND_REFERENCES_QUERY, { id })) ??
-        [];
-      if (!ids.includes(id)) return false;
+      const found = await client.fetch<{
+        tweet: string | null;
+        references: string[];
+      }>(TWEET_AND_REFERENCES_QUERY, { id });
+      if (!found?.tweet) return false;
 
       // One transaction: referencing documents first, so strong references
       // (replies) never block deleting the tweet.
       await client.mutate([
-        ...ids
-          .filter((other) => other !== id)
-          .map((other) => ({ delete: { id: other } })),
+        ...found.references.map((other) => ({ delete: { id: other } })),
         { delete: { id } },
       ]);
       return true;

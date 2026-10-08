@@ -19,12 +19,10 @@ export default defineConfig({
   schema: { types: schemaTypes },
   document: {
     // Reactions are created by the app with deterministic ids; creating them
-    // by hand would allow duplicate likes.
-    newDocumentOptions: (templates, { creationContext }) =>
-      creationContext.type === "global"
-        ? templates.filter(
-            (template) => !REACTION_TYPES.includes(template.templateId)
-          )
-        : templates,
+    // by hand (from any pane or menu) would allow duplicate likes.
+    newDocumentOptions: (templates) =>
+      templates.filter(
+        (template) => !REACTION_TYPES.includes(template.templateId)
+      ),
   },
 });

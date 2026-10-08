@@ -61,8 +61,8 @@ describe("Sanity repository", () => {
     expect(query).not.toContain(evil);
     expect(params).toMatchObject({
       author: evil.toLowerCase(),
-      // Each whitespace-separated word becomes a prefix term.
-      search: ['")*', "||*", "true*", "||*", '("*'],
+      // Only words become prefix terms; punctuation is dropped.
+      search: ["true*"],
     });
   });
 

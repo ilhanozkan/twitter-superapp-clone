@@ -44,7 +44,9 @@ implementations, chosen by `DATA_SOURCE` (see `.env.example`):
 
 The same contract test suite (`lib/db/repository.contract.test.ts`) runs against both:
 the Sanity implementation executes its real GROQ queries with
-[groq-js](https://github.com/sanity-io/groq-js), so both sources are verified to return identical results.
+[groq-js](https://github.com/sanity-io/groq-js), and a final test checks that both return
+the same results for the same reads. Search works like GROQ's `match` in both: every word
+of the query must start a word in the tweet, the username or the name.
 
 The Sanity Studio lives in [`sanity/`](./sanity/README.md).
 

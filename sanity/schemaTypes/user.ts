@@ -1,4 +1,4 @@
-import { defineField, defineType } from "sanity";
+import { defineField, defineType, getPublishedId } from "sanity";
 
 import { apiVersion } from "../env";
 import { imageUrl, username } from "./rules";
@@ -17,15 +17,19 @@ export const userType = defineType({
         username(rule).custom(async (value, context) => {
           if (!value) return true;
 
-          const id = context.document?._id.replace(/^drafts\./, "");
-          const taken = await context
+          // The same user may exist as published, draft and release versions;
+          // only a different document counts as a clash.
+          const published = getPublishedId(context.document?._id ?? "");
+          const ids = await context
             .getClient({ apiVersion })
-            .fetch<number>(
-              `count(*[_type == "user" && lower(username) == $username && !(_id in [$id, $draftId])])`,
-              { username: value.toLowerCase(), id, draftId: `drafts.${id}` }
+            .fetch<string[]>(
+              `*[_type == "user" && lower(username) == $username]._id`,
+              { username: value.toLowerCase() }
             );
 
-          return taken === 0 ? true : "This username is already taken";
+          return ids.some((id) => getPublishedId(id) !== published)
+            ? "This username is already taken"
+            : true;
         }),
     }),
     defineField({

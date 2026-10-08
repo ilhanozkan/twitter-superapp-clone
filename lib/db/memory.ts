@@ -16,6 +16,7 @@ import {
   isAfterCursor,
 } from "./cursor";
 import { NotFoundError } from "./errors";
+import { matchesSearch, searchTerms } from "./search";
 import { createSeedData, SeedData } from "./seed";
 import { ListTweetsQuery, NewReply, NewTweet, Repository } from "./types";
 
@@ -47,7 +48,14 @@ export interface MemoryState {
 export interface MemoryRepositoryOptions {
   now?: () => Date;
   generateId?: () => string;
+  /**
+   * The demo store keeps at most this many tweets and replies, dropping the
+   * oldest first, so a flood of posts cannot exhaust the server's memory.
+   */
+  limits?: { tweets: number; replies: number };
 }
+
+const DEFAULT_LIMITS = { tweets: 2000, replies: 5000 };
 
 const TREND_WINDOW = 500;
 
@@ -128,8 +136,34 @@ export function createMemoryRepository(
   {
     now = () => new Date(),
     generateId = randomUUID,
+    limits = DEFAULT_LIMITS,
   }: MemoryRepositoryOptions = {}
 ): Repository {
+  /** Deletes a tweet with its replies and reactions. */
+  const removeTweet = (id: string) => {
+    if (!state.tweets.delete(id)) return false;
+
+    state.replies = state.replies.filter((reply) => reply.tweetId !== id);
+    state.reactions.forEach((reaction, reactionId) => {
+      if (reaction.tweetId === id) state.reactions.delete(reactionId);
+    });
+    return true;
+  };
+
+  const enforceLimits = () => {
+    while (state.tweets.size > limits.tweets) {
+      let oldest: StoredTweet | undefined;
+      state.tweets.forEach((tweet) => {
+        if (!oldest || compareNewestFirst(tweet, oldest) > 0) oldest = tweet;
+      });
+      if (!oldest) break;
+      removeTweet(oldest.id);
+    }
+    if (state.replies.length > limits.replies) {
+      state.replies.splice(0, state.replies.length - limits.replies);
+    }
+  };
+
   const visibleTweet = (id: string) => {
     const tweet = state.tweets.get(id);
     return tweet && !tweet.blocked ? tweet : undefined;
@@ -181,7 +215,11 @@ export function createMemoryRepository(
     async listTweets(query: ListTweetsQuery = {}) {
       const limit = clampLimit(query.limit);
       const cursor = decodeCursor(query.cursor);
-      const search = query.search?.trim().toLowerCase();
+      // Blank searches are ignored; punctuation-only ones ("!!!") match nothing.
+      const searching = !!query.search?.trim();
+      const terms = searchTerms(query.search ?? "");
+      if (searching && terms.length === 0)
+        return { items: [], nextCursor: null };
 
       const matches = timeline().filter((tweet) => {
         if (query.author && key(tweet.author.username) !== key(query.author))
@@ -194,9 +232,10 @@ export function createMemoryRepository(
         if (query.likedBy && !hasReaction("like", tweet.id, query.likedBy))
           return false;
         if (
-          search &&
-          ![tweet.text, tweet.author.username, tweet.author.fullname].some(
-            (field) => field.toLowerCase().includes(search)
+          searching &&
+          !matchesSearch(
+            [tweet.text, tweet.author.username, tweet.author.fullname],
+            terms
           )
         ) {
           return false;
@@ -228,17 +267,12 @@ export function createMemoryRepository(
         blocked: false,
       };
       state.tweets.set(tweet.id, tweet);
+      enforceLimits();
       return toTweet(tweet, author.username);
     },
 
     async deleteTweet(id) {
-      if (!state.tweets.delete(id)) return false;
-
-      state.replies = state.replies.filter((reply) => reply.tweetId !== id);
-      state.reactions.forEach((reaction, reactionId) => {
-        if (reaction.tweetId === id) state.reactions.delete(reactionId);
-      });
-      return true;
+      return removeTweet(id);
     },
 
     async listReplies(tweetId) {
@@ -259,6 +293,7 @@ export function createMemoryRepository(
         author: toAuthor(author),
       };
       state.replies.push(reply);
+      enforceLimits();
       return { ...reply };
     },
 
@@ -287,20 +322,18 @@ export function createMemoryRepository(
       if (user) return { ...user, tweetCount: tweets.length };
 
       // People who tweeted but have no profile record get one derived from
-      // their most recent tweet, mirroring the Sanity implementation.
-      const authored = Array.from(state.tweets.values())
-        .filter((tweet) => key(tweet.author.username) === key(username))
-        .sort(compareNewestFirst);
-      if (authored.length === 0) return null;
+      // their most recent visible tweet, mirroring the Sanity implementation.
+      // Moderated tweets never count, so their name and avatar stay hidden.
+      if (tweets.length === 0) return null;
 
       const profile: IUserProfile = {
-        ...toAuthor(authored[0].author),
+        ...toAuthor(tweets[0].author),
         bio: null,
         location: null,
         website: null,
         banner: null,
         verified: false,
-        joinedAt: authored[authored.length - 1].createdAt,
+        joinedAt: tweets[tweets.length - 1].createdAt,
         tweetCount: tweets.length,
       };
       return profile;

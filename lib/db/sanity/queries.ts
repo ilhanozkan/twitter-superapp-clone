@@ -92,8 +92,14 @@ export const TWEET_BY_ID_QUERY = `*[${TWEET_FILTER} && _id == $id][0] ${TWEET_PR
 
 export const VISIBLE_TWEET_ID_QUERY = `*[${TWEET_FILTER} && _id == $id][0]._id`;
 
-/** The tweet plus every document pointing at it (replies, reactions). */
-export const TWEET_AND_REFERENCES_QUERY = `*[_id == $id || references($id)]._id`;
+/**
+ * The tweet (only if it is a tweet) and the replies and reactions pointing at
+ * it. Scoped by type so a user or reply id can never be deleted as a tweet.
+ */
+export const TWEET_AND_REFERENCES_QUERY = `{
+  "tweet": *[_type == "tweet" && _id == $id][0]._id,
+  "references": *[_type in ["comment", "like", "retweet", "bookmark"] && references($id)]._id
+}`;
 
 export const REPLIES_QUERY = `*[_type == "comment" && tweet._ref == $tweetId] | order(_createdAt asc, _id asc) ${REPLY_PROJECTION}`;
 
@@ -109,10 +115,10 @@ export const USER_QUERY = `{
     "verified": coalesce(verified, false),
     "joinedAt": coalesce(joinedAt, _createdAt)
   },
-  "latest": *[_type == "tweet" && lower(username) == $username] | order(_createdAt desc)[0] ${author(
-    "userImage"
-  )},
-  "firstTweetAt": *[_type == "tweet" && lower(username) == $username] | order(_createdAt asc)[0]._createdAt,
+  "latest": *[${TWEET_FILTER} && lower(username) == $username] | order(_createdAt desc)[0] ${author(
+  "userImage"
+)},
+  "firstTweetAt": *[${TWEET_FILTER} && lower(username) == $username] | order(_createdAt asc)[0]._createdAt,
   "tweetCount": count(*[${TWEET_FILTER} && lower(username) == $username])
 }`;
 

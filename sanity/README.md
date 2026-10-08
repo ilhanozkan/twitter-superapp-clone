@@ -5,7 +5,7 @@ It edits the same documents the app reads and writes when `DATA_SOURCE=sanity`.
 
 ## Run it
 
-Requires Node.js 22.12 or newer.
+Requires Node.js 22.20 or newer.
 
 ```bash
 cd sanity
@@ -13,13 +13,14 @@ npm ci
 npm run dev        # http://localhost:3333
 ```
 
-| Script                       | What it does                                 |
-| ---------------------------- | -------------------------------------------- |
-| `npm run dev`                | Studio with hot reload                       |
-| `npm run build`              | Production build into `dist/`                |
-| `npm run deploy`             | Deploys the Studio to `<name>.sanity.studio` |
-| `npm run typecheck`          | TypeScript check of config and schemas       |
-| `npx sanity schema validate` | Validates the schema without network access  |
+| Script                         | What it does                                 |
+| ------------------------------ | -------------------------------------------- |
+| `npm run dev` (or `npm start`) | Studio with hot reload                       |
+| `npm run build`                | Production build into `dist/`                |
+| `npm run preview`              | Serves the build from `npm run build`        |
+| `npm run deploy`               | Deploys the Studio to `<name>.sanity.studio` |
+| `npm run typecheck`            | TypeScript check of config and schemas       |
+| `npx sanity schema validate`   | Validates the schema without network access  |
 
 The project id and dataset default to the original project (`am1ac7lm` / `production`).
 Override them with `SANITY_STUDIO_PROJECT_ID` and `SANITY_STUDIO_DATASET` (see `.env.example`).
