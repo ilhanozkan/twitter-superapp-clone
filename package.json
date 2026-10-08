@@ -21,7 +21,8 @@
     "react-dom": "18.1.0",
     "react-icons": "^4.6.0",
     "react-redux": "^8.0.5",
-    "react-timeago": "^7.1.0"
+    "react-timeago": "^7.1.0",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",
