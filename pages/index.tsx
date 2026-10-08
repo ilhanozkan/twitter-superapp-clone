@@ -7,6 +7,7 @@ import Sidebar from "../components/sidebar";
 import Feed from "../components/Feed";
 import RightBar from "../components/RightBar";
 import { MAX_PAGE_SIZE } from "../lib/constants";
+import { getCurrentUsername } from "../lib/auth";
 import { getRepository } from "../lib/db";
 import { ITweetsData } from "../types/Tweet";
 import { setFeed } from "../slices/feedSlice";
@@ -40,7 +41,10 @@ const Home = ({ tweets }: ITweetsData) => {
 export default Home;
 
 export const getServerSideProps: GetServerSideProps<ITweetsData> = async () => {
-  const { items } = await getRepository().listTweets({ limit: MAX_PAGE_SIZE });
+  const { items } = await getRepository().listTweets({
+    viewer: getCurrentUsername(),
+    limit: MAX_PAGE_SIZE,
+  });
 
   return { props: { tweets: items } };
 };

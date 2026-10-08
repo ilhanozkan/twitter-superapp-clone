@@ -40,12 +40,3 @@ export interface ITweetsData {
 export interface ITweetData {
   tweet: ITweet;
 }
-
-/** Request body of POST /api/addTweet. */
-export type TweetBody = {
-  fullname: string;
-  username: string;
-  tweet: string;
-  userImage: string;
-  tweetImage?: string;
-};

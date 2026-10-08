@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { getDataSource, getSanityConfig, SANITY_API_VERSION } from "./config";
+import { ConfigurationError } from "./db/errors";
 
 describe("getDataSource", () => {
   it("falls back to the in-memory demo store when nothing is configured", () => {
@@ -24,6 +25,10 @@ describe("getDataSource", () => {
   it("rejects unknown data sources", () => {
     expect(() => getDataSource({ DATA_SOURCE: "postgres" })).toThrow(
       /Invalid DATA_SOURCE/
+    );
+    // A ConfigurationError, so the API answers 503 instead of 500.
+    expect(() => getDataSource({ DATA_SOURCE: "postgres" })).toThrow(
+      ConfigurationError
     );
   });
 });

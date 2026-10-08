@@ -1,3 +1,5 @@
+import { ConfigurationError } from "./db/errors";
+
 export type DataSource = "memory" | "sanity";
 
 type Env = Record<string, string | undefined>;
@@ -31,7 +33,7 @@ export function getDataSource(env: Env = process.env): DataSource {
 
   if (explicit === "memory" || explicit === "sanity") return explicit;
   if (explicit) {
-    throw new Error(
+    throw new ConfigurationError(
       `Invalid DATA_SOURCE "${explicit}". Expected "memory" or "sanity".`
     );
   }
@@ -49,7 +51,7 @@ export function getSanityConfig(env: Env = process.env): SanityConfig {
   );
 
   if (!projectId) {
-    throw new Error(
+    throw new ConfigurationError(
       'DATA_SOURCE is "sanity" but SANITY_PROJECT_ID is not set. ' +
         "Set it (see .env.example) or unset DATA_SOURCE to use the demo store."
     );

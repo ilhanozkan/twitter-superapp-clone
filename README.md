@@ -50,6 +50,16 @@ of the query must start a word in the tweet, the username or the name.
 
 The Sanity Studio lives in [`sanity/`](./sanity/README.md).
 
+## API
+
+The app talks to a small REST API under `/api` (tweets, replies, likes,
+retweets, bookmarks, users, notifications, trends). Every request acts as the
+account in `DEMO_USERNAME`, decided on the server; writes are validated, rate
+limited and same-origin only. See [docs/API.md](./docs/API.md).
+
+> There is no sign-in yet, so every visitor acts as `DEMO_USERNAME`. For a
+> public deployment backed by Sanity with a write token, set `READ_ONLY=true`.
+
 ## Features
 
 ### Todos
