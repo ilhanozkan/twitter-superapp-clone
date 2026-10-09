@@ -888,12 +888,27 @@ describe("write protections", () => {
     const limited = await send({});
     expectError(limited, 429, "rate_limited");
     expect(Number(limited.headers["retry-after"])).toBeGreaterThan(0);
-    // One bucket for every kind of money operation.
-    expectError(
-      await call(api.topUps, keyed({ amount: 2_500 })),
-      429,
-      "rate_limited"
-    );
+    // One bucket for every kind of money operation (F's seed asks the demo
+    // user to pay seed-req03).
+    const others: [string, MockResponse][] = [
+      ["top-up", await call(api.topUps, keyed({ amount: 2_500 }))],
+      [
+        "tip",
+        await call(api.tip, {
+          query: { id: "seed-t03" },
+          ...keyed({ amount: 200 }),
+        }),
+      ],
+      [
+        "request",
+        await call(api.requests, keyed({ from: "sarahcodes", amount: 450 })),
+      ],
+      ["pay", await call(api.pay, keyedNoBody({ id: "seed-req03" }))],
+    ];
+    for (const [label, res] of others) {
+      expectError(res, 429, "rate_limited", label);
+      expect(Number(res.headers["retry-after"]), label).toBeGreaterThan(0);
+    }
     // Rejected requests don't use the budget, and other users have their own.
     expectInvalid(await send({ amount: 0 }), "amount");
     actAs("sarahcodes");

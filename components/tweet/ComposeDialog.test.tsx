@@ -7,7 +7,16 @@ import { sessionState } from "../../slices/sessionSlice";
 import { openCompose } from "../../slices/uiSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IFeatures } from "../../types/Superapp";
+import { TweetAttachmentInput } from "../../types/Tweet";
 import ComposeDialog from "./ComposeDialog";
+
+// A stand-in for the shop lane's slot, to see what the dialog hands it (the
+// real picker may fetch the attached product).
+vi.mock("../shop/ComposerProductPicker", () => ({
+  default: ({ attachment }: { attachment: TweetAttachmentInput | null }) => (
+    <p>Attached {attachment?.productId ?? "nothing"}</p>
+  ),
+}));
 
 const attachment = { type: "product" as const, productId: "seed-p-kk-latte" };
 
@@ -36,9 +45,11 @@ function postedBody() {
       )
   );
   vi.stubGlobal("fetch", fetch);
+  const posted = () =>
+    fetch.mock.calls.find(([, init]) => init?.method === "POST");
   return async () => {
-    await waitFor(() => expect(fetch).toHaveBeenCalled());
-    return JSON.parse(fetch.mock.calls[0][1]?.body as string);
+    await waitFor(() => expect(posted()).toBeDefined());
+    return JSON.parse(posted()![1]!.body as string);
   };
 }
 
@@ -70,6 +81,7 @@ describe("ComposeDialog prefill", () => {
       "value",
       "Just had the Pistachio latte ☕"
     );
+    expect(screen.getByText("Attached seed-p-kk-latte")).toBeTruthy();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Tweet" }));
@@ -85,6 +97,7 @@ describe("ComposeDialog prefill", () => {
   it("drops the attachment while the shop is off", async () => {
     const body = postedBody();
     renderDialog(featuresWith());
+    expect(screen.queryByText(/^Attached/)).toBeNull();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Tweet" }));

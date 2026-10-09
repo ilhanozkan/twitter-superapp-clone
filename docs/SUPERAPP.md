@@ -29,7 +29,9 @@ an API page under [`api/`](api/) and a feature page under
 
 A feature whose PR has not shipped is **off**: its navigation, tiles and
 buttons are hidden, and its pages and API answer 404. Nothing half-built is
-ever shown.
+ever shown. Messages is the one exception, because the app already had it:
+its navigation item and today's placeholder `/messages` page stay whatever
+its status, and only the unread badge and the messaging UI depend on it.
 
 ## Architecture
 
@@ -130,9 +132,11 @@ always comes from `lib/auth.ts`.
   credits waits for the server, and every money response carries the
   actor's wallet (`balanceChanged`).
 - Each feature has its own slice in `slices/`. A slice registers its own
-  side effects with `startAppListening` (`slices/listeners.ts`) and names
-  the state that survives navigation in `followsNavigation`, so `store.ts`
-  never changes for a feature.
+  side effects with `startAppListening` (`slices/listeners.ts`) and lists in
+  `followsNavigation` the action types whose outcomes are replayed into the
+  current page's store when a request started before a navigation settles
+  (`FOLLOWS_NAVIGATION` in `store.ts`), so `store.ts` never changes for a
+  feature.
 
 ### Time without background work
 
@@ -194,8 +198,12 @@ the transfer carries `holdUntil` (delivery or pickup time).
 - **Debits check `available`**, so held credits can't be spent.
 - A **refund** reverses a held credit while it is still held, at most once,
   for the same amount with the parties swapped. It debits the `balance`, not
-  `available`. Because held credits can't be spent, the balance always
-  covers them, so **a refund can never fail for lack of funds**.
+  `available`. Because held credits can't be spent, the balance covers them
+  for as long as the hold lasts, so **a refund inside its window never fails
+  for lack of funds**. The hold can end between a refund's read and its
+  write, freeing the credits; on Sanity the refunding wallet is
+  revision-guarded, so a debit that lands in between makes the refund retry
+  and find its window over (see [Concurrency](#concurrency)).
 - Funds become available simply because time passes. There is no
   settlement step to run.
 
@@ -247,10 +255,12 @@ idempotent by their target state: repeating one answers 200.
 - **Sanity:** each attempt reads **one snapshot** (wallets with their
   revision, pending holds, freezes, the originals being refunded, extra
   counts) and writes **one transaction**:
-  - a debited wallet is patched with `ifRevisionID`, so a concurrent change
-    makes the transaction fail instead of overdrawing;
+  - a debited wallet, including the one a refund debits, is patched with
+    `ifRevisionID`, so a concurrent change makes the transaction fail
+    instead of overdrawing;
   - a plain credit is an `inc`, which commutes, so receivers never contend;
-  - a refund is guarded on the original transfer's revision.
+  - a refund is also guarded on the original transfer's revision, so it
+    happens once.
 
   On a 409 or 404 the ledger re-reads the primary record: if it now exists
   the call is a replay, otherwise it retries (at most 3 attempts with a

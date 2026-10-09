@@ -113,6 +113,15 @@ test.describe("navigation", () => {
     await expect(page).toHaveURL(/\/wallet$/);
   });
 
+  test("phones reach the account menu from Explore too", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/explore");
+
+    await page.getByRole("button", { name: /account menu/ }).click();
+    await page.getByRole("menuitem", { name: "Profile" }).click();
+    await expect(page).toHaveURL(/\/illlhanozkan$/);
+  });
+
   test("the bell counts new notifications until Notifications is opened", async ({
     page,
   }) => {

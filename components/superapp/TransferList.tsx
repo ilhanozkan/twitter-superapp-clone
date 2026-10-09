@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ReactNode, useEffect, useRef, useState } from "react";
 import { BsTwitter } from "react-icons/bs";
 
+import { useServerClock } from "../../lib/client/useServerClock";
 import { ITransfer } from "../../types/Wallet";
 import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
@@ -14,6 +15,8 @@ interface TransferListProps {
   transfers: ITransfer[];
   /** Whose activity this is: amounts are signed from their side. */
   viewer: string;
+  /** The server's clock when `transfers` were read (ISO): it decides "Pending" and the day groups. */
+  serverNow: string;
   hasMore: boolean;
   loading: boolean;
   /** Loading the next page failed: shown with a Retry button. */
@@ -22,7 +25,8 @@ interface TransferListProps {
   empty: ReactNode;
 }
 
-const DAY = 24 * 60 * 60 * 1000;
+const MINUTE = 60 * 1000;
+const DAY = 24 * 60 * MINUTE;
 const dayKey = (date: Date, timeZone?: string) =>
   date.toLocaleDateString("en-CA", { timeZone });
 
@@ -115,6 +119,7 @@ function TransferRow({
 export default function TransferList({
   transfers,
   viewer,
+  serverNow,
   hasMore,
   loading,
   error,
@@ -122,9 +127,19 @@ export default function TransferList({
   empty,
 }: TransferListProps) {
   const hydrated = useHydrated();
-  const [now] = useState(() => Date.now());
+  const clock = useServerClock(serverNow);
+  // Holds end with the server's clock (§7). Rendering at `serverNow` keeps
+  // hydration identical to the server's HTML whatever the device clock
+  // says; each minute after mount re-reads the server-adjusted clock, so a
+  // hold that ends while the page is open loses its "Pending" chip.
+  const [now, setNow] = useState(() => Date.parse(serverNow));
   const sentinel = useRef<HTMLDivElement>(null);
   const load = useRef(onLoadMore);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(clock.now().getTime()), MINUTE);
+    return () => clearInterval(id);
+  }, [clock]);
 
   useEffect(() => {
     load.current = onLoadMore;

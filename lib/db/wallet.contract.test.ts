@@ -737,6 +737,44 @@ describe.each(subjects())("%s wallet", (name, create) => {
       await expectLedgerInvariants(subject);
     });
 
+    it.runIf(name === "sanity")(
+      "refuse a refund whose hold ends, and is spent, before it commits",
+      async () => {
+        await fundAlice(2_500);
+        const holdUntil = minutesFrom(subject, 10);
+        const held = await heldPayment(subject, {
+          id: "held-race",
+          from: alice,
+          to: shop,
+          amount: 900,
+          holdUntil,
+        });
+        // The refund reads inside the window; the hold ends and the
+        // released credits are spent before its transaction lands.
+        subject.clock.set(new Date(Date.parse(holdUntil) - 1).toISOString());
+        const client = subject.client!;
+        let competitors = 0;
+        client.beforeMutate = async () => {
+          if (competitors++ > 0) return;
+          subject.clock.advance(5);
+          await repo.wallet.send(sendInput(shop, bob, 900));
+        };
+        const refused = reverseTransfer(subject, held);
+        await expect(refused).rejects.toBeInstanceOf(InvalidStateError);
+        await expect(refused).rejects.toThrow("The refund window is over");
+        client.beforeMutate = undefined;
+
+        expect(competitors).toBe(1);
+        expect((await repo.wallet.getTransfer("held-race"))!.reversedBy).toBe(
+          null
+        );
+        expect(await balance(shop)).toBe(0);
+        expect(await balance(bob)).toBe(900);
+        expect(await balance(alice)).toBe(1_600);
+        await expectLedgerInvariants(subject);
+      }
+    );
+
     it("reach frozen wallets in both directions", async () => {
       await fundAlice(2_500);
       const held = await heldPayment(subject, {
@@ -806,6 +844,42 @@ describe.each(subjects())("%s wallet", (name, create) => {
       const { items } = await repo.wallet.listActivity("alice_test");
       expect(items.length).toBeLessThanOrEqual(3);
       expect(await balance(alice)).toBe(items.length * 2_500);
+      await expectLedgerInvariants(subject);
+    });
+
+    it("counts pending requests exactly under concurrent requests", async () => {
+      for (let i = 0; i < 8; i++)
+        await repo.wallet.createRequest(requestInput(bob, alice, 100 + i));
+      // No credits move, so only the wallet lock (§6.9) keeps the count
+      // exact: every operation reads 8 pending before any of them commits.
+      if (subject.client) {
+        subject.client.fetchDelay = () =>
+          new Promise((resolve) => setImmediate(resolve));
+      }
+      const outcomes = await Promise.allSettled(
+        Array.from({ length: 5 }, (_, i) =>
+          repo.wallet.createRequest(requestInput(bob, alice, 200 + i))
+        )
+      );
+      if (subject.client) subject.client.fetchDelay = undefined;
+
+      const pending = (
+        await repo.wallet.listRequests("bob_test", { role: "outgoing" })
+      ).filter((request) => request.status === "pending");
+      expect(pending).toHaveLength(10);
+      expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(2);
+      for (const outcome of outcomes) {
+        if (outcome.status === "rejected") {
+          expect(
+            outcome.reason instanceof LimitExceededError ||
+              outcome.reason instanceof ConflictError,
+            String(outcome.reason)
+          ).toBe(true);
+        }
+      }
+      expect(
+        (await repo.wallet.getLimits("bob_test")).pendingRequestsLeft
+      ).toBe(0);
       await expectLedgerInvariants(subject);
     });
 
@@ -1027,6 +1101,11 @@ describe.each(subjects())("%s wallet", (name, create) => {
     });
 
     it("leave attachments null while the shop is off", async () => {
+      // Pinned off: the shop lane turns it on when it ships.
+      const [, withoutShop] = subjects({ disabled: ["shop"] }).find(
+        ([store]) => store === name
+      )!;
+      const { repo } = withoutShop();
       const tweet = await repo.createTweet({
         text: "Try the latte",
         author: sarah,
