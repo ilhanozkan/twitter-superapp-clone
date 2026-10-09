@@ -12,8 +12,8 @@ import { DEMO_USERNAME } from "./seed";
 import { Repository } from "./types";
 
 // How both stores compose the SuperApp sub-repositories while every lane is
-// still a stub: everything reads as empty and is "off", Tweets carry the new
-// fields with neutral values, and the core keeps working on the full world.
+// still a stub: the wallet is on, every lane reads as empty and is "off",
+// Tweets carry the new fields, and the core keeps working on the full world.
 
 const me = {
   username: DEMO_USERNAME,
@@ -30,32 +30,14 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     repo = subject.repo;
   });
 
-  it("reports every unbuilt feature as off", () => {
+  it("reports the wallet on and every unbuilt feature off", () => {
     for (const id of FEATURE_IDS)
-      expect(repo.featureStatus(id), id).toBe("off");
-    expect(Object.values(repo.features).every((on) => !on)).toBe(true);
+      expect(repo.featureStatus(id), id).toBe(id === "wallet" ? "on" : "off");
+    expect(repo.features).toMatchObject({ wallet: true, shop: false });
     expect(Object.keys(repo.features).sort()).toEqual([...FEATURE_IDS].sort());
   });
 
   it("reads stubbed features as empty", async () => {
-    expect(await repo.wallet.getWallet("sarahcodes")).toEqual({
-      username: "sarahcodes",
-      balance: 0,
-      pending: 0,
-      available: 0,
-      frozen: false,
-    });
-    expect(await repo.wallet.listActivity(DEMO_USERNAME)).toEqual({
-      items: [],
-      nextCursor: null,
-    });
-    expect(await repo.wallet.tipStats(["seed-t01"], DEMO_USERNAME)).toEqual(
-      new Map()
-    );
-    expect(await repo.business.getBusiness("kizilaykahve")).toBeNull();
-    expect(await repo.business.listManagedBusinesses(DEMO_USERNAME)).toEqual(
-      []
-    );
     expect(await repo.shop.getProductCards(["seed-p-kk-latte"])).toEqual(
       new Map()
     );
@@ -69,8 +51,8 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     expect(await repo.stories.getStory("seed-s1", DEMO_USERNAME)).toBeNull();
     expect(await repo.messages.unreadConversations(DEMO_USERNAME)).toBe(0);
     expect(await repo.channels.listChannels({}, DEMO_USERNAME)).toEqual([]);
-    for (const id of FEATURE_IDS) {
-      const feature = id === "wallet" ? repo.wallet : repo[id];
+    for (const id of FEATURE_IDS.filter((id) => id !== "wallet")) {
+      const feature = repo[id];
       expect(await feature.notifications(DEMO_USERNAME, 10), id).toEqual([]);
       expect(await feature.liveActivity(DEMO_USERNAME), id).toEqual([]);
     }
@@ -80,11 +62,14 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
   });
 
   it("refuses writes to stubbed features with NotImplementedError", async () => {
-    const key = { operationId: "tx-1", fingerprint: "f" };
+    const key = { operationId: "order-1", fingerprint: "f" };
     const writes = [
-      repo.wallet.topUp({ ...key, to: me, amount: 2500 }),
-      repo.business.setAcceptingOrders("kizilaykahve", false),
       repo.shop.setProductAvailability("seed-p-kk-latte", false),
+      repo.orders.placeDemoOrder({
+        ...key,
+        business: "kizilaykahve",
+        requestedBy: me,
+      }),
       repo.orders.cancelOrder({ id: "seed-o01", as: "buyer" }),
       repo.rides.cancelRide({ id: "seed-ride01" }),
       repo.stories.markSeen(["seed-s1"], me),
@@ -100,17 +85,13 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     await expectLedgerInvariants(subject);
   });
 
-  it("decorates Tweets with neutral tips and no attachment while the features are off", async () => {
+  it("decorates Tweets with no attachment while the shop is off", async () => {
     const { items } = await repo.listTweets({
       viewer: DEMO_USERNAME,
       limit: 50,
     });
     expect(items.length).toBeGreaterThan(0);
-    for (const tweet of items) {
-      expect(tweet.stats.tips).toBe(0);
-      expect(tweet.viewer.tipped).toBe(false);
-      expect(tweet.attachment).toBeNull();
-    }
+    for (const tweet of items) expect(tweet.attachment).toBeNull();
 
     const created = await repo.createTweet({
       text: "Try the latte",
@@ -176,10 +157,9 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
 
   it("keeps the core notifications on the full world", async () => {
     const notifications = await repo.listNotifications(DEMO_USERNAME);
-    expect(notifications.length).toBeGreaterThan(0);
-    expect(
-      notifications.every((n) => ["like", "retweet", "reply"].includes(n.type))
-    ).toBe(true);
+    expect(notifications.map((n) => n.type)).toEqual(
+      expect.arrayContaining(["like", "retweet", "reply"])
+    );
   });
 });
 

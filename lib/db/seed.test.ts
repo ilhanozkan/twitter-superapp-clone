@@ -10,13 +10,15 @@ import {
   USERNAME_PATTERN,
 } from "../constants";
 import { etaMinutes } from "../superapp/business";
+import { auditLedger } from "../superapp/ledger";
 import { isCents } from "../superapp/money";
 import { isPlaceId } from "../superapp/places";
 import { PRIVATE_TYPES } from "./sanity/ids";
+import { exposedPrivateDocuments } from "./sanity/privacy";
 import { seedToSanityDocuments } from "./sanity/seed";
-import { createSeedData, DEMO_USERNAME, SeedData } from "./seed";
+import { createSeedData, DEMO_USERNAME, SeedData, seedContext } from "./seed";
 import { SeedTransfer } from "./seeds/types";
-import { composeWalletSeed } from "./seeds/wallet";
+import { composeWalletSeed, createWalletSeed } from "./seeds/wallet";
 
 const NOW = new Date("2026-10-08T12:00:00.000Z");
 
@@ -230,6 +232,139 @@ describe("seed worlds", () => {
 
     expect(total).toBe(issued);
     expect(Object.values(wallet.balances).every((b) => b >= 0)).toBe(true);
+    expect(
+      auditLedger({
+        wallets: Object.entries(wallet.balances).map(([username, balance]) => ({
+          username,
+          balance,
+        })),
+        transfers: wallet.transfers,
+        now: NOW,
+      }).ok
+    ).toBe(true);
+  });
+
+  it("gives every money record a unique id", () => {
+    const wallet = superapp.superapp!.wallet;
+    const ids = [...wallet.transfers, ...wallet.requests].map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe("F's wallet seed", () => {
+  const world = createSeedData(NOW);
+  const authorOf = (username: string) => {
+    const user = world.users.find((u) => u.username === username)!;
+    return {
+      username: user.username,
+      fullname: user.fullname,
+      image: user.image,
+    };
+  };
+  const own = createWalletSeed(seedContext(NOW));
+  const wallet = composeWalletSeed(
+    own.contribution.transfers!,
+    authorOf,
+    own.data!.requests
+  );
+
+  it("leaves the demo user at 325.00 credits on its own, with the ledger invariants", () => {
+    expect(wallet.balances[DEMO_USERNAME]).toBe(32_500);
+    expect(
+      auditLedger({
+        wallets: Object.entries(wallet.balances).map(([username, balance]) => ({
+          username,
+          balance,
+        })),
+        transfers: wallet.transfers,
+        now: NOW,
+      })
+    ).toMatchObject({ ok: true, issued: 130_000, totalBalance: 130_000 });
+  });
+
+  it("grants 300.00 to the demo user and 100.00 to every other person and driver", () => {
+    const grants = new Map(
+      wallet.transfers
+        .filter((t) => t.id.startsWith("seed-grant-"))
+        .map((t) => [t.to.username, t])
+    );
+    for (const user of world.users) {
+      const expected =
+        user.username === DEMO_USERNAME
+          ? 30_000
+          : user.accountType === "business" || user.username === "demo_customer"
+            ? undefined
+            : 10_000;
+      expect(grants.get(user.username)?.amount, user.username).toBe(expected);
+    }
+    for (const grant of grants.values()) {
+      expect(grant).toMatchObject({
+        id: `seed-grant-${grant.to.username}`,
+        kind: "issue",
+        from: null,
+        createdAt: "2026-10-01T12:00:00.000Z",
+      });
+    }
+  });
+
+  it("tips only core Tweets that exist, before which they were posted", () => {
+    const tweets = new Map(world.tweets.map((t) => [t.id, t]));
+    for (const transfer of wallet.transfers.filter((t) => t.kind === "tip")) {
+      const context = transfer.context as { type: "tweet"; id: string };
+      const tweet = tweets.get(context.id)!;
+      expect(tweet, transfer.id).toBeDefined();
+      expect(tweet.author).toBe(transfer.to.username);
+      expect(Date.parse(transfer.createdAt)).toBeGreaterThan(
+        Date.parse(tweet.createdAt)
+      );
+    }
+  });
+
+  it("seeds the four requests with resolved parties, expiry and cross-references", () => {
+    const requests = new Map(wallet.requests.map((r) => [r.id, r]));
+    expect([...requests.keys()]).toEqual([
+      "seed-req01",
+      "seed-req02",
+      "seed-req03",
+      "seed-req04",
+    ]);
+    expect(requests.get("seed-req01")).toEqual({
+      id: "seed-req01",
+      requester: authorOf("sarahcodes"),
+      payer: authorOf(DEMO_USERNAME),
+      amount: 450,
+      note: "Coffee ☕",
+      status: "pending",
+      createdAt: "2026-10-08T07:00:00.000Z",
+      expiresAt: "2026-10-15T07:00:00.000Z",
+      respondedAt: null,
+      transferId: null,
+      conversationId: "dm-illlhanozkan-sarahcodes",
+      requestHash: null,
+    });
+
+    const paid = requests.get("seed-req02")!;
+    const payment = wallet.transfers.find((t) => t.id === paid.transferId)!;
+    expect(paid.status).toBe("paid");
+    expect(payment).toMatchObject({
+      kind: "request",
+      from: paid.payer,
+      to: paid.requester,
+      amount: paid.amount,
+      createdAt: paid.respondedAt,
+      context: { type: "request", id: "seed-req02" },
+    });
+
+    for (const request of requests.values()) {
+      if (!request.conversationId) continue;
+      const names = [request.requester.username, request.payer.username].sort();
+      expect(request.conversationId).toBe(`dm-${names.join("-")}`);
+    }
+    expect(() =>
+      composeWalletSeed([], authorOf, [
+        { ...own.data!.requests[1], transferId: "seed-missing" },
+      ])
+    ).toThrow(/missing transfer/);
   });
 });
 
@@ -261,9 +396,11 @@ describe("composeWalletSeed", () => {
   });
 
   it("applies transfers in time order, whatever order lanes list them in", () => {
+    // Only a held credit can be refunded, and only before it is released.
+    const held = { kind: "order" as const, holdUntil: NOW.toISOString() };
     const wallet = composeWalletSeed(
       [
-        transfer("pay", 10, "Alice", "bob", 4000),
+        transfer("pay", 10, "Alice", "bob", 4000, held),
         transfer("grant", 60, null, "alice", 10_000),
         transfer("refund", 5, "bob", "alice", 4000, {
           kind: "order_refund",
@@ -380,6 +517,7 @@ describe("Sanity export", () => {
       username: "sarahcodes",
       key: "sarahcodes",
       balance: 9800,
+      createdAt: "2026-10-01T12:00:00.000Z",
       updatedAt: "2026-10-08T09:30:00.000Z",
     });
     expect(documents).toContainEqual({
@@ -421,9 +559,37 @@ describe("Sanity export", () => {
     );
   });
 
-  it("exposes no private document to anonymous reads", async () => {
-    const client = new FakeSanityClient(documents, () => NOW);
+  it("exports the world's requests and transfers as private documents", () => {
+    const full = seedToSanityDocuments(world);
+    expect(full).toContainEqual(
+      expect.objectContaining({
+        _id: "private.seed-req01",
+        _type: "paymentRequest",
+        requesterKey: "sarahcodes",
+        payerKey: DEMO_USERNAME,
+        status: "pending",
+      })
+    );
+    expect(full).toContainEqual(
+      expect.objectContaining({
+        _id: "private.seed-grant-sarahcodes",
+        _type: "transfer",
+      })
+    );
+    for (const document of full) {
+      expect(document._id.startsWith("private."), document._id).toBe(
+        (PRIVATE_TYPES as readonly string[]).includes(document._type)
+      );
+    }
+  });
+
+  it("exposes no private document of the full world to anonymous reads", async () => {
+    const client = new FakeSanityClient(
+      seedToSanityDocuments(world),
+      () => NOW
+    );
     client.anonymous = true;
+    expect(await exposedPrivateDocuments(client)).toEqual([]);
 
     expect(
       await client.fetch(`*[_type in $types]._id`, {

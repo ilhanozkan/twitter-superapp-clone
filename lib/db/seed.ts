@@ -66,7 +66,8 @@ export function seedContext(now: Date): SeedContext {
  *
  * The superapp world merges every lane's contribution into the shared
  * Tweets, replies and reactions, and folds all contributed transfers in
- * time order into wallet balances. Seeds always use time scale 1.
+ * time order through the ledger planner into wallet balances. Seeds always
+ * use time scale 1.
  */
 export function createSeedData(
   now: Date = new Date(),
@@ -136,7 +137,8 @@ export function createSeedData(
     superapp: {
       wallet: composeWalletSeed(
         contributions.flatMap((part) => part.transfers ?? []),
-        authorOf
+        authorOf,
+        wallet.data?.requests ?? []
       ),
       business: business.data ?? { profiles: [] },
       shop: shop.data,

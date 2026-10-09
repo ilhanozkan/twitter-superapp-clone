@@ -1,40 +1,10 @@
-import { IAuthor } from "../../../../types/User";
-import { ITransfer } from "../../../../types/Wallet";
 import { SeedData } from "../../seed";
 import { privateId, walletKey } from "../ids";
-import { compact, SanitySeedDocument } from "./documents";
+import { paymentRequestDocument, transferDocument } from "../walletDocuments";
+import { SanitySeedDocument } from "./documents";
 
-// Wallets and transfers are private: path ids, so they need a token to read
-// or import (see sanity/README.md).
-
-const party = (author: IAuthor | null) =>
-  author
-    ? compact({
-        username: author.username,
-        fullname: author.fullname,
-        image: author.image,
-      })
-    : null;
-
-export function transferDocument(transfer: ITransfer): SanitySeedDocument {
-  return compact({
-    _id: privateId(transfer.id),
-    _type: "transfer",
-    _createdAt: transfer.createdAt,
-    kind: transfer.kind,
-    amount: transfer.amount,
-    from: party(transfer.from),
-    fromKey: transfer.from?.username.toLowerCase() ?? null,
-    to: party(transfer.to),
-    toKey: transfer.to.username.toLowerCase(),
-    note: transfer.note,
-    context: transfer.context ? compact({ ...transfer.context }) : null,
-    holdUntil: transfer.holdUntil,
-    reversedBy: transfer.reversedBy,
-    reverses: transfer.reverses,
-    createdAt: transfer.createdAt,
-  });
-}
+// Wallets, transfers and payment requests are private: path ids, so they
+// need a token to read or import (see sanity/README.md).
 
 export function walletSanityDocuments(seed: SeedData): SanitySeedDocument[] {
   const wallet = seed.superapp?.wallet;
@@ -65,8 +35,19 @@ export function walletSanityDocuments(seed: SeedData): SanitySeedDocument[] {
     username,
     key,
     balance: wallet.balances[key] ?? 0,
+    createdAt: first,
     updatedAt: last,
   }));
 
-  return [...wallets, ...wallet.transfers.map(transferDocument)];
+  return [
+    ...wallets,
+    ...wallet.transfers.map((transfer) => ({
+      ...transferDocument(transfer),
+      _createdAt: transfer.createdAt,
+    })),
+    ...wallet.requests.map((request) => ({
+      ...paymentRequestDocument(request),
+      _createdAt: request.createdAt,
+    })),
+  ];
 }
