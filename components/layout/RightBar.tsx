@@ -2,6 +2,8 @@ import Link from "next/link";
 import { useRouter } from "next/router";
 
 import { useAppSelector } from "../../store";
+import LiveActivityCard from "../superapp/LiveActivityCard";
+import WalletCard from "../superapp/WalletCard";
 import SearchForm from "./SearchForm";
 import TrendsList from "./TrendsList";
 
@@ -21,6 +23,9 @@ export default function RightBar() {
           <SearchForm />
         </div>
       )}
+
+      <LiveActivityCard />
+      <WalletCard variant="sidebar" />
 
       {showTrends && (
         <section

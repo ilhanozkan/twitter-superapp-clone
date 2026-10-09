@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { initializeStore } from "../store";
+import { sessionState } from "./sessionSlice";
 import reducer, { dismissToast, showToast } from "./uiSlice";
 
 describe("toasts", () => {
@@ -18,10 +19,10 @@ describe("toasts", () => {
   it("shows a toast from a page the user already left on the current page", () => {
     vi.stubGlobal("window", {});
     const before = initializeStore({
-      session: { viewer: null, readOnly: false },
+      session: sessionState({ viewer: null, readOnly: false }),
     });
     const after = initializeStore({
-      session: { viewer: null, readOnly: true },
+      session: sessionState({ viewer: null, readOnly: true }),
     });
 
     before.dispatch(showToast({ message: "Couldn't like that Tweet" }));

@@ -10,6 +10,7 @@ import { setReaction } from "../../slices/tweetsSlice";
 import { showToast } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { ITweet } from "../../types/Tweet";
+import TipAction from "../wallet/TipAction";
 import { statusPath } from "./paths";
 
 interface TweetActionsProps {
@@ -176,6 +177,8 @@ export default function TweetActions({
           size={size}
         />
       </button>
+
+      <TipAction tweet={tweet} showCount={showCounts} size={size} />
 
       <button
         type="button"

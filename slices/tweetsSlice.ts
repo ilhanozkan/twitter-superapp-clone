@@ -6,7 +6,7 @@ import {
   PayloadAction,
 } from "@reduxjs/toolkit";
 
-import { api, errorMessage } from "../lib/client/api";
+import { api, errorMessage, NewTweetBody } from "../lib/client/api";
 import {
   IReply,
   ITweet,
@@ -31,8 +31,7 @@ const STAT: Partial<Record<ReactionKind, "likes" | "retweets">> = {
 
 export const postTweet = createAsyncThunk(
   "tweets/post",
-  async (body: { text: string; image?: string | null }) =>
-    (await api.createTweet(body)).tweet
+  async (body: NewTweetBody) => (await api.createTweet(body)).tweet
 );
 
 export const deleteTweet = createAsyncThunk<

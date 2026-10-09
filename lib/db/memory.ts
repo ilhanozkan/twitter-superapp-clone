@@ -186,14 +186,15 @@ const globalStore = globalThis as typeof globalThis & {
 };
 
 /**
- * The process-wide demo store. It lives on `globalThis` so API routes and
- * `getServerSideProps` (separate bundles in Next.js) and hot reloads all share
- * one copy. Data resets when the server restarts.
+ * The process-wide demo store, seeded with the full SuperApp world. It lives
+ * on `globalThis` so API routes and `getServerSideProps` (separate bundles in
+ * Next.js) and hot reloads all share one copy. Data resets when the server
+ * restarts.
  */
 export function getMemoryState(): MemoryState {
   if (!globalStore.__superappMemoryState) {
     globalStore.__superappMemoryState = createMemoryState(
-      createSeedData(new Date(), { world: "core" })
+      createSeedData(new Date(), { world: "superapp" })
     );
   }
   return globalStore.__superappMemoryState;

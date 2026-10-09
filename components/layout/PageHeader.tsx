@@ -2,34 +2,88 @@ import { useRouter } from "next/router";
 import { ReactNode } from "react";
 import {
   HiArrowLeft,
-  HiOutlineEnvelope,
+  HiOutlineBookmark,
+  HiOutlineBuildingStorefront,
   HiOutlineQueueList,
   HiOutlineUser,
+  HiOutlineWallet,
 } from "react-icons/hi2";
 
 import { useAppSelector } from "../../store";
 import Avatar from "../common/Avatar";
-import Menu from "../common/Menu";
+import Menu, { MenuItem } from "../common/Menu";
+import LiveActivityBanner from "../superapp/LiveActivityBanner";
 import { useMoreMenuItems } from "./moreMenuItems";
+import { useShell } from "./shell";
 
 interface PageHeaderProps {
   title: string;
   subtitle?: string;
   /** Show a back arrow (to the previous page, or home when there is none). */
   back?: boolean;
+  /** Buttons at the end of the title row, e.g. "Send credits" in a chat. */
+  actions?: ReactNode;
   children?: ReactNode;
 }
 
-/** The sticky title bar at the top of the main column; its title is the page's h1. */
+/**
+ * The phone header's avatar menu: what the tab bar has no room for (the
+ * sidebar shows these from 500px).
+ */
+function useAccountMenuItems(): MenuItem[] {
+  const router = useRouter();
+  const session = useAppSelector((state) => state.session);
+  const moreItems = useMoreMenuItems();
+  const username = session.viewer?.username;
+  if (!username) return moreItems;
+
+  const items: (MenuItem | false)[] = [
+    {
+      label: "Profile",
+      icon: <HiOutlineUser />,
+      onSelect: () => router.push(`/${username}`),
+    },
+    session.features.wallet && {
+      label: "Wallet",
+      icon: <HiOutlineWallet />,
+      onSelect: () => router.push("/wallet"),
+    },
+    {
+      label: "Bookmarks",
+      icon: <HiOutlineBookmark />,
+      onSelect: () => router.push("/i/bookmarks"),
+    },
+    {
+      label: "Lists",
+      icon: <HiOutlineQueueList />,
+      onSelect: () => router.push(`/${username}/lists`),
+    },
+    session.features.shop &&
+      session.managedBusinesses.length > 0 && {
+        label: "Business",
+        icon: <HiOutlineBuildingStorefront />,
+        onSelect: () => router.push("/business"),
+      },
+  ];
+  return [...items.filter((item): item is MenuItem => !!item), ...moreItems];
+}
+
+/**
+ * The sticky title bar at the top of the main column; its title is the
+ * page's h1. Where there is no right column (below 1024px, or on wide
+ * pages) it also shows what is in progress (live activity) under the title.
+ */
 export default function PageHeader({
   title,
   subtitle,
   back = false,
+  actions,
   children,
 }: PageHeaderProps) {
   const router = useRouter();
   const viewer = useAppSelector((state) => state.session.viewer);
-  const moreItems = useMoreMenuItems();
+  const accountItems = useAccountMenuItems();
+  const { layout } = useShell();
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
@@ -47,24 +101,7 @@ export default function PageHeader({
               align="left"
               triggerClassName="block rounded-full p-1.5"
               trigger={<Avatar user={viewer} size={32} />}
-              items={[
-                {
-                  label: "Profile",
-                  icon: <HiOutlineUser />,
-                  onSelect: () => router.push(`/${viewer.username}`),
-                },
-                {
-                  label: "Lists",
-                  icon: <HiOutlineQueueList />,
-                  onSelect: () => router.push(`/${viewer.username}/lists`),
-                },
-                {
-                  label: "Messages",
-                  icon: <HiOutlineEnvelope />,
-                  onSelect: () => router.push("/messages"),
-                },
-                ...moreItems,
-              ]}
+              items={accountItems}
             />
           </div>
         )}
@@ -78,14 +115,20 @@ export default function PageHeader({
             <HiArrowLeft aria-hidden="true" />
           </button>
         )}
-        <div className="min-w-0 py-1">
+        <div className="min-w-0 flex-1 py-1">
           <h1 className="truncate text-xl font-bold leading-6">{title}</h1>
           {subtitle && (
             <p className="truncate text-[13px] text-muted">{subtitle}</p>
           )}
         </div>
+        {actions && (
+          <div className="-mr-2 flex shrink-0 items-center gap-1">
+            {actions}
+          </div>
+        )}
       </div>
       {children}
+      <LiveActivityBanner className={layout === "wide" ? "" : "lg:hidden"} />
     </div>
   );
 }

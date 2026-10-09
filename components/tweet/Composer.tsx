@@ -13,15 +13,19 @@ import { errorMessage } from "../../lib/client/api";
 import { textLength, TWEET_MAX_LENGTH } from "../../lib/constants";
 import { isSafeImageUrl } from "../../lib/imageUrl";
 import { postReply, postTweet } from "../../slices/tweetsSlice";
-import { showToast } from "../../slices/uiSlice";
+import { ComposePrefill, showToast } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
+import { TweetAttachmentInput } from "../../types/Tweet";
 import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
+import ComposerProductPicker from "../shop/ComposerProductPicker";
 import { statusPath } from "./paths";
 
 interface ComposerProps {
   /** Reply to this tweet instead of posting a new one. */
   replyTo?: { tweetId: string; username: string };
+  /** What a new Tweet starts with, e.g. "Tweet about it" after an order. */
+  prefill?: ComposePrefill | null;
   /** Focus the text box when shown in a dialog. */
   autoFocus?: boolean;
   onPosted?: () => void;
@@ -91,6 +95,7 @@ function CharCounter({ remaining }: { remaining: number }) {
 
 export default function Composer({
   replyTo,
+  prefill,
   autoFocus = false,
   onPosted,
   id,
@@ -98,7 +103,11 @@ export default function Composer({
   const dispatch = useAppDispatch();
   const viewer = useAppSelector((state) => state.session.viewer);
   const readOnly = useAppSelector((state) => state.session.readOnly);
-  const [text, setText] = useState("");
+  const shopOn = useAppSelector((state) => state.session.features.shop);
+  const [text, setText] = useState(prefill?.text ?? "");
+  const [attachment, setAttachment] = useState<TweetAttachmentInput | null>(
+    prefill?.attachment ?? null
+  );
   const [image, setImage] = useState("");
   const [showImage, setShowImage] = useState(false);
   const [posting, setPosting] = useState(false);
@@ -141,7 +150,11 @@ export default function Composer({
         dispatch(showToast({ message: "Your reply was sent." }));
       } else {
         const tweet = await dispatch(
-          postTweet({ text: trimmed, image: imageValue || null })
+          postTweet({
+            text: trimmed,
+            image: imageValue || null,
+            ...(attachment && shopOn ? { attachment } : {}),
+          })
         ).unwrap();
         dispatch(
           showToast({
@@ -153,6 +166,7 @@ export default function Composer({
       setText("");
       setImage("");
       setShowImage(false);
+      setAttachment(null);
       onPosted?.();
     } catch (reason) {
       setError(errorMessage(reason));
@@ -239,7 +253,7 @@ export default function Composer({
         )}
 
         <div className="flex items-center justify-between border-t border-line pt-3">
-          <div>
+          <div className="flex items-center">
             {!replyTo && (
               <button
                 type="button"
@@ -252,6 +266,12 @@ export default function Composer({
               >
                 <HiOutlinePhoto aria-hidden="true" />
               </button>
+            )}
+            {!replyTo && shopOn && (
+              <ComposerProductPicker
+                attachment={attachment}
+                onChange={setAttachment}
+              />
             )}
           </div>
           <div className="flex items-center gap-3">

@@ -8,6 +8,7 @@ import AppShell from "../components/layout/AppShell";
 import type { PageStateProps } from "../lib/server/pageState";
 import { setHistoryNavigation, useStore } from "../store";
 import "../styles/globals.css";
+import type { NextPageWithShell } from "../types/PageShell";
 
 const DESCRIPTION = "A Twitter clone on its way to becoming a SuperApp.";
 // Absolute URLs are required for link previews; set NEXT_PUBLIC_SITE_URL in production.
@@ -55,7 +56,8 @@ export default function App({
           <meta property="og:image" content={`${SITE_URL}/og.png`} />
         )}
       </Head>
-      <AppShell>
+      {/* A page's static `shell` adjusts the chrome (types/PageShell.ts). */}
+      <AppShell shell={(Component as NextPageWithShell).shell}>
         <Component {...pageProps} />
       </AppShell>
     </Provider>

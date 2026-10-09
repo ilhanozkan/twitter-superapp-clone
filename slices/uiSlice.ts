@@ -1,5 +1,7 @@
 import { createSlice, PayloadAction } from "@reduxjs/toolkit";
 
+import { TweetAttachmentInput } from "../types/Tweet";
+
 export interface Toast {
   id: number;
   message: string;
@@ -8,15 +10,47 @@ export interface Toast {
   tone?: "default" | "error";
 }
 
-export type DialogName = "compose" | "display" | "shortcuts";
+/**
+ * Global dialogs. The SuperApp ones are rendered by each lane's
+ * `<Lane>Dialogs` (loaded on demand by AppShell) and read `dialogArgs`.
+ */
+export type DialogName =
+  | "compose"
+  | "display"
+  | "shortcuts"
+  | "send"
+  | "request"
+  | "topUp"
+  | "tip"
+  | "newMessage"
+  | "quickOrder"
+  | "storyComposer"
+  | "storyViewer";
+
+export type ModalDialogName = Exclude<DialogName, "compose">;
+
+/** What the compose dialog starts with, e.g. "Tweet about it" after an order. */
+export interface ComposePrefill {
+  text?: string;
+  attachment?: TweetAttachmentInput;
+}
 
 export interface UiState {
   composeOpen: boolean;
-  dialog: Exclude<DialogName, "compose"> | null;
+  composePrefill: ComposePrefill | null;
+  dialog: ModalDialogName | null;
+  /** Arguments of the open dialog, e.g. { to: "sarahcodes" } or { tweetId }. */
+  dialogArgs: Record<string, string> | null;
   toasts: Toast[];
 }
 
-const initialState: UiState = { composeOpen: false, dialog: null, toasts: [] };
+const initialState: UiState = {
+  composeOpen: false,
+  composePrefill: null,
+  dialog: null,
+  dialogArgs: null,
+  toasts: [],
+};
 
 const MAX_TOASTS = 3;
 let nextToastId = 1;
@@ -25,17 +59,38 @@ const uiSlice = createSlice({
   name: "ui",
   initialState,
   reducers: {
-    openCompose(state) {
-      state.composeOpen = true;
+    openCompose: {
+      reducer(state, action: PayloadAction<ComposePrefill | null>) {
+        state.composeOpen = true;
+        // A bare { type } (no payload) opens an empty composer too.
+        state.composePrefill = action.payload ?? null;
+      },
+      prepare(prefill?: ComposePrefill) {
+        return { payload: prefill ?? null };
+      },
     },
     closeCompose(state) {
       state.composeOpen = false;
+      state.composePrefill = null;
     },
-    openDialog(state, action: PayloadAction<Exclude<DialogName, "compose">>) {
-      state.dialog = action.payload;
+    openDialog: {
+      reducer(
+        state,
+        action: PayloadAction<{
+          name: ModalDialogName;
+          args: Record<string, string> | null;
+        }>
+      ) {
+        state.dialog = action.payload.name;
+        state.dialogArgs = action.payload.args;
+      },
+      prepare(name: ModalDialogName, args?: Record<string, string>) {
+        return { payload: { name, args: args ?? null } };
+      },
     },
     closeDialog(state) {
       state.dialog = null;
+      state.dialogArgs = null;
     },
     showToast: {
       reducer(state, action: PayloadAction<Toast>) {

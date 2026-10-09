@@ -5,13 +5,12 @@ import PageHeader from "../../components/layout/PageHeader";
 import ProfileHeader from "../../components/profile/ProfileHeader";
 import Timeline from "../../components/tweet/Timeline";
 import { pluralize } from "../../lib/format";
-import { loadProfile } from "../../lib/server/profile";
+import { loadProfile, ProfilePageProps } from "../../lib/server/profile";
 import { timelines } from "../../lib/timelines";
 import { selectTweetCount } from "../../slices/profilesSlice";
 import { useAppSelector } from "../../store";
-import { IUserProfile } from "../../types/User";
 
-export default function Profile({ user }: { user: IUserProfile }) {
+export default function Profile({ user, business }: ProfilePageProps) {
   const timeline = timelines.author(user.username);
   const tweetCount = useAppSelector((state) => selectTweetCount(state, user));
 
@@ -25,7 +24,7 @@ export default function Profile({ user }: { user: IUserProfile }) {
         subtitle={pluralize(tweetCount, "Tweet")}
         back
       />
-      <ProfileHeader user={user} tab="tweets" />
+      <ProfileHeader user={user} business={business} tab="tweets" />
       <Timeline
         timelineKey={timeline.key}
         label={`Tweets by ${user.fullname}`}

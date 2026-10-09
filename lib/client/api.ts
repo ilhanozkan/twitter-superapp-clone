@@ -1,5 +1,4 @@
 import {
-  ApiErrorResponse,
   MeResponse,
   RepliesResponse,
   ReplyResponse,
@@ -7,57 +6,21 @@ import {
   TweetPageResponse,
   TweetResponse,
 } from "../../types/Api";
-import { ReactionKind } from "../../types/Tweet";
+import { ReactionKind, TweetAttachmentInput } from "../../types/Tweet";
+import { request } from "./request";
 
-/** A non-2xx API response, carrying the server's error code and message. */
-export class ApiRequestError extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: string,
-    message: string,
-    readonly requestId?: string
-  ) {
-    super(message);
-    this.name = "ApiRequestError";
-  }
-}
-
-async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(path, {
-      ...init,
-      headers: {
-        Accept: "application/json",
-        ...(init.body ? { "Content-Type": "application/json" } : {}),
-        ...init.headers,
-      },
-    });
-  } catch {
-    throw new ApiRequestError(
-      0,
-      "network_error",
-      "Check your connection and try again."
-    );
-  }
-
-  if (response.status === 204) return undefined as T;
-
-  const body = await response.json().catch(() => null);
-  if (!response.ok) {
-    const error = (body as ApiErrorResponse | null)?.error;
-    throw new ApiRequestError(
-      response.status,
-      error?.code ?? "unknown_error",
-      error?.message ?? "Something went wrong. Try again.",
-      error?.requestId
-    );
-  }
-  return body as T;
-}
+// Lanes add their own lib/client/<lane>Api.ts on top of request().
+export { ApiRequestError, request } from "./request";
+export type { RequestOptions, WithHeaders } from "./request";
 
 const json = (body: unknown) => JSON.stringify(body);
 const tweetPath = (id: string) => `/api/tweets/${encodeURIComponent(id)}`;
+
+export interface NewTweetBody {
+  text: string;
+  image?: string | null;
+  attachment?: TweetAttachmentInput;
+}
 
 export const api = {
   listTweets(query: Record<string, string>) {
@@ -66,7 +29,7 @@ export const api = {
     );
   },
 
-  createTweet(body: { text: string; image?: string | null }) {
+  createTweet(body: NewTweetBody) {
     return request<TweetResponse>("/api/tweets", {
       method: "POST",
       body: json(body),
