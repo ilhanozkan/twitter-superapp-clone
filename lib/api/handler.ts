@@ -3,6 +3,7 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { ZodError } from "zod";
 
 import { envFlag, isReadOnly } from "../auth";
+import { getRepository } from "../db";
 import {
   ConfigurationError,
   ConflictError,
@@ -17,7 +18,15 @@ import {
   UnavailableError,
   WalletFrozenError,
 } from "../db/errors";
-import { ApiError, ErrorCode, ValidationIssue } from "./errors";
+import { FEATURE_LABELS } from "../superapp/features";
+import { FeatureId } from "../../types/Superapp";
+import {
+  ApiError,
+  ErrorCode,
+  notFound,
+  rateLimited,
+  ValidationIssue,
+} from "./errors";
 import { createRateLimiter } from "./rateLimit";
 
 export type Method = "GET" | "POST" | "PUT" | "DELETE";
@@ -25,6 +34,16 @@ export type Method = "GET" | "POST" | "PUT" | "DELETE";
 type RouteHandler = (req: NextApiRequest, res: NextApiResponse) => unknown;
 
 export type Routes = Partial<Record<Method, RouteHandler>>;
+
+export interface HandlerOptions {
+  /**
+   * The SuperApp feature these routes belong to. While it is "off" (not
+   * built, or in DISABLED_FEATURES) every method answers 404, as if the
+   * route did not exist; while it is "unconfigured" (e.g. Sanity without a
+   * token) they answer 503.
+   */
+  feature?: FeatureId;
+}
 
 export interface ApiErrorBody {
   error: {
@@ -139,6 +158,18 @@ function assertSameOrigin(req: NextApiRequest, env: Env = process.env) {
   }
 }
 
+function assertFeatureOn(feature: FeatureId) {
+  const status = getRepository().featureStatus(feature);
+  if (status === "off") throw notFound("This feature is turned off");
+  if (status === "unconfigured") {
+    throw new ApiError(
+      503,
+      "service_unavailable",
+      `${FEATURE_LABELS[feature]} needs SANITY_API_TOKEN on this deployment`
+    );
+  }
+}
+
 // Domain errors whose message is written for people and safe to show.
 const DOMAIN_ERRORS: [new (...args: never[]) => Error, number, ErrorCode][] = [
   [InsufficientFundsError, 402, "insufficient_funds"],
@@ -187,10 +218,10 @@ export function toApiError(error: unknown): ApiError {
 /**
  * Wraps API routes with what every endpoint needs: method routing (405 with
  * an Allow header, OPTIONS and HEAD), same-origin and rate-limit checks on
- * writes, a request id, and one JSON error shape:
+ * writes, a request id, feature gating, and one JSON error shape:
  * `{ error: { code, message, details?, requestId } }`.
  */
-export function createHandler(routes: Routes) {
+export function createHandler(routes: Routes, options: HandlerOptions = {}) {
   const methods = Object.keys(routes) as Method[];
   const allow = [...methods, ...(routes.GET ? ["HEAD"] : []), "OPTIONS"].join(
     ", "
@@ -221,6 +252,9 @@ export function createHandler(routes: Routes) {
         );
       }
 
+      // Before the write checks, so a turned-off feature uses no write budget.
+      if (options.feature) assertFeatureOn(options.feature);
+
       if (WRITE_METHODS.has(method)) {
         res.setHeader("Cache-Control", "no-store");
         if (isReadOnly()) {
@@ -229,14 +263,7 @@ export function createHandler(routes: Routes) {
         assertSameOrigin(req);
 
         const limit = writeLimiter()?.(clientAddress(req));
-        if (limit && !limit.allowed) {
-          res.setHeader("Retry-After", String(limit.retryAfter));
-          throw new ApiError(
-            429,
-            "rate_limited",
-            "Too many requests, slow down"
-          );
-        }
+        if (limit && !limit.allowed) throw rateLimited(limit.retryAfter);
       }
 
       await route(req, res);
@@ -262,6 +289,9 @@ export function createHandler(routes: Routes) {
       if (res.headersSent) return;
       // Error responses must never be cached, whatever the route set before.
       res.setHeader("Cache-Control", "no-store");
+      for (const [name, value] of Object.entries(apiError.headers ?? {})) {
+        res.setHeader(name, value);
+      }
 
       const body: ApiErrorBody = {
         error: {

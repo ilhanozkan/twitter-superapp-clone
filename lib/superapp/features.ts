@@ -10,6 +10,17 @@ export const FEATURE_IDS: readonly FeatureId[] = [
   "stories",
 ];
 
+/** How each feature is named to people, e.g. in "Wallet needs SANITY_API_TOKEN". */
+export const FEATURE_LABELS: Record<FeatureId, string> = {
+  wallet: "Wallet",
+  messages: "Messages",
+  channels: "Channels",
+  shop: "Shop",
+  orders: "Orders",
+  rides: "Rides",
+  stories: "Stories",
+};
+
 export function isFeatureId(value: unknown): value is FeatureId {
   return typeof value === "string" && FEATURE_IDS.includes(value as FeatureId);
 }

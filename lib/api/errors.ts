@@ -31,7 +31,9 @@ export class ApiError extends Error {
     readonly status: number,
     readonly code: ErrorCode,
     message: string,
-    readonly details?: ValidationIssue[]
+    readonly details?: ValidationIssue[],
+    /** Sent with the error response, e.g. Retry-After. */
+    readonly headers?: Record<string, string>
   ) {
     super(message);
     this.name = "ApiError";
@@ -43,3 +45,14 @@ export const notFound = (message = "Not found") =>
 
 export const forbidden = (message: string) =>
   new ApiError(403, "forbidden", message);
+
+/** A 400 for one field, shaped like the errors of schema validation. */
+export const invalid = (path: string, message: string) =>
+  new ApiError(400, "validation_error", "The request is invalid", [
+    { path, message },
+  ]);
+
+export const rateLimited = (retryAfterSeconds: number) =>
+  new ApiError(429, "rate_limited", "Too many requests, slow down", undefined, {
+    "Retry-After": String(retryAfterSeconds),
+  });
