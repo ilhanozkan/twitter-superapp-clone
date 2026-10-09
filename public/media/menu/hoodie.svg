@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#e2e8f0"/>
+  <path d="M140 70 Q200 40 260 70 L330 110 L370 260 L320 275 L300 190 L300 360 H100 V190 L80 275 L30 260 L70 110Z" fill="#1e3a8a"/>
+  <path d="M150 70 Q200 140 250 70 Q200 100 150 70Z" fill="#172554"/>
+  <path d="M185 95 v60 M215 95 v60" stroke="#cbd5e1" stroke-width="5" stroke-linecap="round"/>
+  <rect x="140" y="270" width="120" height="60" rx="14" fill="#172554"/>
+  <circle cx="200" cy="215" r="26" fill="#1d9bf0"/>
+  <text x="200" y="215" dy=".35em" text-anchor="middle" font-family="Arial,sans-serif" font-size="20" font-weight="700" fill="#fff">SA</text>
+</svg>

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" viewBox="0 0 400 400">
+  <rect width="400" height="400" fill="#dbeafe"/>
+  <ellipse cx="190" cy="330" rx="120" ry="20" fill="#1e3a8a" fill-opacity=".2"/>
+  <path d="M265 160 q70 0 70 60 q0 60 -70 60" fill="none" stroke="#1d4ed8" stroke-width="24"/>
+  <path d="M90 110 H280 V300 Q280 330 250 330 H120 Q90 330 90 300Z" fill="#1d9bf0"/>
+  <ellipse cx="185" cy="110" rx="95" ry="16" fill="#0c4a6e"/>
+  <circle cx="185" cy="215" r="48" fill="#ffffff"/>
+  <text x="185" y="215" dy=".35em" text-anchor="middle" font-family="Arial,sans-serif" font-size="38" font-weight="700" fill="#1d9bf0">SA</text>
+</svg>

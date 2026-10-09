@@ -52,3 +52,31 @@ export interface IBusinessSummary extends Pick<
   /** Top 3 product names. */
   highlights: string[];
 }
+
+// Response bodies of the shop endpoints (docs/api/shop.md).
+
+export interface BusinessSummariesResponse {
+  items: IBusinessSummary[];
+}
+
+export interface BusinessMenuResponse {
+  business: IBusiness;
+  menu: IMenuSection[];
+}
+
+export interface BusinessResponse {
+  business: IBusiness;
+}
+
+export interface ProductDetailResponse {
+  product: IProduct;
+  card: IProductCard;
+}
+
+export interface ProductResponse {
+  product: IProduct;
+}
+
+export interface ProductsResponse {
+  items: IProduct[];
+}
