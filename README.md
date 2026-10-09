@@ -124,6 +124,10 @@ bookmarks, users, notifications, trends). Every request acts as the account in
 `DEMO_USERNAME`, decided on the server; writes are validated, rate limited and
 same-origin only. See [docs/API.md](./docs/API.md).
 
+The SuperApp features (wallet, messages, food, rides, stories, channels) share one
+demo-credit ledger and a set of extension points, described in
+[docs/SUPERAPP.md](./docs/SUPERAPP.md).
+
 ## Deployment
 
 All settings are environment variables (see `.env.example`):

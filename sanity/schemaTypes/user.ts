@@ -1,7 +1,7 @@
 import { defineField, defineType, getPublishedId } from "sanity";
 
 import { apiVersion } from "../env";
-import { imageUrl, username } from "./rules";
+import { imageUrl, notReserved, username } from "./rules";
 
 export const userType = defineType({
   name: "user",
@@ -11,9 +11,11 @@ export const userType = defineType({
     defineField({
       name: "username",
       title: "Username",
-      description: "Handle without the @. Must be unique (case-insensitive).",
+      description:
+        "Handle without the @. Must be unique (case-insensitive) and can't be the name of an app page such as wallet or services.",
       type: "string",
-      validation: (rule) =>
+      validation: (rule) => [
+        notReserved(rule),
         username(rule).custom(async (value, context) => {
           if (!value) return true;
 
@@ -31,6 +33,23 @@ export const userType = defineType({
             ? "This username is already taken"
             : true;
         }),
+      ],
+    }),
+    defineField({
+      name: "accountType",
+      title: "Account type",
+      description:
+        "A business also needs a business profile (SuperApp → Food → Businesses), which adds its menu, hours and orders.",
+      type: "string",
+      options: {
+        list: [
+          { title: "Personal", value: "personal" },
+          { title: "Business", value: "business" },
+        ],
+        layout: "radio",
+        direction: "horizontal",
+      },
+      initialValue: "personal",
     }),
     defineField({
       name: "fullname",
@@ -87,13 +106,16 @@ export const userType = defineType({
       fullname: "fullname",
       username: "username",
       verified: "verified",
+      accountType: "accountType",
     },
-    prepare({ fullname, username, verified }) {
+    prepare({ fullname, username, verified, accountType }) {
       return {
         title: `${fullname ?? username ?? "Unnamed user"}${
           verified ? " ✓" : ""
         }`,
-        subtitle: username ? `@${username}` : undefined,
+        subtitle: username
+          ? `@${username}${accountType === "business" ? " · Business" : ""}`
+          : undefined,
       };
     },
   },

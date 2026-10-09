@@ -109,7 +109,8 @@ server (`lib/auth.ts`) and is never read from request bodies.
 ## SuperApp conventions
 
 These apply to the SuperApp endpoints (wallet, messages, orders, rides,
-stories) in addition to everything above.
+stories) in addition to everything above. How the features are built (the
+demo-credit ledger, holds, privacy) is in [SUPERAPP.md](SUPERAPP.md).
 
 - **Amounts** are integer cents of demo credits: `1250` is 12.50 credits.
   Floats, strings, zero and negatives fail validation. Credits have no cash
