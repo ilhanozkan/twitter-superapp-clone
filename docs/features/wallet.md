@@ -1,8 +1,8 @@
 # Wallet
 
 Every account has a wallet of **demo credits**: they have no cash value and
-can't be bought, withdrawn or exchanged. You add them for free, then pay
-people, ask them to pay you, and pay for orders and rides. Every balance in
+can't be bought, withdrawn or exchanged. You add them for free, then tip
+Tweets, pay people, ask them to pay you, and pay for orders and rides. Every balance in
 the app carries a "Demo" pill or says "Demo credits".
 
 The [wallet API](../api/wallet.md) and the ledger behind it
@@ -18,10 +18,12 @@ foundation; this page describes the wallet's screens and controls.
 | `/wallet/transactions/<id>`       | A receipt; only its two parties can open it, anyone else gets a 404           |
 | Services, right column (≥ 1024px) | A wallet card with the balance and the actions (Send and Add on the right)    |
 | Navigation                        | Wallet in the sidebar; on phones it is in the avatar menu                     |
+| Every Tweet                       | **Tip** in the action row; "Send credits to @user" in the "…" menu            |
+| Profiles                          | A **Send credits** icon button next to the other profile actions              |
 
-The Send, Request and Add credits dialogs are global (`ui.dialog` `"send"`,
-`"request"`, `"topUp"`), so any page can open them. They are bottom sheets
-on phones and centred dialogs above 500px.
+The Send, Request, Add credits and Tip dialogs are global (`ui.dialog`
+`"send"`, `"request"`, `"topUp"`, `"tip"`), so any page can open them. They
+are bottom sheets on phones and centred dialogs above 500px.
 
 ## The wallet page
 
@@ -56,8 +58,9 @@ on phones and centred dialogs above 500px.
    arrow keys move through the suggestions, Enter picks one, Escape closes the
    list (a second Escape clears the field, a third closes the dialog), and
    the number of suggestions is announced. This step is skipped and locked
-   when the dialog is opened for someone (a profile, a Tweet's menu, a chat, a
-   receipt's Send again).
+   when the dialog is opened for someone (see [Send credits from a profile
+   or a Tweet](#send-credits-from-a-profile-or-a-tweet), a chat, a receipt's
+   Send again).
 2. **Amount & note:** the amount in credits (a decimal keypad on phones, at
    most 2 decimals, 0.50 to 200.00), quick amounts 2, 5, 10 and 20, and an
    optional note of up to 100 characters.
@@ -83,6 +86,16 @@ Changing the person, amount or note, or a success, makes a new key; closing
 the dialog drops it. Balances are never guessed: the wallet shown afterwards
 is the one the server returned.
 
+### Send credits from a profile or a Tweet
+
+- **Profiles** have a Send credits icon button ("Send credits to
+  @sarahcodes") next to the other actions.
+- **Tweets** by someone else have "Send credits to @user" in their "…" menu.
+
+Both open Send for that person, straight on the amount step. Neither shows
+on your own profile or Tweets, on a read-only demo, or while the wallet is
+off.
+
 ## Requesting credits
 
 The same steps: "Request 10.00 credits from Sarah Chen" on the review (no
@@ -96,6 +109,46 @@ days, and you can have 10 pending at a time.
 **Pay 4.50** opens the payment review for that request ("Pay 4.50 credits to
 Sarah Chen") with the same checks, errors and retries as Send. **Decline**
 answers right away. Either can be repeated safely.
+
+## Tipping a Tweet
+
+The action row under every Tweet has six actions: Reply, Retweet, Like,
+**Tip**, Bookmark and Share.
+
+- **Someone else's Tweet:** a coin with the number of tips. Tips are counted
+  in public, but amounts never are. The button says "Tip. 3 tips" to screen
+  readers and opens the tip sheet.
+- **Once you have tipped it:** the coin is filled and amber, and the button
+  says "Tip again. You tipped this Tweet. 3 tips". You can tip again.
+- **Your own Tweet:** the coin and the count as plain text in the same
+  place (read as "3 tips"), so the row stays aligned. There is nothing to
+  press.
+- **Read-only demo:** disabled, like Like and Retweet.
+- **A Tweet's page** shows "**3** Tips" next to Retweets and Likes instead of
+  a count on the button.
+
+The six actions fit a 360px phone.
+
+**The tip sheet** ("Tip @lenaframes"):
+
+1. **Amount & thanks:** the Tweet's author and the first two lines of its
+   text, then 1.00, 2.00, 5.00 or 10.00 credits (2.00 is chosen when it
+   opens), or **Other** for any amount from 0.50 to 50.00. An optional "Say
+   thanks" note of up to 100 characters, and what you have: "From your
+   available 308.60 credits". The button repeats the amount: **Tip 2.00
+   credits**.
+2. **Review:** "Tip 2.00 credits to Lena Hoffmann (@lenaframes)", the note,
+   what you have and the balance after, with the confirm button focused
+   (WCAG 3.3.4). Back returns to the amount with your choice kept.
+
+On success the sheet closes and focus goes back to the Tip button, which is
+now filled and counts your tip: the Tweet is replaced with the one the
+server returned. A toast says "You tipped @lenaframes 2.00 credits", with a
+Receipt link. The author gets a notification with the amount.
+
+Errors, retries and the Idempotency-Key work as for Send: not enough
+credits (with Add credits), a frozen wallet, too many payments in a minute,
+or a Tweet that was deleted meanwhile ("Tweet not found").
 
 ## Adding credits
 
@@ -127,6 +180,7 @@ opens Send for the same person with the amount and note filled in;
 | Requests for you | Hidden                                                                                  | Server-rendered                                     | Inline alert with Retry                   | Pay and Decline disabled, with the reason                         |
 | Requests tab     | "No requests" with Request credits                                                      | Server-rendered                                     | Inline alert with Retry                   | Cancel disabled, with the reason                                  |
 | Dialogs          | —                                                                                       | The button shows a spinner and waits for the server | Inline alert linked to the confirm button | Not available ("Payments are turned off on this read-only demo.") |
+| Tip action       | No count shown for 0 tips ("Tip. 0 tips" to screen readers)                             | Server-rendered with the Tweet                      | In the tip sheet's review                 | Disabled; "Send credits" is hidden from profiles and Tweet menus  |
 
 A wallet a moderator froze shows a danger banner on `/wallet`: "A
 moderator froze this wallet. You can't send or receive credits right now.
@@ -140,7 +194,11 @@ Refunds still reach you." Its money actions answer with that reason.
 - **Requests for you:** Sarah asks for 4.50 (Coffee ☕), Marco for 3.00
   (Parking 🅿️) and Priya for 6.00 (Team lunch 🍜). Pay one, decline another.
 - **Send** 10.00 to Sarah, then open the receipt from the dialog or the toast.
+- **Tip** Sarah's "Hot take" Tweet on her profile: the count goes up and
+  the coin fills. Your own Tweets show their tips without a button.
+- Open a profile or a Tweet's "…" menu and **Send credits** from there.
 - **Request** a few credits from someone and cancel it on the Requests tab.
 - **Add credits** three times to see the daily limit, or until the cap.
 - Run with `READ_ONLY=true` to see the read-only states, or
-  `DEMO_USERNAME=sarahcodes` to see a request from the other side.
+  `DEMO_USERNAME=sarahcodes` to see a request (and a tipped Tweet) from the
+  other side.

@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sessionState } from "../../slices/sessionSlice";
 import reducer, {
@@ -6,17 +6,32 @@ import reducer, {
   recentPeople,
   requestChanged,
   requestCreated,
+  tipTweet,
   transferCreated,
   walletUiState,
 } from "../../slices/walletUiSlice";
 import { FOLLOWS_NAVIGATION, makeStore } from "../../store";
 import { testViewer } from "../../test/render";
-import { marco, paymentRequest, sarah, transfer } from "./testing";
+import {
+  fail,
+  marco,
+  paymentRequest,
+  sarah,
+  stubApi,
+  transfer,
+  tweet,
+  tweetsState,
+  wallet,
+} from "./testing";
 
 // The wallet lane's slice (slices/walletUiSlice.ts); its tests live with
 // the lane's components.
 
 const lena = { username: "lenaframes", fullname: "Lena Hoffmann", image: null };
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
 
 describe("recentPeople", () => {
   it("lists the other parties of payments, requests and tips, newest first, once", () => {
@@ -105,5 +120,63 @@ describe("walletUi reducer", () => {
       session: sessionState({ viewer: testViewer, readOnly: false }),
     });
     expect(store.getState().walletUi).toEqual(initial);
+  });
+});
+
+describe("tipTweet", () => {
+  it("replaces the cached Tweet with the server's, and takes its wallet", async () => {
+    const before = tweet();
+    const after = tweet({
+      stats: { ...before.stats, tips: 3 },
+      viewer: { ...before.viewer, tipped: true },
+    });
+    const tip = transfer({ id: "tx-tip", kind: "tip", amount: 200, to: lena });
+    const confirmed = wallet({ balance: 30_660, available: 30_660 });
+    const calls = stubApi({
+      "POST /api/tweets/seed-t03/tip": {
+        status: 201,
+        body: { transfer: tip, wallet: confirmed, tweet: after },
+      },
+    });
+    const store = makeStore({
+      session: sessionState({ viewer: testViewer, readOnly: false }),
+      tweets: tweetsState(before),
+    });
+
+    const result = await store.dispatch(
+      tipTweet("seed-t03", { amount: 200, note: null }, "key-12345678")
+    );
+
+    expect(result).toEqual({ transfer: tip, tweet: after });
+    expect(calls.calls[0]).toMatchObject({
+      body: { amount: 200, note: null },
+      key: "key-12345678",
+    });
+    const state = store.getState();
+    expect(state.tweets.entities["seed-t03"]).toEqual(after);
+    expect(state.wallet.wallet).toEqual(confirmed);
+    expect(state.walletUi.created).toEqual([tip]);
+    expect(state.walletUi.recent.people).toEqual([lena]);
+  });
+
+  it("changes nothing when the server refuses", async () => {
+    stubApi({
+      "POST /api/tweets/seed-t03/tip": fail(
+        402,
+        "insufficient_funds",
+        "Not enough credits available"
+      ),
+    });
+    const store = makeStore({
+      session: sessionState({ viewer: testViewer, readOnly: false }),
+      tweets: tweetsState(tweet()),
+    });
+    await expect(
+      store.dispatch(
+        tipTweet("seed-t03", { amount: 200, note: null }, "k1234567")
+      )
+    ).rejects.toMatchObject({ status: 402, code: "insufficient_funds" });
+    expect(store.getState().tweets.entities["seed-t03"]).toEqual(tweet());
+    expect(store.getState().walletUi.created).toEqual([]);
   });
 });

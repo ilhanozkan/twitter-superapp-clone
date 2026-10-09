@@ -16,9 +16,9 @@ import {
 } from "./helpers";
 
 // The wallet's controls as the demo user: Send, Request and Add credits
-// through their dialogs, and answering requests on /wallet. Balances are
-// only ever compared as deltas (§10.7). seed-req03 and seed-req04 belong
-// to this spec (§14.6).
+// through their dialogs, answering requests on /wallet, and tipping and
+// paying people from Tweets and profiles. Balances are only ever compared
+// as deltas (§10.7). seed-req03 and seed-req04 belong to this spec (§14.6).
 
 async function available(request: APIRequestContext): Promise<number> {
   const response = await request.get("/api/wallet");
@@ -40,6 +40,28 @@ async function openSend(page: Page): Promise<Locator> {
   const dialog = page.getByRole("dialog", { name: "Send credits" });
   await expect(dialog).toBeVisible();
   return dialog;
+}
+
+/** Sarah's "Hot take" Tweet on her profile, where nothing else pushes it down. */
+async function sarahsTweet(page: Page): Promise<Locator> {
+  await page.goto("/sarahcodes");
+  const card = page
+    .locator("main article")
+    .filter({ hasText: "Hot take: every icon-only button" });
+  await expect(card).toBeVisible();
+  return card;
+}
+
+/** The Tip button, before or after a tip (a reused server may have one). */
+const tipButton = (card: Locator) =>
+  card.getByRole("button", { name: /^Tip( again)?\. / });
+
+async function openTip(page: Page): Promise<Locator> {
+  const card = await sarahsTweet(page);
+  await tipButton(card).click();
+  const sheet = page.getByRole("dialog", { name: "Tip @sarahcodes" });
+  await expect(sheet).toBeVisible();
+  return sheet;
 }
 
 async function chooseSarah(dialog: Locator) {
@@ -243,6 +265,118 @@ test("declines seed-req04", async ({ page, request }) => {
   expect((await response.json()).request.status).toBe("declined");
 });
 
+test("tips seed-t02, which then shows the tip and links its receipt", async ({
+  page,
+  request,
+}) => {
+  const problems = watchConsole(page);
+  await topUp(request, 500);
+  const before = await available(request);
+  const tips = (await (await request.get("/api/tweets/seed-t02")).json()).tweet
+    .stats.tips;
+
+  const sheet = await openTip(page);
+  await expect(sheet).toContainText("Hot take: every icon-only button");
+  await expect(
+    sheet.getByRole("radio", { name: "2.00 credits" })
+  ).toBeFocused();
+  await sheet.getByText("1.00", { exact: true }).click();
+  await sheet
+    .getByRole("textbox", { name: /Say thanks/ })
+    .fill(unique("Great tip"));
+  await sheet.getByRole("button", { name: "Tip 1.00 credits" }).click();
+
+  const confirm = sheet.getByRole("button", {
+    name: "Tip 1.00 credits to Sarah Chen",
+  });
+  await expect(confirm).toBeFocused();
+  await confirm.click();
+  await expect(sheet).toBeHidden();
+
+  // The count went up by one and the coin is filled, from the server's Tweet.
+  const card = page
+    .locator("main article")
+    .filter({ hasText: "Hot take: every icon-only button" });
+  const tipped = card.getByRole("button", {
+    name: `Tip again. You tipped this Tweet. ${tips + 1} ${tips + 1 === 1 ? "tip" : "tips"}`,
+  });
+  await expect(tipped).toHaveText(String(tips + 1));
+  await expect(tipped).toHaveClass(/text-tip/);
+  await expect(tipped).toBeFocused();
+  expect(await available(request)).toBe(before - 100);
+
+  const toast = page.getByRole("status").filter({
+    hasText: "You tipped @sarahcodes 1.00 credits",
+  });
+  await toast.getByRole("link", { name: "Receipt" }).click();
+  await expect(page).toHaveURL(/\/wallet\/transactions\/tx-/);
+  await expect(page.getByText("Tip on @sarahcodes's Tweet")).toBeVisible();
+  expect(problems).toEqual([]);
+});
+
+test("Send credits opens for the person from a profile and from a Tweet's menu", async ({
+  page,
+}) => {
+  const card = await sarahsTweet(page);
+  await page
+    .getByRole("button", { name: "Send credits to @sarahcodes" })
+    .click();
+  const dialog = page.getByRole("dialog", { name: "Send credits" });
+  // Locked on Sarah: straight to the amount, no way to pick someone else.
+  await expect(
+    dialog.getByRole("textbox", { name: "Amount in credits" })
+  ).toBeFocused();
+  await expect(dialog).toContainText("@sarahcodes");
+  await expect(dialog.getByRole("combobox")).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(dialog).toBeHidden();
+
+  await card.getByRole("button", { name: "More options" }).click();
+  await page
+    .getByRole("menuitem", { name: "Send credits to @sarahcodes" })
+    .click();
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("@sarahcodes");
+  await expect(dialog.getByRole("combobox")).toHaveCount(0);
+});
+
+/** Each action row on the page: how many actions, and how far past its edge. */
+async function actionRows(page: Page) {
+  const rows = page.getByRole("group", { name: "Tweet actions" });
+  await expect(rows.first()).toBeVisible();
+  return rows.evaluateAll((groups) =>
+    groups.map((group) => {
+      const box = group.getBoundingClientRect();
+      const last = group.lastElementChild?.getBoundingClientRect();
+      return {
+        actions: group.children.length,
+        overflow: Math.max(
+          group.scrollWidth - group.clientWidth,
+          (last?.right ?? 0) - box.right
+        ),
+      };
+    })
+  );
+}
+
+test("the six Tweet actions fit a 360px phone", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 780 });
+  // Home's first page may hold only the demo user's own Tweets (other specs
+  // post them), where Tip is text; Sarah's profile has Tip buttons.
+  for (const path of ["/", "/sarahcodes"]) {
+    await page.goto(path);
+    const rows = await actionRows(page);
+    await expectNoHorizontalScroll(page, `${path} at 360px`);
+    for (const row of rows) {
+      expect(row.actions, path).toBe(6);
+      expect(row.overflow, path).toBeLessThanOrEqual(0.5);
+    }
+  }
+  await expect(
+    page.getByRole("button", { name: /^Tip( again)?\. / }).first()
+  ).toBeVisible();
+});
+
 test("the Send sheet fits a 360px phone", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 780 });
   await page.goto("/wallet");
@@ -285,6 +419,26 @@ test.describe("accessibility (axe)", () => {
       await expect(
         page.getByRole("dialog", { name: "Add credits" })
       ).toBeVisible();
+      await expectNoSeriousViolations(page);
+    });
+
+    test(`the Tip sheet and its review in ${theme} mode`, async ({
+      page,
+      request,
+    }) => {
+      await topUp(request, 500);
+      await setTheme(page, theme);
+      const sheet = await openTip(page);
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      await expect(
+        sheet.getByRole("radio", { name: "2.00 credits" })
+      ).toBeFocused();
+      await expectNoSeriousViolations(page);
+
+      await sheet.getByRole("button", { name: "Tip 2.00 credits" }).click();
+      await expect(
+        sheet.getByRole("button", { name: "Tip 2.00 credits to Sarah Chen" })
+      ).toBeFocused();
       await expectNoSeriousViolations(page);
     });
   }

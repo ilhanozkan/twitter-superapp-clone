@@ -2,8 +2,8 @@ import { expect, test } from "@playwright/test";
 
 import { watchConsole } from "./helpers";
 
-// READ_ONLY=true: balances and requests show, but nothing that moves
-// credits can be started.
+// READ_ONLY=true: balances, requests and tip counts show, but nothing that
+// moves credits can be started.
 
 test("the wallet has no money actions, and requests say why they can't be answered", async ({
   page,
@@ -39,4 +39,34 @@ test("the right column's wallet card shows the balance only", async ({
   const card = page.getByRole("region", { name: "Wallet" });
   await expect(card).toContainText("credits");
   await expect(card.getByRole("button")).toHaveCount(0);
+});
+
+test("Tip is disabled, and nothing offers to send credits", async ({
+  page,
+}) => {
+  const problems = watchConsole(page);
+  await page.goto("/sarahcodes");
+  const card = page
+    .locator("main article")
+    .filter({ hasText: "Hot take: every icon-only button" });
+  await expect(card.getByRole("button", { name: /^Tip/ })).toBeDisabled();
+  await expect(page.getByRole("button", { name: /^Send credits/ })).toHaveCount(
+    0
+  );
+
+  // Other features may still have menu items here; the wallet adds none.
+  const more = card.getByRole("button", { name: "More options" });
+  if (await more.count()) {
+    await more.click();
+    await expect(page.getByRole("menu")).toBeVisible();
+    await expect(
+      page.getByRole("menuitem", { name: /^Send credits/ })
+    ).toHaveCount(0);
+  }
+
+  await page.goto("/");
+  const tips = page.getByRole("button", { name: /^Tip/ });
+  await expect(tips.first()).toBeVisible();
+  for (const tip of await tips.all()) await expect(tip).toBeDisabled();
+  expect(problems).toEqual([]);
 });

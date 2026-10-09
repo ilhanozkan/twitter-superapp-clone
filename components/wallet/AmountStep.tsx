@@ -1,6 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
 
-import { LIMITS } from "../../lib/superapp/limits";
 import { parseCredits } from "../../lib/superapp/money";
 import { Cents } from "../../types/Money";
 import { IAuthor } from "../../types/User";
@@ -8,12 +7,10 @@ import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
 import AmountField, { amountError } from "../superapp/AmountField";
 import { amountText } from "./dialogArgs";
+import NoteField, { noteTooLong } from "./NoteField";
 
 /** The quick amounts, in credits. */
 const QUICK = [2, 5, 10, 20];
-
-/** Notes are counted in code points, like the server does (an emoji is one). */
-export const noteLength = (note: string) => [...note].length;
 
 interface AmountStepProps {
   /** "To" or "From", above the other party's name. */
@@ -48,8 +45,6 @@ export default function AmountStep({
   const [submitted, setSubmitted] = useState(false);
   const valid = !amountError(amount, min, max);
   const chosen = parseCredits(amount);
-  const length = noteLength(note);
-  const noteTooLong = length > LIMITS.noteMax;
 
   // A step that replaces another takes focus, like the dialog's first one.
   useEffect(() => {
@@ -60,7 +55,7 @@ export default function AmountStep({
     setSubmitted(true);
     if (!valid) {
       form.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
-    } else if (noteTooLong) {
+    } else if (noteTooLong(note)) {
       document.getElementById(noteId)?.focus();
     } else {
       onNext();
@@ -117,36 +112,13 @@ export default function AmountStep({
         })}
       </div>
 
-      <div>
-        <label htmlFor={noteId} className="block text-[15px] font-bold">
-          Note <span className="font-normal text-muted">(optional)</span>
-        </label>
-        <input
-          id={noteId}
-          type="text"
-          value={note}
-          onChange={(event) => onNoteChange(event.target.value)}
-          aria-invalid={noteTooLong}
-          aria-describedby={`${noteId}-count${noteTooLong ? ` ${noteId}-error` : ""}`}
-          placeholder="What's it for?"
-          className="mt-1 w-full rounded-md border border-line bg-transparent px-3 py-2 text-[17px] placeholder:text-muted focus:border-primary focus:outline-none aria-[invalid=true]:border-danger"
-        />
-        <p
-          id={`${noteId}-count`}
-          className="mt-1 text-right text-[13px] tabular-nums text-muted"
-        >
-          {length}/{LIMITS.noteMax}
-        </p>
-        {noteTooLong && (
-          <p
-            id={`${noteId}-error`}
-            role="alert"
-            className="text-[13px] text-danger"
-          >
-            Notes are at most {LIMITS.noteMax} characters
-          </p>
-        )}
-      </div>
+      <NoteField
+        id={noteId}
+        label="Note"
+        value={note}
+        onChange={onNoteChange}
+        placeholder="What's it for?"
+      />
 
       <div className="flex flex-col gap-3">
         <Button type="submit" size="lg">

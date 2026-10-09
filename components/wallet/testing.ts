@@ -1,7 +1,9 @@
 import { vi } from "vitest";
 
 import { LIMITS } from "../../lib/superapp/limits";
+import { tweetsAdapter } from "../../slices/tweetsSlice";
 import { testViewer } from "../../test/render";
+import { ITweet } from "../../types/Tweet";
 import { IAuthor } from "../../types/User";
 import {
   IPaymentRequest,
@@ -22,6 +24,28 @@ export const marco: IAuthor = {
   fullname: "Marco Rossi",
   image: null,
 };
+
+export const lena: IAuthor = {
+  username: "lenaframes",
+  fullname: "Lena Hoffmann",
+  image: null,
+};
+
+export const tweet = (overrides: Partial<ITweet> = {}): ITweet => ({
+  id: "seed-t03",
+  text: "Sunrise over the Dolomites this morning. Worth the 4am alarm. #Photography",
+  image: null,
+  createdAt: "2026-10-09T10:40:00.000Z",
+  author: lena,
+  stats: { replies: 1, retweets: 0, likes: 4, tips: 2 },
+  viewer: { liked: false, retweeted: false, bookmarked: false, tipped: false },
+  attachment: null,
+  ...overrides,
+});
+
+/** Store state with these Tweets cached, as timelines leave them. */
+export const tweetsState = (...tweets: ITweet[]) =>
+  tweetsAdapter.upsertMany(tweetsAdapter.getInitialState(), tweets);
 
 export const wallet = (overrides: Partial<IWallet> = {}): IWallet => ({
   username: testViewer.username,

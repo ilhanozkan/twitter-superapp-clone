@@ -8,9 +8,11 @@ import {
 
 import { walletApi } from "../lib/client/walletApi";
 import { Cents } from "../types/Money";
+import { ITweet } from "../types/Tweet";
 import { IAuthor } from "../types/User";
 import { IPaymentRequest, ITransfer } from "../types/Wallet";
 import type { SessionState } from "./sessionSlice";
+import { tweetsReceived } from "./tweetsSlice";
 import { balanceChanged, fetchWallet } from "./walletSlice";
 
 // The wallet lane's client state (§12.3): the wallet page's payment
@@ -273,6 +275,28 @@ export const payRequest =
     dispatch(requestChanged(result.request));
     dispatch(transferCreated(result.transfer));
     return { request: result.request, transfer: result.transfer };
+  };
+
+/**
+ * The server answers with the Tweet as the viewer now sees it (one more
+ * tip, `tipped`), which replaces the cached copy every timeline shows.
+ */
+export const tipTweet =
+  (
+    tweetId: string,
+    { amount, note }: { amount: Cents; note: string | null },
+    key: string
+  ): WalletThunk<{ transfer: ITransfer; tweet: ITweet }> =>
+  async (dispatch) => {
+    const { transfer, wallet, tweet } = await walletApi.tip(
+      tweetId,
+      { amount, note },
+      key
+    );
+    dispatch(balanceChanged(wallet));
+    dispatch(tweetsReceived([tweet]));
+    dispatch(transferCreated(transfer));
+    return { transfer, tweet };
   };
 
 /** Decline (the payer) or cancel (the requester); repeating either is harmless. */
