@@ -98,10 +98,14 @@ server (`lib/auth.ts`) and is never read from request bodies.
 | `PUT /api/tweets/:id/retweet`   | Retweet (idempotent); `DELETE` undoes it                             | `200 { tweet }`              |
 | `PUT /api/tweets/:id/bookmark`  | Bookmark (idempotent); `DELETE` removes it                           | `200 { tweet }`              |
 | `GET /api/users/:username`      | Profile with `tweetCount` (case-insensitive)                         | `200 { user }`               |
-| `GET /api/me`                   | The current user's profile and whether writes are allowed            | `200 { user, readOnly }`     |
+| `GET /api/me`                   | The current user, whether writes are allowed, SuperApp features      | `200 { user, readOnly, … }`  |
 | `GET /api/notifications?limit=` | Likes, retweets and replies others made on your tweets, newest first | `200 { items }`              |
 | `GET /api/trends?limit=`        | Most used hashtags (default 10, max 20); cacheable for 60 s          | `200 { items }`              |
 | `GET /api/health`               | Liveness and the configured data source                              | `200 { status, dataSource }` |
+
+`GET /api/me` also returns `features` (which SuperApp features are on, e.g.
+`{ "wallet": false, … }`) and `managedBusinesses` (the businesses the current
+user runs).
 
 ### `GET /api/tweets` query
 

@@ -3,7 +3,20 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { ZodError } from "zod";
 
 import { envFlag, isReadOnly } from "../auth";
-import { ConfigurationError, NotFoundError } from "../db/errors";
+import {
+  ConfigurationError,
+  ConflictError,
+  ForbiddenError,
+  IdempotencyKeyReusedError,
+  InsufficientFundsError,
+  InvalidStateError,
+  LimitExceededError,
+  NotFoundError,
+  NotImplementedError,
+  PriceChangedError,
+  UnavailableError,
+  WalletFrozenError,
+} from "../db/errors";
 import { ApiError, ErrorCode, ValidationIssue } from "./errors";
 import { createRateLimiter } from "./rateLimit";
 
@@ -126,7 +139,20 @@ function assertSameOrigin(req: NextApiRequest, env: Env = process.env) {
   }
 }
 
-function toApiError(error: unknown): ApiError {
+// Domain errors whose message is written for people and safe to show.
+const DOMAIN_ERRORS: [new (...args: never[]) => Error, number, ErrorCode][] = [
+  [InsufficientFundsError, 402, "insufficient_funds"],
+  [WalletFrozenError, 403, "wallet_frozen"],
+  [ForbiddenError, 403, "forbidden"],
+  [LimitExceededError, 422, "limit_exceeded"],
+  [IdempotencyKeyReusedError, 422, "idempotency_key_reused"],
+  [InvalidStateError, 409, "invalid_state"],
+  [PriceChangedError, 409, "price_changed"],
+  [ConflictError, 409, "conflict"],
+  [NotImplementedError, 501, "not_implemented"],
+];
+
+export function toApiError(error: unknown): ApiError {
   if (error instanceof ApiError) return error;
   if (error instanceof ZodError) {
     return new ApiError(
@@ -143,6 +169,17 @@ function toApiError(error: unknown): ApiError {
     return new ApiError(404, "not_found", error.message);
   if (error instanceof ConfigurationError) {
     return new ApiError(503, "service_unavailable", error.message);
+  }
+  if (error instanceof UnavailableError) {
+    return new ApiError(
+      422,
+      "unavailable",
+      error.message,
+      error.productIds.map((id) => ({ path: "productId", message: id }))
+    );
+  }
+  for (const [type, status, code] of DOMAIN_ERRORS) {
+    if (error instanceof type) return new ApiError(status, code, error.message);
   }
   return new ApiError(500, "internal_error", "Something went wrong");
 }

@@ -1,4 +1,6 @@
+import { FeatureId } from "../types/Superapp";
 import { ConfigurationError } from "./db/errors";
+import { parseFeatureList } from "./superapp/features";
 
 export type DataSource = "memory" | "sanity";
 
@@ -64,4 +66,41 @@ export function getSanityConfig(env: Env = process.env): SanityConfig {
     apiVersion: SANITY_API_VERSION,
     token: read(env, "SANITY_API_TOKEN"),
   };
+}
+
+const MAX_TIME_SCALE = 600;
+
+/**
+ * SUPERAPP_TIME_SCALE speeds up demo orders and rides (1 to 600, default 1;
+ * the e2e suite uses 60). Repositories apply it when a record is created,
+ * so stored timestamps are absolute and old records never change speed.
+ */
+export function getTimeScale(env: Env = process.env): number {
+  const value = read(env, "SUPERAPP_TIME_SCALE");
+  if (value === undefined) return 1;
+
+  const scale = /^\d+$/.test(value) ? Number(value) : NaN;
+  if (!(scale >= 1 && scale <= MAX_TIME_SCALE)) {
+    throw new ConfigurationError(
+      `Invalid SUPERAPP_TIME_SCALE "${value}". Expected an integer from 1 to ${MAX_TIME_SCALE}.`
+    );
+  }
+  return scale;
+}
+
+/**
+ * DISABLED_FEATURES is a kill switch: a comma- or space-separated list of
+ * SuperApp features (wallet, messages, channels, shop, orders, rides,
+ * stories) to turn off. Unknown names are rejected rather than ignored.
+ */
+export function getDisabledFeatures(env: Env = process.env): Set<FeatureId> {
+  const { features, unknown } = parseFeatureList(
+    read(env, "DISABLED_FEATURES")
+  );
+  if (unknown.length > 0) {
+    throw new ConfigurationError(
+      `Unknown DISABLED_FEATURES: ${unknown.join(", ")}.`
+    );
+  }
+  return features;
 }

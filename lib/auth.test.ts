@@ -20,6 +20,15 @@ describe("getCurrentUsername", () => {
       ConfigurationError
     );
   });
+
+  it("rejects usernames reserved for the app's own pages", () => {
+    for (const username of ["wallet", "Services", "_next", "404"]) {
+      expect(
+        () => getCurrentUsername({ DEMO_USERNAME: username }),
+        username
+      ).toThrow(/reserved/);
+    }
+  });
 });
 
 describe("envFlag", () => {

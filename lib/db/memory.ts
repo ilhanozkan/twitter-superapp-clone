@@ -3,10 +3,12 @@ import { randomUUID } from "crypto";
 import {
   DEFAULT_NOTIFICATIONS_LIMIT,
   DEFAULT_TRENDS_LIMIT,
+  DEFAULT_USER_SEARCH_LIMIT,
 } from "../constants";
 import { computeTrends } from "../hashtags";
-import { INotification } from "../../types/Notification";
-import { IReply, ITweet, ReactionKind } from "../../types/Tweet";
+import { CoreNotification } from "../../types/Notification";
+import { FeatureId } from "../../types/Superapp";
+import { IReply, ReactionKind, TweetAttachmentInput } from "../../types/Tweet";
 import { IAuthor, IUser, IUserProfile } from "../../types/User";
 import {
   clampLimit,
@@ -16,17 +18,59 @@ import {
   isAfterCursor,
 } from "./cursor";
 import { NotFoundError } from "./errors";
+import { resolveFeatures, SubRepositories } from "./features";
+import {
+  BusinessMemoryState,
+  createBusinessMemoryState,
+  createMemoryBusiness,
+} from "./memory/business";
+import { createMemoryChannels } from "./memory/channels";
+import { DEFAULT_MEMORY_LIMITS, MemoryDeps, MemoryLimits } from "./memory/deps";
+import { createMemoryLedger } from "./memory/ledger";
+import {
+  createMemoryMessages,
+  createMessagesMemoryState,
+  MessagesMemoryState,
+} from "./memory/messages";
+import {
+  createMemoryOrders,
+  createOrdersMemoryState,
+  OrdersMemoryState,
+} from "./memory/orders";
+import {
+  createMemoryRides,
+  createRidesMemoryState,
+  RidesMemoryState,
+} from "./memory/rides";
+import {
+  createMemoryShop,
+  createShopMemoryState,
+  ShopMemoryState,
+} from "./memory/shop";
+import {
+  createMemoryStories,
+  createStoriesMemoryState,
+  StoriesMemoryState,
+} from "./memory/stories";
+import {
+  createMemoryWallet,
+  createWalletMemoryState,
+  WalletMemoryState,
+} from "./memory/wallet";
+import { mergeNotifications } from "./notifications";
 import { matchesSearch, searchTerms } from "./search";
 import { createSeedData, SeedData } from "./seed";
+import { BareTweet, decorateTweets } from "./tweetExtras";
 import { ListTweetsQuery, NewReply, NewTweet, Repository } from "./types";
 
-interface StoredTweet {
+export interface StoredTweet {
   id: string;
   text: string;
   image: string | null;
   createdAt: string;
   author: IAuthor;
   blocked: boolean;
+  attachment: TweetAttachmentInput | null;
 }
 
 interface StoredReaction {
@@ -43,19 +87,30 @@ export interface MemoryState {
   replies: IReply[];
   /** Keyed by `reactionKey()`, which makes reactions idempotent. */
   reactions: Map<string, StoredReaction>;
+  wallet: WalletMemoryState;
+  business: BusinessMemoryState;
+  shop: ShopMemoryState;
+  orders: OrdersMemoryState;
+  rides: RidesMemoryState;
+  stories: StoriesMemoryState;
+  /** Channels live here too. */
+  messages: MessagesMemoryState;
 }
 
 export interface MemoryRepositoryOptions {
   now?: () => Date;
   generateId?: () => string;
+  /** SUPERAPP_TIME_SCALE, applied when orders and rides are created. */
+  timeScale?: number;
   /**
-   * The demo store keeps at most this many tweets and replies, dropping the
-   * oldest first, so a flood of posts cannot exhaust the server's memory.
+   * Caps that keep the demo store's memory bounded, e.g. at most this many
+   * tweets and replies, dropping the oldest first, so a flood of posts
+   * cannot exhaust the server's memory. Unset caps keep their defaults.
    */
-  limits?: { tweets: number; replies: number };
+  limits?: Partial<MemoryLimits>;
+  /** DISABLED_FEATURES */
+  disabled?: ReadonlySet<FeatureId>;
 }
-
-const DEFAULT_LIMITS = { tweets: 2000, replies: 5000 };
 
 const TREND_WINDOW = 500;
 
@@ -63,6 +118,9 @@ const key = (username: string) => username.toLowerCase();
 
 const reactionKey = (kind: ReactionKind, tweetId: string, username: string) =>
   `${kind}:${tweetId}:${key(username)}`;
+
+/** Code-point order, like GROQ's `order()`, so both stores sort alike. */
+const compareKeys = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 const toAuthor = ({ username, fullname, image }: IAuthor): IAuthor => ({
   username,
@@ -91,6 +149,7 @@ export function createMemoryState(seed: SeedData): MemoryState {
           createdAt: tweet.createdAt,
           author: authorOf(tweet.author),
           blocked: tweet.blocked,
+          attachment: tweet.attachment ?? null,
         },
       ])
     ),
@@ -112,6 +171,13 @@ export function createMemoryState(seed: SeedData): MemoryState {
         },
       ])
     ),
+    wallet: createWalletMemoryState(seed.superapp?.wallet ?? null),
+    business: createBusinessMemoryState(seed.superapp?.business ?? null),
+    shop: createShopMemoryState(seed.superapp?.shop ?? null),
+    orders: createOrdersMemoryState(seed.superapp?.orders ?? null),
+    rides: createRidesMemoryState(seed.superapp?.rides ?? null),
+    stories: createStoriesMemoryState(seed.superapp?.stories ?? null),
+    messages: createMessagesMemoryState(seed.superapp?.messages ?? null),
   };
 }
 
@@ -126,7 +192,9 @@ const globalStore = globalThis as typeof globalThis & {
  */
 export function getMemoryState(): MemoryState {
   if (!globalStore.__superappMemoryState) {
-    globalStore.__superappMemoryState = createMemoryState(createSeedData());
+    globalStore.__superappMemoryState = createMemoryState(
+      createSeedData(new Date(), { world: "core" })
+    );
   }
   return globalStore.__superappMemoryState;
 }
@@ -136,9 +204,37 @@ export function createMemoryRepository(
   {
     now = () => new Date(),
     generateId = randomUUID,
-    limits = DEFAULT_LIMITS,
+    timeScale = 1,
+    limits: limitOverrides,
+    disabled = new Set(),
   }: MemoryRepositoryOptions = {}
 ): Repository {
+  const limits: MemoryLimits = { ...DEFAULT_MEMORY_LIMITS, ...limitOverrides };
+
+  const deps: MemoryDeps = {
+    state,
+    now,
+    generateId,
+    timeScale,
+    limits,
+    ledger: createMemoryLedger(),
+    // Sub-repositories only call it after construction, once `repository` exists.
+    self: () => repository,
+  };
+  const subs: SubRepositories = {
+    wallet: createMemoryWallet(deps),
+    business: createMemoryBusiness(deps),
+    shop: createMemoryShop(deps),
+    orders: createMemoryOrders(deps),
+    rides: createMemoryRides(deps),
+    stories: createMemoryStories(deps),
+    messages: createMemoryMessages(deps),
+    channels: createMemoryChannels(deps),
+  };
+  const { featureStatus, features } = resolveFeatures(subs, disabled);
+  const decorate = (tweets: BareTweet[], viewer?: string | null) =>
+    decorateTweets(tweets, viewer, { features, ...subs });
+
   /** Deletes a tweet with its replies and reactions. */
   const removeTweet = (id: string) => {
     if (!state.tweets.delete(id)) return false;
@@ -175,7 +271,7 @@ export function createMemoryRepository(
     username?: string | null
   ) => !!username && state.reactions.has(reactionKey(kind, tweetId, username));
 
-  const toTweet = (tweet: StoredTweet, viewer?: string | null): ITweet => {
+  const toTweet = (tweet: StoredTweet, viewer?: string | null): BareTweet => {
     let likes = 0;
     let retweets = 0;
     state.reactions.forEach((reaction) => {
@@ -201,6 +297,7 @@ export function createMemoryRepository(
         retweeted: hasReaction("retweet", tweet.id, viewer),
         bookmarked: hasReaction("bookmark", tweet.id, viewer),
       },
+      attachment: tweet.attachment,
     };
   };
 
@@ -209,7 +306,47 @@ export function createMemoryRepository(
       .filter((tweet) => !tweet.blocked)
       .sort(compareNewestFirst);
 
-  return {
+  const coreNotifications = async (username: string, limit: number) => {
+    const mine = new Map(
+      timeline()
+        .filter((tweet) => key(tweet.author.username) === key(username))
+        .map((tweet) => [tweet.id, tweet])
+    );
+    const notifications: CoreNotification[] = [];
+
+    state.reactions.forEach((reaction) => {
+      const tweet = mine.get(reaction.tweetId);
+      if (!tweet || reaction.kind === "bookmark") return;
+      if (key(reaction.actor.username) === key(username)) return;
+
+      notifications.push({
+        id: `${reaction.kind}-${tweet.id}-${key(reaction.actor.username)}`,
+        type: reaction.kind,
+        createdAt: reaction.createdAt,
+        actor: toAuthor(reaction.actor),
+        tweet: { id: tweet.id, text: tweet.text },
+        reply: null,
+      });
+    });
+
+    for (const reply of state.replies) {
+      const tweet = mine.get(reply.tweetId);
+      if (!tweet || key(reply.author.username) === key(username)) continue;
+
+      notifications.push({
+        id: reply.id,
+        type: "reply",
+        createdAt: reply.createdAt,
+        actor: toAuthor(reply.author),
+        tweet: { id: tweet.id, text: tweet.text },
+        reply: { id: reply.id, text: reply.text },
+      });
+    }
+
+    return notifications.sort(compareNewestFirst).slice(0, limit);
+  };
+
+  const repository: Repository = {
     source: "memory",
 
     async listTweets(query: ListTweetsQuery = {}) {
@@ -247,17 +384,22 @@ export function createMemoryRepository(
       const last = page[page.length - 1];
 
       return {
-        items: page.map((tweet) => toTweet(tweet, query.viewer)),
+        items: await decorate(
+          page.map((tweet) => toTweet(tweet, query.viewer)),
+          query.viewer
+        ),
         nextCursor: matches.length > limit && last ? encodeCursor(last) : null,
       };
     },
 
     async getTweet(id, viewer) {
       const tweet = visibleTweet(id);
-      return tweet ? toTweet(tweet, viewer) : null;
+      if (!tweet) return null;
+      const [decorated] = await decorate([toTweet(tweet, viewer)], viewer);
+      return decorated;
     },
 
-    async createTweet({ text, image, author }: NewTweet) {
+    async createTweet({ text, image, author, attachment }: NewTweet) {
       const tweet: StoredTweet = {
         id: generateId(),
         text,
@@ -265,10 +407,15 @@ export function createMemoryRepository(
         createdAt: now().toISOString(),
         author: toAuthor(author),
         blocked: false,
+        attachment: attachment ?? null,
       };
       state.tweets.set(tweet.id, tweet);
       enforceLimits();
-      return toTweet(tweet, author.username);
+      const [decorated] = await decorate(
+        [toTweet(tweet, author.username)],
+        author.username
+      );
+      return decorated;
     },
 
     async deleteTweet(id) {
@@ -334,6 +481,7 @@ export function createMemoryRepository(
         banner: null,
         verified: false,
         joinedAt: tweets[tweets.length - 1].createdAt,
+        accountType: "personal",
         tweetCount: tweets.length,
       };
       return profile;
@@ -347,45 +495,29 @@ export function createMemoryRepository(
     },
 
     async listNotifications(username, limit = DEFAULT_NOTIFICATIONS_LIMIT) {
-      const mine = new Map(
-        timeline()
-          .filter((tweet) => key(tweet.author.username) === key(username))
-          .map((tweet) => [tweet.id, tweet])
+      return mergeNotifications(
+        (safeLimit) => coreNotifications(username, safeLimit),
+        subs,
+        features,
+        username,
+        limit
       );
-      const notifications: INotification[] = [];
-
-      state.reactions.forEach((reaction) => {
-        const tweet = mine.get(reaction.tweetId);
-        if (!tweet || reaction.kind === "bookmark") return;
-        if (key(reaction.actor.username) === key(username)) return;
-
-        notifications.push({
-          id: `${reaction.kind}-${tweet.id}-${key(reaction.actor.username)}`,
-          type: reaction.kind,
-          createdAt: reaction.createdAt,
-          actor: toAuthor(reaction.actor),
-          tweet: { id: tweet.id, text: tweet.text },
-          reply: null,
-        });
-      });
-
-      for (const reply of state.replies) {
-        const tweet = mine.get(reply.tweetId);
-        if (!tweet || key(reply.author.username) === key(username)) continue;
-
-        notifications.push({
-          id: reply.id,
-          type: "reply",
-          createdAt: reply.createdAt,
-          actor: toAuthor(reply.author),
-          tweet: { id: tweet.id, text: tweet.text },
-          reply: { id: reply.id, text: reply.text },
-        });
-      }
-
-      return notifications
-        .sort(compareNewestFirst)
-        .slice(0, Math.max(0, limit));
     },
+
+    async searchUsers(query, limit = DEFAULT_USER_SEARCH_LIMIT) {
+      const terms = searchTerms(query);
+      if (terms.length === 0) return [];
+
+      return Array.from(state.users.values())
+        .filter((user) => matchesSearch([user.username, user.fullname], terms))
+        .sort((a, b) => compareKeys(key(a.username), key(b.username)))
+        .slice(0, Math.max(0, Math.floor(limit)))
+        .map((user): IUser => ({ ...user }));
+    },
+
+    featureStatus,
+    features,
+    ...subs,
   };
+  return repository;
 }

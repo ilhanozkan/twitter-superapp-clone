@@ -1,5 +1,6 @@
 import { INotification } from "./Notification";
 import { IPage } from "./Page";
+import { IFeatures } from "./Superapp";
 import { ITrend } from "./Trend";
 import { IReply, ITweet } from "./Tweet";
 import { IUserProfile } from "./User";
@@ -27,6 +28,10 @@ export interface UserResponse {
 export interface MeResponse extends UserResponse {
   /** True when the server rejects writes (READ_ONLY=true). */
   readOnly: boolean;
+  /** SuperApp features that are on for this deployment. */
+  features: IFeatures;
+  /** Businesses the current user can run: their own, plus delegations. */
+  managedBusinesses: string[];
 }
 
 export interface TrendsResponse {

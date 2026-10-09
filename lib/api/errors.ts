@@ -8,7 +8,16 @@ export type ErrorCode =
   | "unsupported_media_type"
   | "rate_limited"
   | "internal_error"
-  | "service_unavailable";
+  | "service_unavailable"
+  | "insufficient_funds"
+  | "wallet_frozen"
+  | "limit_exceeded"
+  | "unavailable"
+  | "idempotency_key_reused"
+  | "invalid_state"
+  | "price_changed"
+  | "conflict"
+  | "not_implemented";
 
 export interface ValidationIssue {
   /** Dotted path of the offending field, e.g. "text" or "image". */

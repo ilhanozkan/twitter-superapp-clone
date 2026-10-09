@@ -15,6 +15,8 @@
     --color-retweet: 0 127 85;
     --color-danger: 220 38 38;
     --color-warning: 180 83 9;
+    --color-tip: 180 83 9;
+    --color-success: 0 127 85;
     --color-banner: 207 217 222;
     --shadow-menu:
       0 0 15px rgb(101 119 134 / 0.2), 0 0 3px 1px rgb(101 119 134 / 0.15);
@@ -33,6 +35,8 @@
     --color-retweet: 0 186 124;
     --color-danger: 244 33 46;
     --color-warning: 255 212 0;
+    --color-tip: 255 212 0;
+    --color-success: 0 186 124;
     --color-banner: 51 54 57;
     --shadow-menu:
       0 0 15px rgb(255 255 255 / 0.2), 0 0 3px 1px rgb(255 255 255 / 0.15);
@@ -52,6 +56,8 @@
       --color-retweet: 0 186 124;
       --color-danger: 244 33 46;
       --color-warning: 255 212 0;
+      --color-tip: 255 212 0;
+      --color-success: 0 186 124;
       --color-banner: 51 54 57;
       --shadow-menu:
         0 0 15px rgb(255 255 255 / 0.2), 0 0 3px 1px rgb(255 255 255 / 0.15);

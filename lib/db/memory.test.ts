@@ -4,11 +4,13 @@ import { createMemoryRepository, createMemoryState } from "./memory";
 import { createSeedData } from "./seed";
 
 const author = { username: "flooder", fullname: "Flooder", image: null };
+// The core world: the caps below are counted against its 21 seed tweets.
+const coreSeed = () => createSeedData(new Date(), { world: "core" });
 
 describe("memory repository limits", () => {
   it("keeps at most `limits.tweets` tweets, dropping the oldest with their data", async () => {
     let counter = 0;
-    const repo = createMemoryRepository(createMemoryState(createSeedData()), {
+    const repo = createMemoryRepository(createMemoryState(coreSeed()), {
       generateId: () => `new-${++counter}`,
       limits: { tweets: 22, replies: 1000 },
     });
@@ -25,7 +27,7 @@ describe("memory repository limits", () => {
   });
 
   it("keeps at most `limits.replies` replies, dropping the oldest", async () => {
-    const repo = createMemoryRepository(createMemoryState(createSeedData()), {
+    const repo = createMemoryRepository(createMemoryState(coreSeed()), {
       limits: { tweets: 1000, replies: 3 },
     });
 

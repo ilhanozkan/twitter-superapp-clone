@@ -368,6 +368,27 @@ describe("users, me, trends, notifications, health", () => {
     });
   });
 
+  it("reports the SuperApp features and the businesses the user runs", async () => {
+    const me = await call(api.me);
+
+    expect(Object.keys(me.body.features).sort()).toEqual([
+      "channels",
+      "messages",
+      "orders",
+      "rides",
+      "shop",
+      "stories",
+      "wallet",
+    ]);
+    expect(
+      Object.values(me.body.features).every(
+        (value) => typeof value === "boolean"
+      )
+    ).toBe(true);
+    // The core world has no business profiles.
+    expect(me.body.managedBusinesses).toEqual([]);
+  });
+
   it("returns cacheable trends", async () => {
     const res = await call(api.trends, { query: { limit: "2" } });
     expect(res.body.items).toEqual([

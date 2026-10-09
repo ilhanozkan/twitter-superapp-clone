@@ -1,57 +1,25 @@
 import { beforeEach, describe, expect, it } from "vitest";
 
-import { FakeSanityClient } from "../../test/fakeSanityClient";
-import { createMemoryRepository, createMemoryState } from "./memory";
+import {
+  expectStoresAgree,
+  Subject,
+  SUBJECT_NOW,
+  subjects,
+} from "../../test/repositorySubjects";
+import { INotification } from "../../types/Notification";
 import { NotFoundError } from "./errors";
-import { createSanityRepository } from "./sanity/repository";
-import { seedToSanityDocuments } from "./sanity/seed";
-import { createSeedData, DEMO_USERNAME } from "./seed";
+import { DEMO_USERNAME } from "./seed";
 import { Repository } from "./types";
 
 // Both data sources must behave identically; every test below runs against
-// the in-memory store and the Sanity repository (real GROQ via groq-js).
-const NOW = new Date("2026-10-08T12:00:00.000Z");
+// the in-memory store and the Sanity repository (real GROQ via groq-js),
+// on the core world: the data the app had before the SuperApp features.
+const NOW = SUBJECT_NOW;
+const factories = subjects({ world: "core" });
 
-interface Subject {
-  repo: Repository;
-  /** Moderates a tweet the way a Studio editor would (blockTweet = true). */
-  block: (tweetId: string) => void;
-}
-
-const factories: [string, () => Subject][] = [
-  [
-    "memory",
-    () => {
-      let counter = 0;
-      const state = createMemoryState(createSeedData(NOW));
-      return {
-        repo: createMemoryRepository(state, {
-          now: () => NOW,
-          generateId: () => `new-${++counter}`,
-        }),
-        block: (id) => {
-          state.tweets.get(id)!.blocked = true;
-        },
-      };
-    },
-  ],
-  [
-    "sanity",
-    () => {
-      const client = new FakeSanityClient(
-        seedToSanityDocuments(createSeedData(NOW)),
-        () => NOW
-      );
-      return {
-        repo: createSanityRepository(client, { canWrite: true }),
-        block: (id) => {
-          client.documents.find((document) => document._id === id)!.blockTweet =
-            true;
-        },
-      };
-    },
-  ],
-];
+/** The Tweet a notification is about, for the kinds that have one. */
+const tweetIdOf = (notification: INotification) =>
+  "tweet" in notification ? notification.tweet?.id : undefined;
 
 const me = {
   username: DEMO_USERNAME,
@@ -118,11 +86,13 @@ describe.each(factories)("%s repository", (_name, create) => {
         replies: 2,
         retweets: 2,
         likes: 6,
+        tips: 0,
       });
       expect(byId.get("seed-t01")!.viewer).toEqual({
         liked: false,
         retweeted: true,
         bookmarked: false,
+        tipped: false,
       });
       expect(byId.get("seed-t02")!.viewer.liked).toBe(true);
       expect(byId.get("seed-t04")!.viewer.bookmarked).toBe(true);
@@ -252,7 +222,9 @@ describe.each(factories)("%s repository", (_name, create) => {
         )
       ).not.toContain("seed-t05");
       const notifications = await repo.listNotifications(DEMO_USERNAME);
-      expect(notifications.some((n) => n.tweet.id === "seed-t05")).toBe(false);
+      expect(notifications.some((n) => tweetIdOf(n) === "seed-t05")).toBe(
+        false
+      );
 
       expect(await repo.deleteTweet("seed-t05")).toBe(false);
     });
@@ -342,11 +314,17 @@ describe.each(factories)("%s repository", (_name, create) => {
       await repo.setReaction("bookmark", "seed-t20", me, true);
 
       const tweet = await repo.getTweet("seed-t20", DEMO_USERNAME);
-      expect(tweet!.stats).toEqual({ replies: 0, retweets: 1, likes: 0 });
+      expect(tweet!.stats).toEqual({
+        replies: 0,
+        retweets: 1,
+        likes: 0,
+        tips: 0,
+      });
       expect(tweet!.viewer).toEqual({
         liked: false,
         retweeted: true,
         bookmarked: true,
+        tipped: false,
       });
       expect(
         (await repo.listTweets({ bookmarkedBy: DEMO_USERNAME })).items[0].id
@@ -373,6 +351,7 @@ describe.each(factories)("%s repository", (_name, create) => {
         website: null,
         verified: true,
         joinedAt: "2015-03-14T09:00:00.000Z",
+        accountType: "personal",
         tweetCount: 3,
       });
     });
@@ -388,6 +367,7 @@ describe.each(factories)("%s repository", (_name, create) => {
         banner: null,
         verified: false,
         joinedAt: NOW.toISOString(),
+        accountType: "personal",
         tweetCount: 1,
       });
     });
@@ -429,7 +409,7 @@ describe.each(factories)("%s repository", (_name, create) => {
       ).toBe(true);
       expect(
         notifications.every((n) =>
-          ["seed-t05", "seed-t12", "seed-t19"].includes(n.tweet.id)
+          ["seed-t05", "seed-t12", "seed-t19"].includes(tweetIdOf(n)!)
         )
       ).toBe(true);
       expect(notifications.map((n) => n.type)).toEqual(
@@ -459,22 +439,20 @@ describe.each(factories)("%s repository", (_name, create) => {
 
 describe("memory and sanity repositories agree", () => {
   it("on every read of the seed data", async () => {
-    const [memory, sanity] = factories.map(([, create]) => create().repo);
-
-    for (const repo of [memory, sanity]) {
-      await repo.setReaction("like", "seed-t08", me, true);
-    }
-
-    const read = (repo: Repository) =>
-      Promise.all([
-        repo.listTweets({ viewer: DEMO_USERNAME, limit: 50 }),
-        repo.listTweets({ search: "SuperApp" }),
-        repo.listReplies("seed-t01"),
-        repo.getUser(DEMO_USERNAME),
-        repo.listTrends(),
-        repo.listNotifications(DEMO_USERNAME),
-      ]);
-
-    expect(await read(sanity)).toEqual(await read(memory));
+    await expectStoresAgree(
+      (repo: Repository) =>
+        Promise.all([
+          repo.listTweets({ viewer: DEMO_USERNAME, limit: 50 }),
+          repo.listTweets({ search: "SuperApp" }),
+          repo.listReplies("seed-t01"),
+          repo.getUser(DEMO_USERNAME),
+          repo.listTrends(),
+          repo.listNotifications(DEMO_USERNAME),
+        ]),
+      {
+        world: "core",
+        prepare: ({ repo }) => repo.setReaction("like", "seed-t08", me, true),
+      }
+    );
   });
 });
