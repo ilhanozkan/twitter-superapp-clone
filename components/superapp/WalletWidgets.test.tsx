@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { renderToString } from "react-dom/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sessionState } from "../../slices/sessionSlice";
@@ -133,6 +134,7 @@ describe("TransferList", () => {
           }),
         ]}
         viewer={testViewer.username}
+        serverNow="2026-10-09T12:00:00.000Z"
         hasMore={false}
         loading={false}
         error={null}
@@ -171,6 +173,7 @@ describe("TransferList", () => {
           }),
         ]}
         viewer={testViewer.username}
+        serverNow="2026-10-09T12:00:00.000Z"
         hasMore={false}
         loading={false}
         error={null}
@@ -184,10 +187,62 @@ describe("TransferList", () => {
     expect(within(refunded).queryByText("Pending")).toBeNull();
   });
 
+  describe("on a device whose clock is 4 minutes ahead", () => {
+    // Held until 13:00 by the server's clock; the device already says 13:02.
+    const serverNow = "2026-10-09T12:58:00.000Z";
+    const deviceNow = new Date("2026-10-09T13:02:00.000Z");
+    const list = (
+      <TransferList
+        transfers={[
+          transfer({ id: "tx-h", holdUntil: "2026-10-09T13:00:00.000Z" }),
+        ]}
+        viewer={testViewer.username}
+        serverNow={serverNow}
+        hasMore={false}
+        loading={false}
+        error={null}
+        onLoadMore={() => {}}
+        empty={null}
+      />
+    );
+
+    it("hydrates the server's Pending chip without a mismatch", () => {
+      vi.useFakeTimers({ toFake: ["Date"] });
+      vi.setSystemTime(new Date(serverNow));
+      const html = renderToString(list);
+      expect(html).toContain("Pending");
+
+      vi.setSystemTime(deviceNow);
+      const container = document.createElement("div");
+      container.innerHTML = html;
+      document.body.appendChild(container);
+      const onRecoverableError = vi.fn();
+      renderWithStore(list, { container, hydrate: true, onRecoverableError });
+
+      expect(onRecoverableError).not.toHaveBeenCalled();
+      expect(within(container).getByText("Pending")).toBeTruthy();
+    });
+
+    it("ends the hold when the server's clock reaches it", () => {
+      vi.useFakeTimers();
+      vi.setSystemTime(deviceNow);
+      renderWithStore(list);
+      expect(screen.getByText("Pending")).toBeTruthy();
+
+      // 12:59 for the server: still held, although the device says 13:03.
+      act(() => vi.advanceTimersByTime(60_000));
+      expect(screen.getByText("Pending")).toBeTruthy();
+
+      act(() => vi.advanceTimersByTime(2 * 60_000));
+      expect(screen.queryByText("Pending")).toBeNull();
+    });
+  });
+
   it("shows the empty state, a Show more fallback and a retry", async () => {
     const onLoadMore = vi.fn();
     const props = {
       viewer: testViewer.username,
+      serverNow: "2026-10-09T12:00:00.000Z",
       loading: false,
       onLoadMore,
       empty: <p>No activity yet</p>,

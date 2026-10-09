@@ -237,11 +237,10 @@ async function readSnapshot(
 }
 
 /**
- * The wallet writes of a plan (§6.8). Debited, capped and locked wallets
- * are guarded by the snapshot's revision (or created, which conflicts with
- * a concurrent create); every other credit is createIfNotExists + inc,
- * which commutes with concurrent credits. Refund debits are never guarded:
- * the hold guarantees the balance covers them.
+ * The wallet writes of a plan (§6.8). Debited, refunding, capped and
+ * locked wallets are guarded by the snapshot's revision (or created, which
+ * conflicts with a concurrent create); every other credit is
+ * createIfNotExists + inc, which commutes with concurrent credits.
  */
 function walletWrites(
   plan: LedgerPlan,
@@ -346,11 +345,19 @@ export function createSanityLedger(
           if (!names.has(lower(username))) names.set(lower(username), username);
         }
         const isPrimary = (id: string) => id === op.operationId;
+        // The hold that covers a refund can end between this snapshot and
+        // the commit and free the credits for a concurrent debit. Guarding
+        // the refunding wallet makes that debit force a retry, which then
+        // finds the refund window over.
+        const refunding = prepared.transfers.flatMap((t) =>
+          t.reverses && t.from ? [lower(t.from.username)] : []
+        );
 
         const mutations: SanityMutation[] = [
           ...walletWrites(plan, snapshot, {
             guarded: new Set([
               ...plan.debited,
+              ...refunding,
               ...(prepared.cappedCredits ?? []).map(lower),
               ...locks,
             ]),

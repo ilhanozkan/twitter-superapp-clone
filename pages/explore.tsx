@@ -1,8 +1,10 @@
 import Head from "next/head";
 
 import EmptyState from "../components/common/EmptyState";
+import AccountMenu from "../components/layout/AccountMenu";
 import SearchForm from "../components/layout/SearchForm";
 import TrendsList from "../components/layout/TrendsList";
+import LiveActivityBanner from "../components/superapp/LiveActivityBanner";
 import Timeline from "../components/tweet/Timeline";
 import { timelineState, withPageState } from "../lib/server/pageState";
 import { timelines } from "../lib/timelines";
@@ -23,12 +25,20 @@ export default function Explore({ query }: { query: string }) {
             : "Explore / Twitter SuperApp"}
         </title>
       </Head>
-      <div className="sticky top-0 z-20 border-b border-line bg-surface/85 px-4 py-1 backdrop-blur-md">
-        <h1 className="sr-only">
-          {query ? `Search results for ${query}` : "Explore"}
-        </h1>
-        {/* Remount on a new query so the box shows it. */}
-        <SearchForm key={query} initialQuery={query} />
+      {/* Explore's header is its search box, so it carries the phone
+          account menu and the live activity banner PageHeader would. */}
+      <div className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
+        <div className="flex items-center gap-6 px-4 py-1">
+          <h1 className="sr-only">
+            {query ? `Search results for ${query}` : "Explore"}
+          </h1>
+          <AccountMenu />
+          <div className="min-w-0 flex-1">
+            {/* Remount on a new query so the box shows it. */}
+            <SearchForm key={query} initialQuery={query} />
+          </div>
+        </div>
+        <LiveActivityBanner className="lg:hidden" />
       </div>
 
       {search ? (

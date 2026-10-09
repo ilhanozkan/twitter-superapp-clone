@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import { initialActivityState } from "../../slices/activitySlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
+import Explore from "../../pages/explore";
 import { IFeatures } from "../../types/Superapp";
 import MobileNav from "./MobileNav";
 import Navigation, { navItems } from "./Navigation";
@@ -231,5 +232,41 @@ describe("PageHeader account menu (phones)", () => {
     const items = await open();
     expect(items).toContain("Business");
     expect(items).not.toContain("Wallet");
+  });
+});
+
+describe("Explore's header (phones)", () => {
+  it("has the account menu and live activity, like every PageHeader", async () => {
+    renderWithStore(<Explore query="" />, {
+      path: "/explore",
+      state: {
+        ...stateWith(),
+        activity: {
+          ...initialActivityState,
+          live: [
+            {
+              kind: "ride",
+              id: "r1",
+              title: "Ride to Atakule",
+              status: "Ahmet is 3 min away",
+              eta: null,
+              href: "/rides/r1",
+              nextChangeAt: null,
+            },
+          ],
+        },
+      },
+    });
+
+    const banner = screen.getByRole("region", { name: "Live activity" });
+    expect(banner.className).toContain("lg:hidden");
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: /account menu/ }));
+    expect(
+      within(screen.getByRole("menu"))
+        .getAllByRole("menuitem")
+        .map((item) => item.textContent)
+    ).toEqual(expect.arrayContaining(["Profile", "Wallet", "Bookmarks"]));
   });
 });

@@ -1,19 +1,9 @@
 import { useRouter } from "next/router";
 import { ReactNode } from "react";
-import {
-  HiArrowLeft,
-  HiOutlineBookmark,
-  HiOutlineBuildingStorefront,
-  HiOutlineQueueList,
-  HiOutlineUser,
-  HiOutlineWallet,
-} from "react-icons/hi2";
+import { HiArrowLeft } from "react-icons/hi2";
 
-import { useAppSelector } from "../../store";
-import Avatar from "../common/Avatar";
-import Menu, { MenuItem } from "../common/Menu";
 import LiveActivityBanner from "../superapp/LiveActivityBanner";
-import { useMoreMenuItems } from "./moreMenuItems";
+import AccountMenu from "./AccountMenu";
 import { useShell } from "./shell";
 
 interface PageHeaderProps {
@@ -24,48 +14,6 @@ interface PageHeaderProps {
   /** Buttons at the end of the title row, e.g. "Send credits" in a chat. */
   actions?: ReactNode;
   children?: ReactNode;
-}
-
-/**
- * The phone header's avatar menu: what the tab bar has no room for (the
- * sidebar shows these from 500px).
- */
-function useAccountMenuItems(): MenuItem[] {
-  const router = useRouter();
-  const session = useAppSelector((state) => state.session);
-  const moreItems = useMoreMenuItems();
-  const username = session.viewer?.username;
-  if (!username) return moreItems;
-
-  const items: (MenuItem | false)[] = [
-    {
-      label: "Profile",
-      icon: <HiOutlineUser />,
-      onSelect: () => router.push(`/${username}`),
-    },
-    session.features.wallet && {
-      label: "Wallet",
-      icon: <HiOutlineWallet />,
-      onSelect: () => router.push("/wallet"),
-    },
-    {
-      label: "Bookmarks",
-      icon: <HiOutlineBookmark />,
-      onSelect: () => router.push("/i/bookmarks"),
-    },
-    {
-      label: "Lists",
-      icon: <HiOutlineQueueList />,
-      onSelect: () => router.push(`/${username}/lists`),
-    },
-    session.features.shop &&
-      session.managedBusinesses.length > 0 && {
-        label: "Business",
-        icon: <HiOutlineBuildingStorefront />,
-        onSelect: () => router.push("/business"),
-      },
-  ];
-  return [...items.filter((item): item is MenuItem => !!item), ...moreItems];
 }
 
 /**
@@ -81,8 +29,6 @@ export default function PageHeader({
   children,
 }: PageHeaderProps) {
   const router = useRouter();
-  const viewer = useAppSelector((state) => state.session.viewer);
-  const accountItems = useAccountMenuItems();
   const { layout } = useShell();
 
   const goBack = () => {
@@ -93,18 +39,7 @@ export default function PageHeader({
   return (
     <div className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
       <div className="flex min-h-[53px] items-center gap-6 px-4">
-        {/* Phones have no sidebar: the avatar opens what it would hold. */}
-        {!back && viewer && (
-          <div className="-my-1.5 -ml-1.5 -mr-3.5 xs:hidden">
-            <Menu
-              label={`${viewer.fullname} @${viewer.username}, account menu`}
-              align="left"
-              triggerClassName="block rounded-full p-1.5"
-              trigger={<Avatar user={viewer} size={32} />}
-              items={accountItems}
-            />
-          </div>
-        )}
+        {!back && <AccountMenu />}
         {back && (
           <button
             type="button"

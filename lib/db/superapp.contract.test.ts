@@ -7,13 +7,15 @@ import {
   subjects,
 } from "../../test/repositorySubjects";
 import { FEATURE_IDS } from "../superapp/features";
-import { NotFoundError, NotImplementedError } from "./errors";
 import { DEMO_USERNAME } from "./seed";
 import { Repository } from "./types";
 
-// How both stores compose the SuperApp sub-repositories while every lane is
-// still a stub: the wallet is on, every lane reads as empty and is "off",
-// Tweets carry the new fields, and the core keeps working on the full world.
+// How both stores compose the SuperApp sub-repositories: the wallet is on,
+// each other feature is on exactly when its lane has shipped, features
+// still on their stub read as empty, Tweets carry the new fields, and the
+// core keeps working on the full world. Lanes ship in parallel, so nothing
+// here may assume another lane's state; lib/db/stubs.test.ts covers the
+// stubs themselves.
 
 const me = {
   username: DEMO_USERNAME,
@@ -30,82 +32,29 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     repo = subject.repo;
   });
 
-  it("reports the wallet on and every unbuilt feature off", () => {
-    for (const id of FEATURE_IDS)
-      expect(repo.featureStatus(id), id).toBe(id === "wallet" ? "on" : "off");
-    expect(repo.features).toMatchObject({ wallet: true, shop: false });
+  it("reports the wallet on and every other feature by whether it shipped", () => {
+    expect(repo.featureStatus("wallet")).toBe("on");
+    for (const id of FEATURE_IDS) {
+      // Both test stores can serve every feature.
+      expect(repo[id].configured, id).toBe(true);
+      expect(repo.featureStatus(id), id).toBe(
+        repo[id].implemented ? "on" : "off"
+      );
+      expect(repo.features[id], id).toBe(repo[id].implemented);
+    }
     expect(Object.keys(repo.features).sort()).toEqual([...FEATURE_IDS].sort());
   });
 
-  it("reads stubbed features as empty", async () => {
-    expect(await repo.shop.getProductCards(["seed-p-kk-latte"])).toEqual(
-      new Map()
-    );
-    expect(await repo.shop.getProduct("seed-p-kk-latte")).toBeNull();
-    expect(await repo.orders.listOrders({ buyer: DEMO_USERNAME })).toEqual({
-      items: [],
-      nextCursor: null,
-    });
-    expect(await repo.rides.getDriver("ahmet_drives")).toBeNull();
-    expect(await repo.stories.listTray(DEMO_USERNAME)).toEqual([]);
-    expect(await repo.stories.getStory("seed-s1", DEMO_USERNAME)).toBeNull();
-    expect(await repo.messages.unreadConversations(DEMO_USERNAME)).toBe(0);
-    expect(await repo.channels.listChannels({}, DEMO_USERNAME)).toEqual([]);
-    for (const id of FEATURE_IDS.filter((id) => id !== "wallet")) {
+  it("reads features that haven't shipped as empty", async () => {
+    for (const id of FEATURE_IDS.filter((id) => !repo[id].implemented)) {
       const feature = repo[id];
       expect(await feature.notifications(DEMO_USERNAME, 10), id).toEqual([]);
       expect(await feature.liveActivity(DEMO_USERNAME), id).toEqual([]);
-    }
-    await expect(
-      repo.messages.listMessages("dm-a-b", DEMO_USERNAME)
-    ).rejects.toBeInstanceOf(NotFoundError);
-  });
-
-  it("refuses writes to stubbed features with NotImplementedError", async () => {
-    const key = { operationId: "order-1", fingerprint: "f" };
-    const writes = [
-      repo.shop.setProductAvailability("seed-p-kk-latte", false),
-      repo.orders.placeDemoOrder({
-        ...key,
-        business: "kizilaykahve",
-        requestedBy: me,
-      }),
-      repo.orders.cancelOrder({ id: "seed-o01", as: "buyer" }),
-      repo.rides.cancelRide({ id: "seed-ride01" }),
-      repo.stories.markSeen(["seed-s1"], me),
-      repo.messages.openDirect(me, { ...me, username: "sarahcodes" }),
-      repo.channels.setMembership("ankara_eats", me, true),
-    ];
-    for (const write of writes) {
-      await expect(write).rejects.toBeInstanceOf(NotImplementedError);
     }
   });
 
   it("passes the ledger invariants", async () => {
     await expectLedgerInvariants(subject);
-  });
-
-  it("decorates Tweets with no attachment while the shop is off", async () => {
-    const { items } = await repo.listTweets({
-      viewer: DEMO_USERNAME,
-      limit: 50,
-    });
-    expect(items.length).toBeGreaterThan(0);
-    for (const tweet of items) expect(tweet.attachment).toBeNull();
-
-    const created = await repo.createTweet({
-      text: "Try the latte",
-      author: me,
-      attachment: { type: "product", productId: "seed-p-kk-latte" },
-    });
-    expect(created).toMatchObject({
-      stats: { tips: 0 },
-      viewer: { tipped: false },
-      attachment: null,
-    });
-    expect((await repo.getTweet(created.id, DEMO_USERNAME))!.attachment).toBe(
-      null
-    );
   });
 
   it("adds the SuperApp accounts to the world", async () => {
@@ -162,6 +111,36 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     );
   });
 });
+
+describe.each(subjects({ disabled: ["shop"] }))(
+  "%s repository without the shop",
+  (_name, create) => {
+    it("decorates Tweets with no attachment", async () => {
+      const { repo } = create();
+      expect(repo.featureStatus("shop")).toBe("off");
+      const { items } = await repo.listTweets({
+        viewer: DEMO_USERNAME,
+        limit: 50,
+      });
+      expect(items.length).toBeGreaterThan(0);
+      for (const tweet of items) expect(tweet.attachment).toBeNull();
+
+      const created = await repo.createTweet({
+        text: "Try the latte",
+        author: me,
+        attachment: { type: "product", productId: "seed-p-kk-latte" },
+      });
+      expect(created).toMatchObject({
+        stats: { tips: 0 },
+        viewer: { tipped: false },
+        attachment: null,
+      });
+      expect((await repo.getTweet(created.id, DEMO_USERNAME))!.attachment).toBe(
+        null
+      );
+    });
+  }
+);
 
 describe("stores agree on the superapp world", () => {
   it("for Tweets, users, search and notifications", async () => {

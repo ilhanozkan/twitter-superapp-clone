@@ -109,8 +109,9 @@ function mirrors(reversal: PendingTransfer, original: ITransfer): boolean {
  *   now) is pending for the recipient, so it is not spendable.
  * - A reversal refunds a held credit before its `holdUntil`, once, with the
  *   same amount and the parties swapped. It debits `balance`, not
- *   `available` (held credits are never spent, so it cannot overdraw), and
- *   ignores freezes: refunds always go through.
+ *   `available` (held credits are never spent, so inside the window it
+ *   cannot overdraw; Sanity guards the refunding wallet in case the window
+ *   closes before the write), and ignores freezes: refunds always go through.
  * - Issued credits (`from: null`) have no generic check; callers cap them.
  */
 export function planLedger(

@@ -21,7 +21,14 @@ const PAGE_SIZE = 20;
  * The viewer's wallet: balance, activity and the banners. The wallet lane
  * adds the action buttons, requests and dialogs through its slots.
  */
-export default function Wallet({ activity }: { activity: IPage<ITransfer> }) {
+export default function Wallet({
+  activity,
+  serverNow,
+}: {
+  activity: IPage<ITransfer>;
+  /** When `activity` was read, by the server's clock. */
+  serverNow: string;
+}) {
   const viewer = useAppSelector((state) => state.session.viewer);
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const wallet = useAppSelector((state) => state.wallet.wallet);
@@ -88,6 +95,7 @@ export default function Wallet({ activity }: { activity: IPage<ITransfer> }) {
           <TransferList
             transfers={page.items}
             viewer={viewer.username}
+            serverNow={serverNow}
             hasMore={!!page.nextCursor}
             loading={loading}
             error={error}
@@ -112,12 +120,14 @@ export default function Wallet({ activity }: { activity: IPage<ITransfer> }) {
 
 export const getServerSideProps = withPageState<{
   activity: IPage<ITransfer>;
+  serverNow: string;
 }>(
   async ({ repo, viewer }) => ({
     props: {
       activity: await repo.wallet.listActivity(viewer.username, {
         limit: PAGE_SIZE,
       }),
+      serverNow: new Date().toISOString(),
     },
   }),
   { feature: "wallet" }
