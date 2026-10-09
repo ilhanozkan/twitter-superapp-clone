@@ -9,10 +9,16 @@ import { useAppDispatch, useAppSelector } from "../../store";
 import { ITweet } from "../../types/Tweet";
 import { Button } from "../common/Button";
 import Dialog from "../common/Dialog";
-import Menu from "../common/Menu";
+import Menu, { MenuItem } from "../common/Menu";
+import { useMessageTweetMenuItems } from "../messages/messageTweetMenuItems";
+import { useWalletTweetMenuItems } from "../wallet/walletTweetMenuItems";
 import { statusPath } from "./paths";
 
-/** The "…" menu on the current user's own tweets. */
+/**
+ * The "…" menu on every Tweet: Delete on your own (not in READ_ONLY), then
+ * each feature's items (§12.3), which decide for themselves whether they
+ * apply to this Tweet. A menu with no items is not shown.
+ */
 export default function TweetMenu({ tweet }: { tweet: ITweet }) {
   const dispatch = useAppDispatch();
   const router = useRouter();
@@ -21,11 +27,28 @@ export default function TweetMenu({ tweet }: { tweet: ITweet }) {
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Hooks: called on every render, always in this order.
+  const walletItems = useWalletTweetMenuItems(tweet);
+  const messageItems = useMessageTweetMenuItems(tweet);
 
   const isMine =
     !!viewer &&
     viewer.username.toLowerCase() === tweet.author.username.toLowerCase();
-  if (!isMine || readOnly) return null;
+  const items: MenuItem[] = [
+    ...(isMine && !readOnly
+      ? [
+          {
+            label: "Delete",
+            icon: <HiOutlineTrash />,
+            danger: true,
+            onSelect: () => setConfirming(true),
+          },
+        ]
+      : []),
+    ...walletItems,
+    ...messageItems,
+  ];
+  if (items.length === 0) return null;
 
   const confirmDelete = async () => {
     setDeleting(true);
@@ -50,14 +73,7 @@ export default function TweetMenu({ tweet }: { tweet: ITweet }) {
         label="More options"
         trigger={<HiEllipsisHorizontal aria-hidden="true" />}
         triggerClassName="-m-2 rounded-full p-2 text-lg text-muted transition-colors hover:bg-primary/10 hover:text-primary"
-        items={[
-          {
-            label: "Delete",
-            icon: <HiOutlineTrash />,
-            danger: true,
-            onSelect: () => setConfirming(true),
-          },
-        ]}
+        items={items}
       />
       <Dialog
         open={confirming}

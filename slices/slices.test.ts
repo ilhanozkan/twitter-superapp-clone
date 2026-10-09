@@ -9,6 +9,7 @@ import {
 import { ITweet } from "../types/Tweet";
 import { IUserProfile } from "../types/User";
 import { profileState, selectTweetCount } from "./profilesSlice";
+import { sessionState } from "./sessionSlice";
 import { timelineFromPage } from "./timelinesSlice";
 import {
   deleteTweet,
@@ -325,11 +326,13 @@ describe("initializeStore", () => {
   it("starts from new page data on navigation but keeps client UI state", () => {
     vi.stubGlobal("window", {});
     const first = initializeStore({
-      session: { viewer: null, readOnly: false },
+      session: sessionState({ viewer: null, readOnly: false }),
     });
     first.dispatch({ type: "ui/openCompose" });
 
-    const next = initializeStore({ session: { viewer: null, readOnly: true } });
+    const next = initializeStore({
+      session: sessionState({ viewer: null, readOnly: true }),
+    });
 
     expect(next).not.toBe(first);
     expect(next.getState().session.readOnly).toBe(true);
@@ -446,7 +449,7 @@ describe("navigation state", () => {
     // Navigate while the request is in flight: the optimistic like is
     // carried into the new store.
     const after = initializeStore({
-      session: { viewer: null, readOnly: false },
+      session: sessionState({ viewer: null, readOnly: false }),
     });
     expect(after.getState().tweets.entities.t2.viewer.liked).toBe(true);
 

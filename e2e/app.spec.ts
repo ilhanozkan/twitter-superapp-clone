@@ -1,17 +1,6 @@
-import { expect, Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
 
-// Fails the test on any console error or uncaught exception, which also
-// catches hydration mismatches and Content-Security-Policy violations.
-function watchConsole(page: Page) {
-  const problems: string[] = [];
-  page.on("console", (message) => {
-    if (message.type() === "error") problems.push(message.text());
-  });
-  page.on("pageerror", (error) => problems.push(String(error)));
-  return problems;
-}
-
-const unique = (label: string) => `${label} ${Date.now().toString(36)}`;
+import { unique, watchConsole } from "./helpers";
 
 test.describe("pages", () => {
   const routes: [string, string | RegExp][] = [

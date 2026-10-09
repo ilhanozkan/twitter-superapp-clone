@@ -3,6 +3,7 @@ import Link from "next/link";
 import { formatCount, formatFullDate } from "../../lib/format";
 import { ITweet } from "../../types/Tweet";
 import Avatar from "../common/Avatar";
+import ProductAttachment from "../shop/ProductAttachment";
 import { profilePath } from "./paths";
 import TweetActions from "./TweetActions";
 import TweetImage from "./TweetImage";
@@ -12,7 +13,7 @@ import TweetText from "./TweetText";
 /** The focused tweet on its own page. */
 export default function TweetDetail({ tweet }: { tweet: ITweet }) {
   const profile = profilePath(tweet.author.username);
-  const { retweets, likes } = tweet.stats;
+  const { retweets, likes, tips } = tweet.stats;
 
   return (
     <article aria-labelledby="focused-tweet-author" className="px-4 pt-3">
@@ -41,6 +42,7 @@ export default function TweetDetail({ tweet }: { tweet: ITweet }) {
 
       <TweetText text={tweet.text} className="mt-3 text-[17px] leading-6" />
       {tweet.image && <TweetImage src={tweet.image} />}
+      <ProductAttachment tweet={tweet} variant="detail" />
 
       <p className="my-4 text-[15px] text-muted">
         <time dateTime={tweet.createdAt} suppressHydrationWarning>
@@ -48,8 +50,8 @@ export default function TweetDetail({ tweet }: { tweet: ITweet }) {
         </time>
       </p>
 
-      {(retweets > 0 || likes > 0) && (
-        <p className="flex gap-5 border-t border-line py-4 text-[15px] text-muted">
+      {(retweets > 0 || likes > 0 || tips > 0) && (
+        <p className="flex flex-wrap gap-x-5 gap-y-1 border-t border-line py-4 text-[15px] text-muted">
           {retweets > 0 && (
             <span>
               <strong className="text-fg">{formatCount(retweets)}</strong>{" "}
@@ -60,6 +62,12 @@ export default function TweetDetail({ tweet }: { tweet: ITweet }) {
             <span>
               <strong className="text-fg">{formatCount(likes)}</strong>{" "}
               {likes === 1 ? "Like" : "Likes"}
+            </span>
+          )}
+          {tips > 0 && (
+            <span>
+              <strong className="text-fg">{formatCount(tips)}</strong>{" "}
+              {tips === 1 ? "Tip" : "Tips"}
             </span>
           )}
         </p>

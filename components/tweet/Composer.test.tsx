@@ -4,13 +4,14 @@ import userEvent from "@testing-library/user-event";
 import { Provider } from "react-redux";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { sessionState } from "../../slices/sessionSlice";
 import { makeStore } from "../../store";
 import Composer from "./Composer";
 
 const viewer = { username: "me", fullname: "Me Myself", image: null };
 
 function renderComposer(readOnly = false) {
-  const store = makeStore({ session: { viewer, readOnly } });
+  const store = makeStore({ session: sessionState({ viewer, readOnly }) });
   render(
     <Provider store={store}>
       <Composer />

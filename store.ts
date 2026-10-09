@@ -7,9 +7,17 @@ import {
 import { useMemo } from "react";
 import { useDispatch, useSelector } from "react-redux";
 
+import activityReducer, * as activity from "./slices/activitySlice";
+import cartReducer, * as cart from "./slices/cartSlice";
+import channelsReducer, * as channels from "./slices/channelsSlice";
+import { listenerMiddleware } from "./slices/listeners";
+import messagesReducer, * as messages from "./slices/messagesSlice";
+import ordersReducer, * as orders from "./slices/ordersSlice";
 import profilesReducer from "./slices/profilesSlice";
 import repliesReducer from "./slices/repliesSlice";
+import ridesReducer, * as rides from "./slices/ridesSlice";
 import sessionReducer from "./slices/sessionSlice";
+import storiesReducer, * as stories from "./slices/storiesSlice";
 import timelinesReducer, { TimelinesState } from "./slices/timelinesSlice";
 import trendsReducer from "./slices/trendsSlice";
 import tweetsReducer, {
@@ -17,6 +25,8 @@ import tweetsReducer, {
   tweetsAdapter,
 } from "./slices/tweetsSlice";
 import uiReducer, { showToast } from "./slices/uiSlice";
+import walletReducer, * as wallet from "./slices/walletSlice";
+import walletUiReducer, * as walletUi from "./slices/walletUiSlice";
 
 const rootReducer = combineReducers({
   session: sessionReducer,
@@ -26,6 +36,17 @@ const rootReducer = combineReducers({
   replies: repliesReducer,
   profiles: profilesReducer,
   ui: uiReducer,
+  wallet: walletReducer,
+  activity: activityReducer,
+  // Lane-owned slices (§12.3): each file exports its reducer and the
+  // action types that follow navigations.
+  walletUi: walletUiReducer,
+  messages: messagesReducer,
+  channels: channelsReducer,
+  cart: cartReducer,
+  orders: ordersReducer,
+  rides: ridesReducer,
+  stories: storiesReducer,
 });
 
 export type RootState = ReturnType<typeof rootReducer>;
@@ -36,10 +57,20 @@ export type InitialState = Partial<RootState>;
 // Outcomes of requests started before a navigation: they settle in the store
 // that was current when they started (see followNavigation). Toasts about
 // them (e.g. a failed like) follow too, so they show on the current page.
-const FOLLOWS_NAVIGATION = new Set<string>([
+// Each SuperApp slice lists its own.
+export const FOLLOWS_NAVIGATION: ReadonlySet<string> = new Set<string>([
   setReaction.fulfilled.type,
   setReaction.rejected.type,
   showToast.type,
+  ...wallet.followsNavigation,
+  ...activity.followsNavigation,
+  ...walletUi.followsNavigation,
+  ...messages.followsNavigation,
+  ...channels.followsNavigation,
+  ...cart.followsNavigation,
+  ...orders.followsNavigation,
+  ...rides.followsNavigation,
+  ...stories.followsNavigation,
 ]);
 
 /**
@@ -65,7 +96,9 @@ export function makeStore(preloadedState?: InitialState) {
     reducer: rootReducer,
     preloadedState,
     middleware: (getDefaultMiddleware) =>
-      getDefaultMiddleware().concat(followNavigation),
+      getDefaultMiddleware()
+        .prepend(listenerMiddleware.middleware)
+        .concat(followNavigation),
   });
 }
 
@@ -137,6 +170,16 @@ export function mergeServerState(
       ...(history
         ? restoreTimelines(current.timelines, incoming.timelines)
         : incoming.timelines),
+    };
+  }
+  // The server can't read this device's "notifications seen" time: keep the
+  // bell count the client already made, and take the rest fresh.
+  if (incoming.activity && current.activity.loaded) {
+    merged.activity = {
+      ...incoming.activity,
+      newNotifications: current.activity.newNotifications,
+      seenAt: current.activity.seenAt,
+      loaded: true,
     };
   }
   return merged;

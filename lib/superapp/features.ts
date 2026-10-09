@@ -66,3 +66,8 @@ export function featuresFrom(
     FEATURE_IDS.map((id) => [id, statusOf(id) === "on"])
   ) as IFeatures;
 }
+
+/** Every feature off: what the client assumes until the server says otherwise. */
+export const NO_FEATURES: IFeatures = Object.fromEntries(
+  FEATURE_IDS.map((id) => [id, false])
+) as IFeatures;
