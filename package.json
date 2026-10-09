@@ -15,7 +15,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "seed:sanity": "tsx scripts/export-sanity-seed.ts"
+    "seed:sanity": "tsx scripts/export-sanity-seed.ts",
+    "audit:ledger": "tsx scripts/audit-ledger.ts",
+    "check:sanity-privacy": "tsx scripts/check-sanity-privacy.ts"
   },
   "dependencies": {
     "@reduxjs/toolkit": "^2.13.0",

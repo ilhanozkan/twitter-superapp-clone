@@ -5,11 +5,17 @@ import {
   createMemoryState,
   MemoryState,
 } from "../lib/db/memory";
+import { createMemoryLedger } from "../lib/db/memory/ledger";
+import { createRead } from "../lib/db/sanity/deps";
+import { createSanityLedger } from "../lib/db/sanity/ledger";
 import { createSanityRepository } from "../lib/db/sanity/repository";
 import { seedToSanityDocuments } from "../lib/db/sanity/seed";
 import { createSeedData, SeedWorld } from "../lib/db/seed";
 import { Repository } from "../lib/db/types";
+import { PendingTransfer } from "../lib/superapp/ledger";
 import { FeatureId } from "../types/Superapp";
+import { IAuthor } from "../types/User";
+import { ITransfer } from "../types/Wallet";
 import { FakeSanityClient } from "./fakeSanityClient";
 
 // The contract harness: every repository test runs against the in-memory
@@ -197,4 +203,113 @@ export function mulberry32(seed: number): () => number {
     t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/**
+ * Test-only: writes one operation's `transfers` through the subject's own
+ * ledger, the way orders and rides do. F's wallet API never holds or
+ * refunds credits, so wallet contract tests make held credits and their
+ * reversals with this. The first transfer is the operation's primary.
+ */
+export async function commitTransfers(
+  subject: Subject,
+  transfers: PendingTransfer[]
+): Promise<ITransfer[]> {
+  const operationId = transfers[0].id;
+  const replay = () =>
+    Promise.all(
+      transfers.map(async (t) => (await subject.repo.wallet.getTransfer(t.id))!)
+    );
+
+  if (subject.state) {
+    const { wallet } = subject.state;
+    const ledger = createMemoryLedger(wallet, {
+      now: subject.clock.now,
+      capacity: Infinity,
+    });
+    const stored = wallet.transfers.get(operationId);
+    if (stored) return replay();
+    return ledger.commit({
+      operationId,
+      fingerprint: "test",
+      storedFingerprint: () => undefined,
+      replay: () => [],
+      prepare: () => ({ transfers, apply: (written) => written }),
+    }).result;
+  }
+
+  const client = subject.client!;
+  const ledger = createSanityLedger({
+    client,
+    read: createRead(client),
+    now: subject.clock.now,
+    sleep: noSleep,
+  });
+  const { result } = await ledger.commit({
+    operationId,
+    fingerprint: "test",
+    primaryType: "transfer",
+    parties: transfers.flatMap((t) => [
+      ...(t.from ? [t.from.username] : []),
+      t.to.username,
+    ]),
+    reverses: transfers.flatMap((t) => (t.reverses ? [t.reverses] : [])),
+    replay,
+    prepare: async () => ({ transfers, result: (written) => written }),
+  });
+  return result;
+}
+
+/** Test-only: a held payment, pending for `to` until `holdUntil` (like an order or a ride fare). */
+export async function heldPayment(
+  subject: Subject,
+  {
+    id,
+    from,
+    to,
+    amount,
+    holdUntil,
+  }: {
+    id: string;
+    from: IAuthor;
+    to: IAuthor;
+    amount: number;
+    holdUntil: string;
+  }
+): Promise<ITransfer> {
+  const [transfer] = await commitTransfers(subject, [
+    {
+      id,
+      kind: "order",
+      from,
+      to,
+      amount,
+      note: null,
+      context: { type: "order", id: `order-${id}`, code: "TEST" },
+      holdUntil,
+      reverses: null,
+    },
+  ]);
+  return transfer;
+}
+
+/** Test-only: refunds a held payment with the natural id `refund-<id>`. */
+export async function reverseTransfer(
+  subject: Subject,
+  original: ITransfer
+): Promise<ITransfer> {
+  const [refund] = await commitTransfers(subject, [
+    {
+      id: `refund-${original.id}`,
+      kind: "order_refund",
+      from: original.to,
+      to: original.from!,
+      amount: original.amount,
+      note: null,
+      context: original.context,
+      holdUntil: null,
+      reverses: original.id,
+    },
+  ]);
+  return refund;
 }

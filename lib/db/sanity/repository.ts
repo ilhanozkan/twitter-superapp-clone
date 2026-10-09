@@ -117,6 +117,7 @@ export function createSanityRepository(
   }: SanityRepositoryOptions
 ): Repository {
   const writable = () => assertWritable(canWrite);
+  const read = createRead(superappClient);
 
   const deps: SanityDeps = {
     client: superappClient,
@@ -126,9 +127,9 @@ export function createSanityRepository(
     generateId,
     sleep,
     timeScale,
-    ledger: createSanityLedger(),
+    ledger: createSanityLedger({ client: superappClient, read, now, sleep }),
     assertWritable: writable,
-    read: createRead(superappClient),
+    read,
     // Sub-repositories only call it after construction, once `repository` exists.
     self: () => repository,
   };

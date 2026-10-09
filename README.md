@@ -44,17 +44,19 @@ Changes you make are kept until the server restarts.
 
 ### Scripts
 
-| Script                | What it does                                                 |
-| --------------------- | ------------------------------------------------------------ |
-| `npm run dev`         | Development server                                           |
-| `npm run build`       | Production build                                             |
-| `npm start`           | Serves the production build                                  |
-| `npm run lint`        | ESLint (Next.js core web vitals + TypeScript rules)          |
-| `npm run format`      | Prettier (with Tailwind class sorting); `format:check` in CI |
-| `npm run typecheck`   | TypeScript check                                             |
-| `npm test`            | Unit, component and repository contract tests (Vitest)       |
-| `npm run test:e2e`    | End-to-end and accessibility tests (Playwright + axe)        |
-| `npm run seed:sanity` | Exports the demo dataset as NDJSON for a Sanity import       |
+| Script                         | What it does                                                       |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `npm run dev`                  | Development server                                                 |
+| `npm run build`                | Production build                                                   |
+| `npm start`                    | Serves the production build                                        |
+| `npm run lint`                 | ESLint (Next.js core web vitals + TypeScript rules)                |
+| `npm run format`               | Prettier (with Tailwind class sorting); `format:check` in CI       |
+| `npm run typecheck`            | TypeScript check                                                   |
+| `npm test`                     | Unit, component and repository contract tests (Vitest)             |
+| `npm run test:e2e`             | End-to-end and accessibility tests (Playwright + axe)              |
+| `npm run seed:sanity`          | Exports the demo dataset as NDJSON for a Sanity import             |
+| `npm run audit:ledger`         | Checks the demo-credit ledger's invariants (Sanity: needs a token) |
+| `npm run check:sanity-privacy` | Fails if private Sanity documents are readable without a token     |
 
 `npm run test:e2e` runs against `npm run build` output. The first run needs a browser:
 `npx playwright install chromium`.

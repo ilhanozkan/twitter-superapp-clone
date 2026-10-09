@@ -217,7 +217,10 @@ export function createMemoryRepository(
     generateId,
     timeScale,
     limits,
-    ledger: createMemoryLedger(),
+    ledger: createMemoryLedger(state.wallet, {
+      now,
+      capacity: limits.transfers,
+    }),
     // Sub-repositories only call it after construction, once `repository` exists.
     self: () => repository,
   };

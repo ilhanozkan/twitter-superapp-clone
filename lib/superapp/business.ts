@@ -1,4 +1,11 @@
-import { IBusinessHours, IBusinessStatus } from "../../types/Business";
+import {
+  IBusiness,
+  IBusinessHours,
+  IBusinessStatus,
+} from "../../types/Business";
+import { IAuthor } from "../../types/User";
+import type { BusinessProfile } from "../db/business/types";
+import { canManageBusiness } from "./policy/business";
 
 // Opening hours are wall-clock times in the business's IANA zone. They are
 // evaluated with Intl in that zone, so the server and every browser agree
@@ -94,4 +101,62 @@ export function etaMinutes(
 ): [number, number] {
   const total = prepMinutes + deliveryMinutes;
   return [total, total + 3];
+}
+
+/**
+ * A business as read: the stored profile, the name and avatar of its user
+ * record (never stored twice), and its status at `now`.
+ */
+export function toBusiness(
+  profile: BusinessProfile,
+  user: IAuthor,
+  frozen: boolean,
+  now: Date
+): IBusiness {
+  return {
+    username: user.username,
+    fullname: user.fullname,
+    image: user.image,
+    banner: profile.banner,
+    category: profile.category,
+    description: profile.description,
+    placeId: profile.placeId,
+    address: profile.address,
+    hours: { ...profile.hours },
+    acceptingOrders: profile.acceptingOrders,
+    prepMinutes: profile.prepMinutes,
+    deliveryMinutes: profile.deliveryMinutes,
+    deliveryFee: profile.deliveryFee,
+    minimumOrder: profile.minimumOrder,
+    greeting: profile.greeting,
+    managers: [...profile.managers],
+    status: businessStatus(profile.hours, profile.acceptingOrders, frozen, now),
+    etaMinutes: etaMinutes(profile.prepMinutes, profile.deliveryMinutes),
+  };
+}
+
+/** By full name (then username), the same in every store. */
+export function compareBusinesses(
+  a: Pick<IBusiness, "fullname" | "username">,
+  b: Pick<IBusiness, "fullname" | "username">
+): number {
+  const name = a.fullname.localeCompare(b.fullname, "en");
+  if (name !== 0) return name;
+  const [x, y] = [a.username.toLowerCase(), b.username.toLowerCase()];
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** The businesses `username` runs: its own account first, then delegations, in list order. */
+export function managedBusinesses(
+  businesses: Pick<IBusiness, "username" | "managers">[],
+  username: string
+): string[] {
+  const lower = username.toLowerCase();
+  const managed = businesses.filter((business) =>
+    canManageBusiness(username, business)
+  );
+  return [
+    ...managed.filter((business) => business.username.toLowerCase() === lower),
+    ...managed.filter((business) => business.username.toLowerCase() !== lower),
+  ].map((business) => business.username);
 }
