@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { act, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { renderToString } from "react-dom/server";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
@@ -278,6 +279,164 @@ describe("TransferList", () => {
       .setup()
       .click(screen.getByRole("button", { name: "Retry" }));
     expect(onLoadMore).toHaveBeenCalledTimes(2);
+  });
+
+  describe("keeps keyboard focus in the list as pages load", () => {
+    type Next = { items: ITransfer[]; more: boolean } | Error;
+    const transfers = (from: number, count: number) =>
+      Array.from({ length: count }, (_, i) =>
+        transfer({ id: `tx-${from + i}` })
+      );
+    const row = (id: string) =>
+      screen
+        .getAllByRole("link")
+        .find(
+          (link) => link.getAttribute("href") === `/wallet/transactions/${id}`
+        );
+    let intersect: (() => void) | null = null;
+
+    beforeEach(() => {
+      // The sentinel's observer, triggered by the test.
+      vi.stubGlobal(
+        "IntersectionObserver",
+        class {
+          callback: IntersectionObserverCallback;
+          constructor(callback: IntersectionObserverCallback) {
+            this.callback = callback;
+          }
+          observe() {
+            intersect = () =>
+              this.callback(
+                [{ isIntersecting: true } as IntersectionObserverEntry],
+                this as unknown as IntersectionObserver
+              );
+          }
+          disconnect() {
+            intersect = null;
+          }
+        }
+      );
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    /** Three transfers, then each page (or failure) the test hands `arrive`, like /wallet. */
+    function renderWallet() {
+      let settle: ((next: Next) => void) | null = null;
+      function Wallet() {
+        const [items, setItems] = useState(transfers(0, 3));
+        const [hasMore, setHasMore] = useState(true);
+        const [loading, setLoading] = useState(false);
+        const [error, setError] = useState<string | null>(null);
+        const loadMore = async () => {
+          if (loading) return;
+          setLoading(true);
+          setError(null);
+          const next = await new Promise<Next>((resolve) => {
+            settle = resolve;
+          });
+          if (next instanceof Error) setError(next.message);
+          else {
+            setItems((current) => [...current, ...next.items]);
+            setHasMore(next.more);
+          }
+          setLoading(false);
+        };
+        return (
+          <>
+            <TransferList
+              transfers={items}
+              viewer={testViewer.username}
+              serverNow="2026-10-09T12:00:00.000Z"
+              hasMore={hasMore}
+              loading={loading}
+              error={error}
+              onLoadMore={loadMore}
+              empty={null}
+            />
+            <button type="button">After the list</button>
+          </>
+        );
+      }
+      renderWithStore(<Wallet />);
+      return {
+        user: userEvent.setup(),
+        arrive: (next: Next) => act(async () => settle!(next)),
+      };
+    }
+
+    const pressShowMore = async (user: ReturnType<typeof userEvent.setup>) => {
+      screen.getByRole("button", { name: "Show more" }).focus();
+      await user.keyboard("{Enter}");
+      // The spinner keeps focus while the page loads.
+      expect(document.activeElement?.getAttribute("aria-disabled")).toBe(
+        "true"
+      );
+    };
+
+    it("moves to the first new transfer when more pages remain", async () => {
+      const { user, arrive } = renderWallet();
+      await pressShowMore(user);
+      await arrive({ items: transfers(3, 3), more: true });
+      expect(document.activeElement).toBe(row("tx-3"));
+      expect(screen.getByRole("button", { name: "Show more" })).toBeTruthy();
+    });
+
+    it("moves to the first new transfer when the last page arrives", async () => {
+      const { user, arrive } = renderWallet();
+      await pressShowMore(user);
+      await arrive({ items: transfers(3, 2), more: false });
+      expect(screen.queryByRole("button", { name: "Show more" })).toBeNull();
+      expect(document.activeElement).toBe(row("tx-3"));
+    });
+
+    it("moves to Retry when the page fails, and on from there", async () => {
+      const { user, arrive } = renderWallet();
+      await pressShowMore(user);
+      await arrive(new Error("Offline"));
+      const retry = screen.getByRole("button", { name: "Retry" });
+      expect(document.activeElement).toBe(retry);
+
+      await user.keyboard("{Enter}");
+      await arrive({ items: transfers(3, 1), more: false });
+      expect(document.activeElement).toBe(row("tx-3"));
+    });
+
+    it("follows a page the sentinel loads while the user is on the button", async () => {
+      const { user, arrive } = renderWallet();
+      screen.getByRole("button", { name: "Show more" }).focus();
+      act(() => intersect!());
+      await arrive({ items: transfers(3, 2), more: true });
+      expect(document.activeElement).toBe(row("tx-3"));
+
+      // Tabbing onto the spinner while the next page loads.
+      row("tx-4")!.focus();
+      act(() => intersect!());
+      await user.tab();
+      expect(document.activeElement?.getAttribute("aria-disabled")).toBe(
+        "true"
+      );
+      await arrive({ items: transfers(5, 2), more: false });
+      expect(document.activeElement).toBe(row("tx-5"));
+    });
+
+    it("leaves focus alone when the user moved on or was elsewhere", async () => {
+      const { user, arrive } = renderWallet();
+      await pressShowMore(user);
+      await user.tab();
+      const after = screen.getByRole("button", { name: "After the list" });
+      expect(document.activeElement).toBe(after);
+      await arrive({ items: transfers(3, 2), more: true });
+      expect(document.activeElement).toBe(after);
+
+      // A page loaded by scrolling, with focus on a row.
+      row("tx-0")!.focus();
+      act(() => intersect!());
+      await arrive({ items: transfers(5, 2), more: false });
+      expect(document.activeElement).toBe(row("tx-0"));
+    });
   });
 });
 

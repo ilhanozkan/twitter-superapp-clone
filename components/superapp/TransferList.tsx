@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode, useEffect, useRef, useState } from "react";
+import { ReactNode, useEffect, useId, useRef, useState } from "react";
 import { BsTwitter } from "react-icons/bs";
 
 import { useServerClock } from "../../lib/client/useServerClock";
@@ -53,6 +53,9 @@ function groupByDay(transfers: ITransfer[], now: number, timeZone?: string) {
   return groups;
 }
 
+/** A row's element id, unique per list (`list` comes from useId). */
+const rowId = (list: string, transfer: ITransfer) => `${list}-${transfer.id}`;
+
 function Chip({ children }: { children: ReactNode }) {
   return (
     <span className="rounded-full border border-line px-2 text-[12px] font-bold leading-5 text-muted">
@@ -62,10 +65,12 @@ function Chip({ children }: { children: ReactNode }) {
 }
 
 function TransferRow({
+  id,
   transfer,
   viewer,
   now,
 }: {
+  id: string;
   transfer: ITransfer;
   viewer: string;
   now: number;
@@ -75,6 +80,7 @@ function TransferRow({
 
   return (
     <Link
+      id={id}
       href={`/wallet/transactions/${encodeURIComponent(transfer.id)}`}
       className="flex items-center gap-3 px-4 py-3 outline-offset-[-2px] transition-colors hover:bg-fg/[0.03]"
     >
@@ -135,6 +141,18 @@ export default function TransferList({
   const [now, setNow] = useState(() => Date.parse(serverNow));
   const sentinel = useRef<HTMLDivElement>(null);
   const load = useRef(onLoadMore);
+  const more = useRef<HTMLButtonElement>(null);
+  const retry = useRef<HTMLButtonElement>(null);
+  const list = useId();
+  // How many transfers were shown when a keyboard user went on to load more:
+  // they pressed Show more or Retry, or were on the button as a page loaded.
+  const requestedAt = useRef<number | null>(null);
+
+  const loadMore = () => {
+    if (loading) return;
+    requestedAt.current = transfers.length;
+    onLoadMore();
+  };
 
   useEffect(() => {
     const id = setInterval(() => setNow(clock.now().getTime()), MINUTE);
@@ -144,6 +162,22 @@ export default function TransferList({
   useEffect(() => {
     load.current = onLoadMore;
   });
+
+  // When that page is in, move focus to its first transfer (or to Retry),
+  // like Timeline, so the next Tab continues there instead of skipping what
+  // loaded or, with the button gone, starting over from the top.
+  useEffect(() => {
+    if (loading) {
+      if (document.activeElement === more.current)
+        requestedAt.current ??= transfers.length;
+      return;
+    }
+    if (requestedAt.current === null) return;
+    const firstNew = transfers[requestedAt.current];
+    requestedAt.current = null;
+    if (firstNew) document.getElementById(rowId(list, firstNew))?.focus();
+    else if (error) retry.current?.focus();
+  }, [transfers, loading, error, list]);
 
   useEffect(() => {
     const element = sentinel.current;
@@ -178,7 +212,12 @@ export default function TransferList({
           <ul>
             {group.items.map((transfer) => (
               <li key={transfer.id}>
-                <TransferRow transfer={transfer} viewer={viewer} now={now} />
+                <TransferRow
+                  id={rowId(list, transfer)}
+                  transfer={transfer}
+                  viewer={viewer}
+                  now={now}
+                />
               </li>
             ))}
           </ul>
@@ -192,14 +231,25 @@ export default function TransferList({
             className="flex flex-col items-center gap-3 p-6 text-[15px] text-muted"
           >
             <p>{error}</p>
-            <Button onClick={onLoadMore}>Retry</Button>
+            <Button ref={retry} onClick={loadMore}>
+              Retry
+            </Button>
           </div>
         ) : (
           (hasMore || loading) && (
             <button
+              ref={more}
               type="button"
               aria-disabled={loading}
-              onClick={() => !loading && onLoadMore()}
+              onClick={loadMore}
+              onFocus={() => {
+                if (loading) requestedAt.current ??= transfers.length;
+              }}
+              onBlur={(event) => {
+                // Moving on to something else cancels the move; losing
+                // focus as the button unmounts (no relatedTarget) doesn't.
+                if (event.relatedTarget) requestedAt.current = null;
+              }}
               className="flex w-full justify-center p-4 text-[15px] text-primary transition-colors hover:bg-fg/[0.03] aria-disabled:cursor-progress"
             >
               {loading ? (

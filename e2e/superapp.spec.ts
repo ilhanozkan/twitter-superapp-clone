@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, Page, test } from "@playwright/test";
 
+import type { ILiveActivity } from "../types/Superapp";
 import {
   expectNoHorizontalScroll,
   expectNoSeriousViolations,
@@ -145,6 +146,68 @@ test.describe("navigation", () => {
       nav.getByRole("link", { name: "Notifications", exact: true })
     ).toBeVisible();
   });
+});
+
+test.describe("live activity", () => {
+  // Nothing is in progress in F's demo (orders and rides add live items),
+  // so the activity response gets one added.
+  const ride: ILiveActivity = {
+    kind: "ride",
+    id: "e2e-ride",
+    title: "Ride to Atakule",
+    status: "On the way",
+    eta: null,
+    href: "/rides/e2e-ride",
+    nextChangeAt: null,
+  };
+
+  /** What hides the focused element: the sticky header the banner is in. */
+  const coveredFocus = (page: Page) =>
+    page.evaluate(() => {
+      const active = document.activeElement;
+      const header = document
+        .querySelector('section[aria-label="Live activity"]')
+        ?.closest(".sticky");
+      if (!(active instanceof HTMLElement) || !header) return null;
+      if (active === document.body || header.contains(active)) return null;
+      // The tab bar, compose button and skip link don't scroll.
+      for (let el: Element | null = active; el; el = el.parentElement) {
+        if (getComputedStyle(el).position === "fixed") return null;
+      }
+      const box = active.getBoundingClientRect();
+      const bar = header.getBoundingClientRect();
+      const beside = box.right <= bar.left || box.left >= bar.right;
+      if (beside || box.top >= bar.bottom) return null;
+      const name = active.getAttribute("aria-label") ?? active.textContent;
+      return `"${name?.trim().slice(0, 40)}" at ${Math.round(box.top)}px, under a header ending at ${Math.round(bar.bottom)}px`;
+    });
+
+  for (const width of [390, 768]) {
+    test(`keyboard focus stays clear of the header and its banner at ${width}px`, async ({
+      page,
+    }) => {
+      await page.route(/\/api\/activity(\?|$)/, async (route) => {
+        const response = await route.fetch();
+        const body = await response.json();
+        await route.fulfill({ response, json: { ...body, live: [ride] } });
+      });
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto("/");
+      await expect(
+        page.getByRole("region", { name: "Live activity" })
+      ).toContainText("Ride to Atakule");
+
+      for (let i = 0; i < 80; i++) await page.keyboard.press("Tab");
+      // Going back up is where the browser scrolls each element to the top.
+      const covered: string[] = [];
+      for (let i = 0; i < 75; i++) {
+        await page.keyboard.press("Shift+Tab");
+        const problem = await coveredFocus(page);
+        if (problem) covered.push(problem);
+      }
+      expect(covered).toEqual([]);
+    });
+  }
 });
 
 test("a tip sent through the API shows on the Tweet's page", async ({

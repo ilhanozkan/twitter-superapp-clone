@@ -4,6 +4,7 @@ import EmptyState from "../components/common/EmptyState";
 import AccountMenu from "../components/layout/AccountMenu";
 import SearchForm from "../components/layout/SearchForm";
 import TrendsList from "../components/layout/TrendsList";
+import { useStickyHeader } from "../components/layout/useStickyHeader";
 import LiveActivityBanner from "../components/superapp/LiveActivityBanner";
 import Timeline from "../components/tweet/Timeline";
 import { timelineState, withPageState } from "../lib/server/pageState";
@@ -15,6 +16,7 @@ const MAX_QUERY_LENGTH = 100;
 export default function Explore({ query }: { query: string }) {
   const trends = useAppSelector((state) => state.trends.items);
   const search = query ? timelines.search(query) : null;
+  const header = useStickyHeader<HTMLDivElement>();
 
   return (
     <>
@@ -26,8 +28,12 @@ export default function Explore({ query }: { query: string }) {
         </title>
       </Head>
       {/* Explore's header is its search box, so it carries the phone
-          account menu and the live activity banner PageHeader would. */}
-      <div className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
+          account menu and the live activity banner PageHeader would, and
+          publishes its height the same way. */}
+      <div
+        ref={header}
+        className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md"
+      >
         <div className="flex items-center gap-6 px-4 py-1">
           <h1 className="sr-only">
             {query ? `Search results for ${query}` : "Explore"}
