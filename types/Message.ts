@@ -1,7 +1,7 @@
 import { Cents } from "./Money";
 import { StoryContent } from "./Story";
 import { IAuthor } from "./User";
-import { IPaymentRequest } from "./Wallet";
+import { IPaymentRequest, ITransfer, IWallet } from "./Wallet";
 
 // Skeleton declared by the foundation; the messages lane completes it
 // (IChannel is completed by the channels lane).
@@ -61,4 +61,31 @@ export interface IChannel {
   lastMessage: IMessage | null;
   createdAt: string;
   viewer: { role: ChannelRole | null; unread: number };
+}
+
+// Response bodies of /api/conversations/** (docs/api/messages.md).
+
+export interface ConversationsResponse {
+  items: IConversation[];
+}
+
+export interface ConversationResponse {
+  conversation: IConversation;
+}
+
+export type MessagePageResponse = IMessagePage;
+
+export interface MessageResponse {
+  message: IMessage;
+}
+
+/** A payment in a conversation: its message, the transfer and the sender's wallet afterwards. */
+export interface ChatPaymentResponse extends MessageResponse {
+  transfer: ITransfer;
+  wallet: IWallet;
+}
+
+/** A payment request in a conversation: its message and the request. */
+export interface ChatRequestResponse extends MessageResponse {
+  request: IPaymentRequest;
 }
