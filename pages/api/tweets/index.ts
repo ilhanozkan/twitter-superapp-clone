@@ -1,3 +1,4 @@
+import { checkAttachment } from "../../../lib/api/attachments";
 import { createHandler } from "../../../lib/api/handler";
 import {
   createTweetBody,
@@ -31,15 +32,20 @@ export default createHandler({
     res.status(200).json(page);
   },
 
-  // POST /api/tweets { text, image? }
+  // POST /api/tweets { text, image?, attachment?: { type: "product", productId } }
   async POST(req, res) {
     const body = parseBody(req, createTweetBody);
+    const repo = getRepository();
+    const attachment = body.attachment
+      ? await checkAttachment(repo, body.attachment)
+      : null;
     const author = await getCurrentUser();
 
-    const tweet = await getRepository().createTweet({
+    const tweet = await repo.createTweet({
       text: body.text,
       image: body.image ?? null,
       author,
+      attachment,
     });
 
     res.setHeader("Location", `/api/tweets/${encodeURIComponent(tweet.id)}`);

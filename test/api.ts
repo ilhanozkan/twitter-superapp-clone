@@ -119,8 +119,10 @@ export async function freshApi({ world = "core" }: { world?: SeedWorld } = {}) {
   const globals = globalThis as {
     __superappMemoryState?: unknown;
     __superappWriteLimiters?: unknown;
+    __superappActorLimiters?: unknown;
   };
   delete globals.__superappWriteLimiters;
+  delete globals.__superappActorLimiters;
 
   const { createMemoryState } = await import("../lib/db/memory");
   const { createSeedData } = await import("../lib/db/seed");
