@@ -1,28 +1,44 @@
-import { ReactionKind } from "../../types/Tweet";
-import { IUser } from "../../types/User";
+import { IAuthor, IUser } from "../../types/User";
+import { BusinessSeed, createBusinessSeed } from "./seeds/business";
+import { createCoreSeed } from "./seeds/core";
+import { createMessagesSeed, MessagesSeed } from "./seeds/messages";
+import { createOrdersSeed, OrdersSeed } from "./seeds/orders";
+import { createRidesSeed, RidesSeed } from "./seeds/rides";
+import { createShopSeed, ShopSeed } from "./seeds/shop";
+import { createStoriesSeed, StoriesSeed } from "./seeds/stories";
+import {
+  SeedContext,
+  SeedContribution,
+  SeedReaction,
+  SeedReply,
+  SeedTweet,
+} from "./seeds/types";
+import { superappUsers } from "./seeds/users";
+import {
+  composeWalletSeed,
+  createWalletSeed,
+  WalletSeed,
+} from "./seeds/wallet";
 
-export interface SeedTweet {
-  id: string;
-  text: string;
-  image: string | null;
-  createdAt: string;
-  author: string;
-  blocked: boolean;
-}
+export { DEMO_USERNAME } from "./seeds/core";
+export type { SeedReaction, SeedReply, SeedTweet } from "./seeds/types";
 
-export interface SeedReply {
-  id: string;
-  tweetId: string;
-  text: string;
-  createdAt: string;
-  author: string;
-}
+/**
+ * "core" is the app's data before the SuperApp features, unchanged: the core
+ * contract suite and route tests assert it. "superapp" adds every feature's
+ * seed on top.
+ */
+export type SeedWorld = "core" | "superapp";
 
-export interface SeedReaction {
-  kind: ReactionKind;
-  tweetId: string;
-  username: string;
-  createdAt: string;
+/** Each feature's own seed records; lanes that ship no seed leave theirs null. */
+export interface SuperappSeed {
+  wallet: WalletSeed;
+  business: BusinessSeed;
+  shop: ShopSeed | null;
+  orders: OrdersSeed | null;
+  rides: RidesSeed | null;
+  stories: StoriesSeed | null;
+  messages: MessagesSeed | null;
 }
 
 export interface SeedData {
@@ -30,404 +46,104 @@ export interface SeedData {
   tweets: SeedTweet[];
   replies: SeedReply[];
   reactions: SeedReaction[];
+  /** null in the core world. */
+  superapp: SuperappSeed | null;
 }
-
-/** The account the demo is browsed as (the repository owner). */
-export const DEMO_USERNAME = "illlhanozkan";
 
 const MINUTE = 60_000;
 
-const users: IUser[] = [
-  {
-    username: "illlhanozkan",
-    fullname: "Ilhan Ozkan",
-    image: "/avatars/illlhanozkan.svg",
-    banner: "/media/banner-illlhanozkan.svg",
-    bio: "Software Developer · Building Twitter SuperApp 🚀",
-    location: "Turkey",
-    website: "https://ilhanozkan.com",
-    verified: false,
-    joinedAt: "2020-06-28T12:41:15.000Z",
-  },
-  {
-    username: "superapp",
-    fullname: "Twitter SuperApp",
-    image: "/avatars/superapp.svg",
-    banner: null,
-    bio: "The everything app, one tweet at a time. Payments, rides and food delivery are on the roadmap.",
-    location: null,
-    website: "https://github.com/ilhanozkan/twitter-superapp-clone",
-    verified: true,
-    joinedAt: "2022-10-25T15:54:23.000Z",
-  },
-  {
-    username: "sarahcodes",
-    fullname: "Sarah Chen",
-    image: "/avatars/sarahcodes.svg",
-    banner: "/media/banner-sarahcodes.svg",
-    bio: "Frontend engineer. React, accessibility & good coffee.",
-    location: "San Francisco, CA",
-    website: null,
-    verified: true,
-    joinedAt: "2015-03-14T09:00:00.000Z",
-  },
-  {
-    username: "devmarco",
-    fullname: "Marco Rossi",
-    image: "/avatars/devmarco.svg",
-    banner: null,
-    bio: "Backend dev. Go, Postgres, distributed systems. Opinions are my own.",
-    location: "Milan, Italy",
-    website: null,
-    verified: false,
-    joinedAt: "2012-09-02T18:30:00.000Z",
-  },
-  {
-    username: "ayse_design",
-    fullname: "Ayşe Yılmaz",
-    image: "/avatars/ayse_design.svg",
-    banner: null,
-    bio: "Product designer at a fintech. Design systems nerd.",
-    location: "İstanbul",
-    website: null,
-    verified: false,
-    joinedAt: "2017-01-20T11:15:00.000Z",
-  },
-  {
-    username: "nightowl_dev",
-    fullname: "Priya Nair",
-    image: "/avatars/nightowl_dev.svg",
-    banner: null,
-    bio: "ML engineer. I write code at 2am so you don't have to.",
-    location: "Bengaluru, India",
-    website: null,
-    verified: false,
-    joinedAt: "2019-11-05T22:45:00.000Z",
-  },
-  {
-    username: "foodie_ankara",
-    fullname: "Mert Demir",
-    image: "/avatars/foodie_ankara.svg",
-    banner: null,
-    bio: "Eating my way through Ankara. Coffee > sleep.",
-    location: "Ankara",
-    website: null,
-    verified: false,
-    joinedAt: "2021-04-11T08:00:00.000Z",
-  },
-  {
-    username: "lenaframes",
-    fullname: "Lena Hoffmann",
-    image: "/avatars/lenaframes.svg",
-    banner: "/media/banner-lenaframes.svg",
-    bio: "Landscape & city photographer 📷",
-    location: "Berlin",
-    website: null,
-    verified: false,
-    joinedAt: "2016-06-30T16:20:00.000Z",
-  },
-];
-
-// [id, author, minutes ago, text, image?, blocked?]
-type TweetRow = [string, string, number, string, string?, boolean?];
-
-const tweetRows: TweetRow[] = [
-  [
-    "seed-t01",
-    "superapp",
-    12,
-    "Welcome to Twitter SuperApp 👋 Tweet, reply, like and bookmark today. Wallets, rides and food delivery are next on the roadmap. #SuperApp",
-  ],
-  [
-    "seed-t02",
-    "sarahcodes",
-    38,
-    "Hot take: every icon-only button needs an aria-label. Your screen reader users will thank you. #a11y #React",
-  ],
-  [
-    "seed-t03",
-    "lenaframes",
-    80,
-    "Sunrise over the Dolomites this morning. Worth the 4am alarm. #Photography",
-    "/media/mountains.svg",
-  ],
-  [
-    "seed-t04",
-    "devmarco",
-    2 * 60,
-    "Cursor pagination > offset pagination. Stable pages even while new rows are being inserted. Fight me. #Backend",
-  ],
-  [
-    "seed-t05",
-    "illlhanozkan",
-    3 * 60,
-    "Rebuilt the data layer of the SuperApp with a repository pattern: Sanity in production, an in-memory store for local dev. #NextJS #TypeScript",
-    "/media/code.svg",
-  ],
-  [
-    "seed-t06",
-    "foodie_ankara",
-    4 * 60,
-    "Nothing beats a Turkish coffee after lunch ☕ Who's building the food delivery feature so I can order this from a tweet? #SuperApp #Coffee",
-    "/media/coffee.svg",
-  ],
-  [
-    "seed-t07",
-    "nightowl_dev",
-    6 * 60,
-    'Trained a tiny model that ranks timelines by "how likely you are to reply". It mostly recommends arguments. Back to the drawing board. #AI',
-  ],
-  [
-    "seed-t08",
-    "ayse_design",
-    7 * 60,
-    "Design systems are 20% components and 80% saying no to one-off variants. #Design",
-  ],
-  [
-    "seed-t09",
-    "sarahcodes",
-    9 * 60,
-    "React 19 with the Next.js pages router is still a great combo for apps like this. Not everything needs to be a server component. #React #NextJS",
-  ],
-  [
-    "seed-t10",
-    "lenaframes",
-    11 * 60,
-    "Berlin blue hour from the rooftop. #Photography #Berlin",
-    "/media/skyline.svg",
-  ],
-  [
-    "seed-t11",
-    "devmarco",
-    14 * 60,
-    "Idempotent APIs make retries boring. Boring is good. PUT /like twice and you still have one like. #Backend",
-  ],
-  [
-    "seed-t12",
-    "illlhanozkan",
-    20 * 60,
-    "What should the SuperApp ship first? Reply with your vote:\n💸 payments\n🚗 rides\n🍔 food\n📺 live #SuperApp",
-  ],
-  [
-    "seed-t13",
-    "ayse_design",
-    26 * 60,
-    "İstanbul'da yağmur, kahve ve Figma. Perfect Sunday. #Istanbul #Design",
-  ],
-  [
-    "seed-t14",
-    "nightowl_dev",
-    29 * 60,
-    "Reminder: your test suite is a product too. Make it fast or people will stop running it. #TypeScript",
-  ],
-  [
-    "seed-t15",
-    "superapp",
-    2 * 24 * 60,
-    "Roadmap update: account balances and payments over DMs are being designed now. Follow along! #SuperApp",
-  ],
-  [
-    "seed-t16",
-    "foodie_ankara",
-    2 * 24 * 60 + 180,
-    "Best lahmacun in Ankara? Asking for a friend (the friend is me). #Food",
-  ],
-  [
-    "seed-t17",
-    "sarahcodes",
-    3 * 24 * 60,
-    "Tailwind tip: semantic color tokens backed by CSS variables make dark mode almost free. #CSS",
-  ],
-  [
-    "seed-t18",
-    "devmarco",
-    4 * 24 * 60,
-    "Shipped a migration with zero downtime today. Expand, migrate, contract. Every. Time. #Backend",
-  ],
-  [
-    "seed-t19",
-    "illlhanozkan",
-    6 * 24 * 60,
-    "hello world 👋 the first tweet from the SuperApp clone #100DaysOfCode",
-  ],
-  [
-    "seed-t20",
-    "lenaframes",
-    8 * 24 * 60,
-    'New series coming soon: "Cities at night". #Photography',
-  ],
-  // Hidden by moderation (blockTweet): must never be listed.
-  [
-    "seed-t99",
-    "nightowl_dev",
-    45,
-    "This tweet was hidden by a moderator.",
-    undefined,
-    true,
-  ],
-];
-
-// [id, tweet id, author, minutes ago, text]
-type ReplyRow = [string, string, string, number, string];
-
-const replyRows: ReplyRow[] = [
-  [
-    "seed-r01",
-    "seed-t01",
-    "sarahcodes",
-    10,
-    "Congrats on the launch! Bookmarks are exactly what I needed.",
-  ],
-  ["seed-r02", "seed-t01", "foodie_ankara", 8, "Food delivery when? 🍔"],
-  [
-    "seed-r03",
-    "seed-t05",
-    "devmarco",
-    170,
-    "Nice. Did you make the reactions idempotent? Deterministic document ids make that easy in Sanity.",
-  ],
-  [
-    "seed-r04",
-    "seed-t05",
-    "illlhanozkan",
-    160,
-    "@devmarco Yep: like-<tweet>-<user> ids, so liking twice is a no-op.",
-  ],
-  ["seed-r05", "seed-t12", "nightowl_dev", 19 * 60, "💸 payments, obviously"],
-  [
-    "seed-r06",
-    "seed-t12",
-    "ayse_design",
-    18 * 60,
-    "🚗 rides! I'll design the booking flow.",
-  ],
-  [
-    "seed-r07",
-    "seed-t12",
-    "foodie_ankara",
-    17 * 60,
-    "🍔 food. This is not a debate.",
-  ],
-  ["seed-r08", "seed-t03", "ayse_design", 70, "Those colors are unreal 😍"],
-  ["seed-r09", "seed-t19", "superapp", 6 * 24 * 60 - 30, "Welcome aboard! 🚀"],
-  [
-    "seed-r10",
-    "seed-t09",
-    "devmarco",
-    8 * 60,
-    "Agreed. Ship the boring stack.",
-  ],
-];
-
-// tweet id -> usernames, in the order the reactions happened
-const likes: Record<string, string[]> = {
-  "seed-t01": [
-    "sarahcodes",
-    "devmarco",
-    "ayse_design",
-    "nightowl_dev",
-    "foodie_ankara",
-    "lenaframes",
-  ],
-  "seed-t02": ["illlhanozkan", "ayse_design", "nightowl_dev"],
-  "seed-t03": [
-    "illlhanozkan",
-    "sarahcodes",
-    "ayse_design",
-    "superapp",
-    "foodie_ankara",
-  ],
-  "seed-t04": ["nightowl_dev", "sarahcodes"],
-  "seed-t05": ["sarahcodes", "devmarco", "ayse_design", "nightowl_dev"],
-  "seed-t06": ["superapp", "lenaframes"],
-  "seed-t07": ["devmarco", "sarahcodes", "ayse_design"],
-  "seed-t08": ["sarahcodes", "lenaframes"],
-  "seed-t09": ["illlhanozkan", "devmarco", "nightowl_dev"],
-  "seed-t10": ["ayse_design", "sarahcodes", "foodie_ankara"],
-  "seed-t11": ["nightowl_dev"],
-  "seed-t12": ["superapp", "sarahcodes", "foodie_ankara"],
-  "seed-t13": ["lenaframes"],
-  "seed-t15": ["illlhanozkan", "foodie_ankara"],
-  "seed-t17": ["ayse_design"],
-  "seed-t19": ["lenaframes", "superapp"],
-};
-
-const retweets: Record<string, string[]> = {
-  "seed-t01": ["illlhanozkan", "devmarco"],
-  "seed-t03": ["ayse_design"],
-  "seed-t05": ["superapp", "sarahcodes"],
-  "seed-t07": ["devmarco"],
-  "seed-t12": ["superapp"],
-};
-
-const bookmarks: Record<string, string[]> = {
-  "seed-t04": ["illlhanozkan"],
-  "seed-t11": ["illlhanozkan"],
-  "seed-t17": ["illlhanozkan", "ayse_design"],
-};
+export function seedContext(now: Date): SeedContext {
+  return {
+    now,
+    at: (minutesAgo) =>
+      new Date(now.getTime() - minutesAgo * MINUTE).toISOString(),
+  };
+}
 
 /**
  * Builds the demo dataset with timestamps relative to `now`, so the feed
  * always looks recent ("12m", "3h", "2d") no matter when the app starts.
+ *
+ * The superapp world merges every lane's contribution into the shared
+ * Tweets, replies and reactions, and folds all contributed transfers in
+ * time order into wallet balances. Seeds always use time scale 1.
  */
-export function createSeedData(now: Date = new Date()): SeedData {
-  const at = (minutesAgo: number) =>
-    new Date(now.getTime() - minutesAgo * MINUTE).toISOString();
+export function createSeedData(
+  now: Date = new Date(),
+  { world }: { world: SeedWorld } = { world: "superapp" }
+): SeedData {
+  const ctx = seedContext(now);
+  const core = createCoreSeed(ctx);
+  if (world === "core") return { ...core, superapp: null };
 
-  const tweets: SeedTweet[] = tweetRows.map(
-    ([id, author, minutesAgo, text, image, blocked]) => ({
-      id,
-      text,
-      image: image ?? null,
-      createdAt: at(minutesAgo),
-      author,
-      blocked: blocked ?? false,
-    })
+  const wallet = createWalletSeed(ctx);
+  const business = createBusinessSeed(ctx);
+  const shop = createShopSeed(ctx);
+  const orders = createOrdersSeed(ctx);
+  const rides = createRidesSeed(ctx);
+  const stories = createStoriesSeed(ctx);
+  const messages = createMessagesSeed(ctx);
+  const contributions: SeedContribution[] = [
+    wallet,
+    business,
+    shop,
+    orders,
+    rides,
+    stories,
+    messages,
+  ].map((seed) => seed.contribution);
+
+  // An account is a business exactly when it has a business profile.
+  const businesses = new Set(
+    (business.data?.profiles ?? []).map((profile) =>
+      profile.username.toLowerCase()
+    )
   );
+  const users: IUser[] = [...core.users, ...superappUsers].map((user) => ({
+    ...user,
+    accountType: businesses.has(user.username.toLowerCase())
+      ? "business"
+      : "personal",
+  }));
 
-  const replies: SeedReply[] = replyRows.map(
-    ([id, tweetId, author, minutesAgo, text]) => ({
-      id,
-      tweetId,
-      text,
-      createdAt: at(minutesAgo),
-      author,
-    })
+  const byUsername = new Map(
+    users.map((user) => [user.username.toLowerCase(), user])
   );
-
-  const tweetTime = new Map(tweets.map((t) => [t.id, Date.parse(t.createdAt)]));
-  const reactions: SeedReaction[] = [];
-
-  const addReactions = (
-    kind: ReactionKind,
-    byTweet: Record<string, string[]>
-  ) => {
-    for (const [tweetId, usernames] of Object.entries(byTweet)) {
-      const postedAt = tweetTime.get(tweetId)!;
-      usernames.forEach((username, index) => {
-        // Spread reactions after the tweet was posted, never in the future.
-        const time = Math.min(
-          postedAt + (index + 1) * 4 * MINUTE,
-          now.getTime() - MINUTE
-        );
-        reactions.push({
-          kind,
-          tweetId,
-          username,
-          createdAt: new Date(Math.max(time, postedAt)).toISOString(),
-        });
-      });
-    }
+  const authorOf = (username: string): IAuthor => {
+    const user = byUsername.get(username.toLowerCase());
+    if (!user) throw new Error(`Seed references unknown user "${username}"`);
+    return {
+      username: user.username,
+      fullname: user.fullname,
+      image: user.image,
+    };
   };
 
-  addReactions("like", likes);
-  addReactions("retweet", retweets);
-  addReactions("bookmark", bookmarks);
-
   return {
-    users: users.map((user) => ({ ...user })),
-    tweets,
-    replies,
-    reactions,
+    users,
+    tweets: [
+      ...core.tweets,
+      ...contributions.flatMap((part) => part.tweets ?? []),
+    ],
+    replies: [
+      ...core.replies,
+      ...contributions.flatMap((part) => part.replies ?? []),
+    ],
+    reactions: [
+      ...core.reactions,
+      ...contributions.flatMap((part) => part.reactions ?? []),
+    ],
+    superapp: {
+      wallet: composeWalletSeed(
+        contributions.flatMap((part) => part.transfers ?? []),
+        authorOf
+      ),
+      business: business.data ?? { profiles: [] },
+      shop: shop.data,
+      orders: orders.data,
+      rides: rides.data,
+      stories: stories.data,
+      messages: messages.data,
+    },
   };
 }

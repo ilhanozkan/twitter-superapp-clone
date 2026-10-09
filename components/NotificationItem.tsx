@@ -3,7 +3,7 @@ import { AiFillHeart } from "react-icons/ai";
 import { FaRetweet } from "react-icons/fa";
 import { RiChat1Fill } from "react-icons/ri";
 
-import { INotification } from "../types/Notification";
+import { CoreNotification, INotification } from "../types/Notification";
 import Avatar from "./common/Avatar";
 import RelativeTime from "./common/RelativeTime";
 import { statusPath } from "./tweet/paths";
@@ -22,6 +22,10 @@ const kinds = {
   },
 };
 
+const isCoreNotification = (
+  notification: INotification
+): notification is CoreNotification => notification.type in kinds;
+
 export default function NotificationItem({
   notification,
   viewerUsername,
@@ -29,6 +33,9 @@ export default function NotificationItem({
   notification: INotification;
   viewerUsername: string;
 }) {
+  // Money, order and ride notifications get their own renderers with the
+  // features that produce them.
+  if (!isCoreNotification(notification)) return null;
   const kind = kinds[notification.type];
   const Icon = kind.icon;
   const href = statusPath({

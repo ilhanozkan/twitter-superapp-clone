@@ -1,6 +1,8 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { vi } from "vitest";
 
+import type { SeedWorld } from "../lib/db/seed";
+
 type Handler = (req: NextApiRequest, res: NextApiResponse) => unknown;
 
 export interface MockRequest {
@@ -98,37 +100,57 @@ export function stubDefaultEnv() {
     "WRITE_RATE_LIMIT",
     "TRUST_PROXY",
     "VERCEL",
+    "SUPERAPP_TIME_SCALE",
+    "DISABLED_FEATURES",
   ]) {
     vi.stubEnv(name, "");
   }
 }
 
 /**
- * Imports API routes against a fresh in-memory dataset: module state (the
- * repository, the rate limiter) and the seeded store are reset.
+ * Resets module state (the repository, the rate limiters) and seeds a fresh
+ * in-memory store with `world`. Routes loaded afterwards with `loadRoute`
+ * share that store. The core world is the data the existing route tests
+ * assert; SuperApp route tests use "superapp".
  */
-export async function freshRoutes() {
+export async function freshApi({ world = "core" }: { world?: SeedWorld } = {}) {
   vi.resetModules();
   stubDefaultEnv();
   const globals = globalThis as {
     __superappMemoryState?: unknown;
     __superappWriteLimiters?: unknown;
   };
-  delete globals.__superappMemoryState;
   delete globals.__superappWriteLimiters;
 
-  const load = async (path: string) => (await import(path)).default as Handler;
+  const { createMemoryState } = await import("../lib/db/memory");
+  const { createSeedData } = await import("../lib/db/seed");
+  globals.__superappMemoryState = createMemoryState(
+    createSeedData(new Date(), { world })
+  );
+
   return {
-    tweets: await load("../pages/api/tweets/index"),
-    tweet: await load("../pages/api/tweets/[id]/index"),
-    replies: await load("../pages/api/tweets/[id]/replies"),
-    like: await load("../pages/api/tweets/[id]/like"),
-    retweet: await load("../pages/api/tweets/[id]/retweet"),
-    bookmark: await load("../pages/api/tweets/[id]/bookmark"),
-    user: await load("../pages/api/users/[username]"),
-    me: await load("../pages/api/me"),
-    trends: await load("../pages/api/trends"),
-    notifications: await load("../pages/api/notifications"),
-    health: await load("../pages/api/health"),
+    /** A route module's handler, e.g. `loadRoute("pages/api/wallet/index")`. */
+    loadRoute: async (path: string) => {
+      const specifier = "../" + path;
+      return (await import(specifier)).default as Handler;
+    },
+  };
+}
+
+/** The core API routes against a fresh core-world store. */
+export async function freshRoutes() {
+  const { loadRoute } = await freshApi();
+  return {
+    tweets: await loadRoute("pages/api/tweets/index"),
+    tweet: await loadRoute("pages/api/tweets/[id]/index"),
+    replies: await loadRoute("pages/api/tweets/[id]/replies"),
+    like: await loadRoute("pages/api/tweets/[id]/like"),
+    retweet: await loadRoute("pages/api/tweets/[id]/retweet"),
+    bookmark: await loadRoute("pages/api/tweets/[id]/bookmark"),
+    user: await loadRoute("pages/api/users/[username]"),
+    me: await loadRoute("pages/api/me"),
+    trends: await loadRoute("pages/api/trends"),
+    notifications: await loadRoute("pages/api/notifications"),
+    health: await loadRoute("pages/api/health"),
   };
 }

@@ -27,6 +27,9 @@ module.exports = {
         retweet: token("retweet"),
         danger: token("danger"),
         warning: token("warning"),
+        // Tips (amber) and received credits (green).
+        tip: token("tip"),
+        success: token("success"),
         surface: token("surface"),
         subtle: token("subtle"),
         fg: token("fg"),

@@ -23,8 +23,9 @@ const tweet = (id: string, author = "someone"): ITweet => ({
   image: null,
   createdAt: "2026-10-08T12:00:00.000Z",
   author: { username: author, fullname: author, image: null },
-  stats: { replies: 0, retweets: 0, likes: 3 },
-  viewer: { liked: false, retweeted: false, bookmarked: false },
+  stats: { replies: 0, retweets: 0, likes: 3, tips: 0 },
+  viewer: { liked: false, retweeted: false, bookmarked: false, tipped: false },
+  attachment: null,
 });
 
 function storeWith(tweets: ITweet[]) {

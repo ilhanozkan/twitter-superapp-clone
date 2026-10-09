@@ -1,5 +1,5 @@
 import { IAuthor, IUserProfile } from "../types/User";
-import { USERNAME_PATTERN } from "./constants";
+import { isReservedUsername, USERNAME_PATTERN } from "./constants";
 import { ConfigurationError, getRepository } from "./db";
 import { DEMO_USERNAME } from "./db/seed";
 
@@ -16,6 +16,11 @@ export function getCurrentUsername(
   if (!USERNAME_PATTERN.test(username)) {
     throw new ConfigurationError(
       `DEMO_USERNAME "${username}" is not a valid username`
+    );
+  }
+  if (isReservedUsername(username)) {
+    throw new ConfigurationError(
+      `DEMO_USERNAME "${username}" is reserved for a page of the app`
     );
   }
   return username;
@@ -53,6 +58,7 @@ export async function getCurrentProfile(): Promise<IUserProfile> {
       website: null,
       verified: false,
       joinedAt: new Date().toISOString(),
+      accountType: "personal",
       tweetCount: 0,
     }
   );

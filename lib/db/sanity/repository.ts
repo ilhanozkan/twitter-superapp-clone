@@ -1,10 +1,14 @@
+import { randomUUID } from "crypto";
+
 import {
   DEFAULT_NOTIFICATIONS_LIMIT,
   DEFAULT_TRENDS_LIMIT,
+  DEFAULT_USER_SEARCH_LIMIT,
 } from "../../constants";
 import { computeTrends } from "../../hashtags";
-import { INotification } from "../../../types/Notification";
-import { IReply, ITweet, ReactionKind } from "../../../types/Tweet";
+import { CoreNotification } from "../../../types/Notification";
+import { FeatureId } from "../../../types/Superapp";
+import { IReply, ReactionKind } from "../../../types/Tweet";
 import { IAuthor, IUser, IUserProfile } from "../../../types/User";
 import {
   clampLimit,
@@ -12,12 +16,22 @@ import {
   decodeCursor,
   encodeCursor,
 } from "../cursor";
-import { ConfigurationError, NotFoundError } from "../errors";
+import { NotFoundError } from "../errors";
+import { resolveFeatures, SubRepositories } from "../features";
+import { mergeNotifications } from "../notifications";
 import { searchTerms } from "../search";
+import { decorateTweets } from "../tweetExtras";
 import { ListTweetsQuery, NewReply, NewTweet, Repository } from "../types";
+import { createSanityBusiness } from "./business";
+import { createSanityChannels } from "./channels";
+import { assertWritable, createRead, SanityDeps } from "./deps";
+import { createSanityLedger, SanityMutation } from "./ledger";
+import { createSanityMessages } from "./messages";
+import { createSanityOrders } from "./orders";
 import {
   notificationsQuery,
   REPLIES_QUERY,
+  searchUsersQuery,
   TWEET_AND_REFERENCES_QUERY,
   TWEET_BY_ID_QUERY,
   trendTextsQuery,
@@ -25,6 +39,11 @@ import {
   USER_QUERY,
   VISIBLE_TWEET_ID_QUERY,
 } from "./queries";
+import { createSanityRides } from "./rides";
+import { createSanityShop } from "./shop";
+import { createSanityStories } from "./stories";
+import { attachmentField, SanityTweetRow, toBareTweet } from "./tweetExtras";
+import { createSanityWallet } from "./wallet";
 
 type Params = Record<string, unknown>;
 
@@ -34,12 +53,11 @@ interface SanityDocument {
   [field: string]: unknown;
 }
 
-type Mutation = { delete: { id: string } };
-
 /** The subset of `@sanity/client` the repository uses (keeps it easy to fake in tests). */
 export interface SanityClientLike {
   fetch<T = unknown>(query: string, params?: Params): Promise<T>;
   create(document: {
+    _id?: string;
     _type: string;
     [field: string]: unknown;
   }): Promise<SanityDocument>;
@@ -49,13 +67,32 @@ export interface SanityClientLike {
     [field: string]: unknown;
   }): Promise<SanityDocument>;
   delete(id: string): Promise<unknown>;
-  mutate(mutations: Mutation[]): Promise<unknown>;
+  /** One atomic transaction. */
+  mutate(
+    mutations: SanityMutation[],
+    options?: { visibility?: "sync" | "async" | "deferred" }
+  ): Promise<unknown>;
 }
 
 export interface SanityRepositoryOptions {
   /** Writes need a token with editor rights; without one the repository is read-only. */
   canWrite: boolean;
+  /** The "raw"-perspective client for SuperApp documents (default: `client`). */
+  superappClient?: SanityClientLike;
+  /** Private SuperApp documents need a token to read (default: `canWrite`). */
+  canReadPrivate?: boolean;
+  now?: () => Date;
+  generateId?: () => string;
+  /** Backoff between ledger retries; tests pass a no-op. */
+  sleep?: (ms: number) => Promise<void>;
+  /** SUPERAPP_TIME_SCALE, applied when orders and rides are created. */
+  timeScale?: number;
+  /** DISABLED_FEATURES */
+  disabled?: ReadonlySet<FeatureId>;
 }
+
+const wait = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 const TREND_WINDOW = 500;
 
@@ -68,15 +105,46 @@ export const reactionDocumentId = (
 
 export function createSanityRepository(
   client: SanityClientLike,
-  { canWrite }: SanityRepositoryOptions
+  {
+    canWrite,
+    superappClient = client,
+    canReadPrivate = canWrite,
+    now = () => new Date(),
+    generateId = randomUUID,
+    sleep = wait,
+    timeScale = 1,
+    disabled = new Set(),
+  }: SanityRepositoryOptions
 ): Repository {
-  const assertWritable = () => {
-    if (!canWrite) {
-      throw new ConfigurationError(
-        "SANITY_API_TOKEN is not set, so the Sanity data source is read-only."
-      );
-    }
+  const writable = () => assertWritable(canWrite);
+
+  const deps: SanityDeps = {
+    client: superappClient,
+    canWrite,
+    canReadPrivate,
+    now,
+    generateId,
+    sleep,
+    timeScale,
+    ledger: createSanityLedger(),
+    assertWritable: writable,
+    read: createRead(superappClient),
+    // Sub-repositories only call it after construction, once `repository` exists.
+    self: () => repository,
   };
+  const subs: SubRepositories = {
+    wallet: createSanityWallet(deps),
+    business: createSanityBusiness(deps),
+    shop: createSanityShop(deps),
+    orders: createSanityOrders(deps),
+    rides: createSanityRides(deps),
+    stories: createSanityStories(deps),
+    messages: createSanityMessages(deps),
+    channels: createSanityChannels(deps),
+  };
+  const { featureStatus, features } = resolveFeatures(subs, disabled);
+  const decorate = (rows: SanityTweetRow[], viewer?: string | null) =>
+    decorateTweets(rows.map(toBareTweet), viewer, { features, ...subs });
 
   const assertTweetVisible = async (id: string) => {
     const found = await client.fetch<string | null>(VISIBLE_TWEET_ID_QUERY, {
@@ -87,7 +155,19 @@ export function createSanityRepository(
 
   const viewerParam = (viewer?: string | null) => viewer?.toLowerCase() ?? "";
 
-  return {
+  const coreNotifications = async (username: string, limit: number) => {
+    const result = await client.fetch<{
+      reactions: CoreNotification[];
+      replies: CoreNotification[];
+    }>(notificationsQuery(limit), { username: username.toLowerCase() });
+
+    return [...(result?.reactions ?? []), ...(result?.replies ?? [])]
+      .filter((notification) => notification.tweet)
+      .sort(compareNewestFirst)
+      .slice(0, limit);
+  };
+
+  const repository: Repository = {
     source: "sanity",
 
     async listTweets(query: ListTweetsQuery = {}) {
@@ -121,29 +201,32 @@ export function createSanityRepository(
         limit + 1
       );
 
-      const tweets = (await client.fetch<ITweet[]>(groq, params)) ?? [];
+      const tweets = (await client.fetch<SanityTweetRow[]>(groq, params)) ?? [];
       const page = tweets.slice(0, limit);
       const last = page[page.length - 1];
 
       return {
-        items: page,
+        items: await decorate(page, query.viewer),
         nextCursor: tweets.length > limit && last ? encodeCursor(last) : null,
       };
     },
 
     async getTweet(id, viewer) {
-      return (
-        (await client.fetch<ITweet | null>(TWEET_BY_ID_QUERY, {
-          id,
-          viewer: viewerParam(viewer),
-        })) ?? null
-      );
+      const row = await client.fetch<SanityTweetRow | null>(TWEET_BY_ID_QUERY, {
+        id,
+        viewer: viewerParam(viewer),
+      });
+      if (!row) return null;
+      const [tweet] = await decorate([row], viewer);
+      return tweet;
     },
 
-    async createTweet({ text, image, author }: NewTweet) {
-      assertWritable();
+    async createTweet({ text, image, author, attachment }: NewTweet) {
+      writable();
 
+      const stored = attachmentField(attachment);
       const document = await client.create({
+        _id: generateId(),
         _type: "tweet",
         tweet: text,
         username: author.username,
@@ -151,21 +234,29 @@ export function createSanityRepository(
         ...(author.image ? { userImage: author.image } : {}),
         ...(image ? { tweetImage: image } : {}),
         blockTweet: false,
+        ...(stored ? { attachment: stored } : {}),
       });
 
-      return {
-        id: document._id,
-        text,
-        image: image ?? null,
-        createdAt: document._createdAt,
-        author: { ...author },
-        stats: { replies: 0, retweets: 0, likes: 0 },
-        viewer: { liked: false, retweeted: false, bookmarked: false },
-      };
+      const [tweet] = await decorate(
+        [
+          {
+            id: document._id,
+            text,
+            image: image ?? null,
+            createdAt: document._createdAt,
+            author: { ...author },
+            stats: { replies: 0, retweets: 0, likes: 0 },
+            viewer: { liked: false, retweeted: false, bookmarked: false },
+            attachment: stored ?? null,
+          },
+        ],
+        author.username
+      );
+      return tweet;
     },
 
     async deleteTweet(id) {
-      assertWritable();
+      writable();
 
       const found = await client.fetch<{
         tweet: string | null;
@@ -187,10 +278,11 @@ export function createSanityRepository(
     },
 
     async createReply({ tweetId, text, author }: NewReply) {
-      assertWritable();
+      writable();
       await assertTweetVisible(tweetId);
 
       const document = await client.create({
+        _id: generateId(),
         _type: "comment",
         comment: text,
         username: author.username,
@@ -209,7 +301,7 @@ export function createSanityRepository(
     },
 
     async setReaction(kind, tweetId, actor: IAuthor, active) {
-      assertWritable();
+      writable();
       await assertTweetVisible(tweetId);
 
       const _id = reactionDocumentId(kind, tweetId, actor.username);
@@ -249,6 +341,8 @@ export function createSanityRepository(
           website: user.website ?? null,
           verified: !!user.verified,
           joinedAt: user.joinedAt,
+          accountType:
+            user.accountType === "business" ? "business" : "personal",
           tweetCount: result.tweetCount,
         };
       }
@@ -265,6 +359,7 @@ export function createSanityRepository(
         website: null,
         verified: false,
         joinedAt: result.firstTweetAt,
+        accountType: "personal",
         tweetCount: result.tweetCount,
       };
       return profile;
@@ -282,16 +377,30 @@ export function createSanityRepository(
     },
 
     async listNotifications(username, limit = DEFAULT_NOTIFICATIONS_LIMIT) {
-      const safeLimit = Math.max(0, Math.floor(limit));
-      const result = await client.fetch<{
-        reactions: INotification[];
-        replies: INotification[];
-      }>(notificationsQuery(safeLimit), { username: username.toLowerCase() });
-
-      return [...(result?.reactions ?? []), ...(result?.replies ?? [])]
-        .filter((notification) => notification.tweet)
-        .sort(compareNewestFirst)
-        .slice(0, safeLimit);
+      return mergeNotifications(
+        (safeLimit) => coreNotifications(username, safeLimit),
+        subs,
+        features,
+        username,
+        limit
+      );
     },
+
+    async searchUsers(query, limit = DEFAULT_USER_SEARCH_LIMIT) {
+      const terms = searchTerms(query);
+      const safeLimit = Math.max(0, Math.floor(limit));
+      if (terms.length === 0 || safeLimit === 0) return [];
+
+      return (
+        (await client.fetch<IUser[]>(searchUsersQuery(safeLimit), {
+          search: terms.map((term) => `${term}*`),
+        })) ?? []
+      );
+    },
+
+    featureStatus,
+    features,
+    ...subs,
   };
+  return repository;
 }

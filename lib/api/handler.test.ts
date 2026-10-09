@@ -87,6 +87,66 @@ describe("createHandler", () => {
     expect(console.error).toHaveBeenCalledTimes(2);
   });
 
+  it("maps SuperApp domain errors to their statuses and codes", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const throwing = (error: unknown) =>
+      createHandler({
+        GET: () => {
+          throw error;
+        },
+      });
+
+    const cases: [Error, number, string][] = [
+      [
+        new dbErrors.InsufficientFundsError(800, 1000),
+        402,
+        "insufficient_funds",
+      ],
+      [new dbErrors.WalletFrozenError("sarahcodes"), 403, "wallet_frozen"],
+      [
+        new dbErrors.ForbiddenError("You can't tip your own Tweet"),
+        403,
+        "forbidden",
+      ],
+      [
+        new dbErrors.LimitExceededError("Too many requests"),
+        422,
+        "limit_exceeded",
+      ],
+      [new dbErrors.UnavailableError("Sold out"), 422, "unavailable"],
+      [new dbErrors.IdempotencyKeyReusedError(), 422, "idempotency_key_reused"],
+      [new dbErrors.InvalidStateError("Already paid"), 409, "invalid_state"],
+      [new dbErrors.PriceChangedError(650, 700), 409, "price_changed"],
+      [new dbErrors.ConflictError(), 409, "conflict"],
+      [new dbErrors.NotImplementedError(), 501, "not_implemented"],
+    ];
+
+    for (const [error, status, code] of cases) {
+      const res = await call(throwing(error));
+      expect(res.statusCode, code).toBe(status);
+      expect(res.body.error).toMatchObject({ code, message: error.message });
+    }
+  });
+
+  it("names the unavailable products in the details", async () => {
+    const res = await call(
+      createHandler({
+        GET: () => {
+          throw new dbErrors.UnavailableError("Some items are sold out", [
+            "seed-p-sa-mug",
+            "seed-p-kk-simit",
+          ]);
+        },
+      })
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error.details).toEqual([
+      { path: "productId", message: "seed-p-sa-mug" },
+      { path: "productId", message: "seed-p-kk-simit" },
+    ]);
+  });
+
   it("keeps a well-formed incoming request id and replaces others", async () => {
     const handler = createHandler({
       GET: (req, res) => res.status(200).json({}),
