@@ -1,25 +1,26 @@
 import Head from "next/head";
-import { useState } from "react";
+import { useRouter } from "next/router";
 
 import PageHeader from "../../components/layout/PageHeader";
 import BalanceSummary from "../../components/superapp/BalanceSummary";
 import FrozenNotice from "../../components/superapp/FrozenNotice";
 import ReadOnlyNotice from "../../components/superapp/ReadOnlyNotice";
-import TransferList from "../../components/superapp/TransferList";
+import ActivityList, {
+  ACTIVITY_PAGE_SIZE,
+} from "../../components/wallet/ActivityList";
+import OutgoingRequests from "../../components/wallet/OutgoingRequests";
 import WalletActions from "../../components/wallet/WalletActions";
 import WalletRequests from "../../components/wallet/WalletRequests";
-import { errorMessage } from "../../lib/client/api";
-import { walletApi } from "../../lib/client/walletApi";
+import WalletTabs, { walletTab } from "../../components/wallet/WalletTabs";
 import { withPageState } from "../../lib/server/pageState";
+import { walletUiState } from "../../slices/walletUiSlice";
 import { useAppSelector } from "../../store";
 import { IPage } from "../../types/Page";
 import { ITransfer } from "../../types/Wallet";
 
-const PAGE_SIZE = 20;
-
 /**
- * The viewer's wallet: balance, activity and the banners. The wallet lane
- * adds the action buttons, requests and dialogs through its slots.
+ * The viewer's wallet: the balance with Send, Request and Add credits,
+ * requests waiting for them, then Activity | Requests (`?tab=requests`).
  */
 export default function Wallet({
   activity,
@@ -29,32 +30,11 @@ export default function Wallet({
   /** When `activity` was read, by the server's clock. */
   serverNow: string;
 }) {
+  const router = useRouter();
   const viewer = useAppSelector((state) => state.session.viewer);
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const wallet = useAppSelector((state) => state.wallet.wallet);
-  const [page, setPage] = useState(activity);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  const loadMore = async () => {
-    if (loading || !page.nextCursor) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const next = await walletApi.listActivity({
-        limit: PAGE_SIZE,
-        cursor: page.nextCursor,
-      });
-      setPage((current) => ({
-        items: [...current.items, ...next.items],
-        nextCursor: next.nextCursor,
-      }));
-    } catch (reason) {
-      setError(errorMessage(reason));
-    } finally {
-      setLoading(false);
-    }
-  };
+  const tab = walletTab(router.query.tab);
 
   return (
     <>
@@ -87,27 +67,24 @@ export default function Wallet({
 
       <WalletRequests />
 
-      <section aria-labelledby="activity-heading">
-        <h2 id="activity-heading" className="px-4 pt-4 text-xl font-extrabold">
+      <WalletTabs tab={tab} />
+      {/* Both stay mounted, so switching tabs keeps the pages loaded. */}
+      <section aria-labelledby="activity-heading" hidden={tab !== "activity"}>
+        <h2 id="activity-heading" className="sr-only">
           Activity
         </h2>
-        {viewer && (
-          <TransferList
-            transfers={page.items}
-            viewer={viewer.username}
-            serverNow={serverNow}
-            hasMore={!!page.nextCursor}
-            loading={loading}
-            error={error}
-            onLoadMore={loadMore}
-            empty={
-              <p className="px-4 py-8 text-[15px] text-muted">
-                No activity yet. Add demo credits, then tip a Tweet or pay a
-                friend.
-              </p>
-            }
-          />
-        )}
+        {/* A fresh read from the server starts the list over. */}
+        <ActivityList
+          key={serverNow}
+          initial={activity}
+          serverNow={serverNow}
+        />
+      </section>
+      <section aria-labelledby="requests-heading" hidden={tab !== "requests"}>
+        <h2 id="requests-heading" className="sr-only">
+          Your requests
+        </h2>
+        <OutgoingRequests />
       </section>
 
       <footer className="border-t border-line px-4 py-6 text-[13px] text-muted">
@@ -122,13 +99,35 @@ export const getServerSideProps = withPageState<{
   activity: IPage<ITransfer>;
   serverNow: string;
 }>(
-  async ({ repo, viewer }) => ({
-    props: {
-      activity: await repo.wallet.listActivity(viewer.username, {
-        limit: PAGE_SIZE,
-      }),
-      serverNow: new Date().toISOString(),
-    },
-  }),
+  async ({ repo, viewer }) => {
+    const [activity, requests] = await Promise.all([
+      repo.wallet.listActivity(viewer.username, { limit: ACTIVITY_PAGE_SIZE }),
+      // Failing requests show an inline alert with Retry, not an error
+      // page: the balance and the activity still work.
+      Promise.all([
+        repo.wallet.listRequests(viewer.username, {
+          role: "incoming",
+          status: "pending",
+        }),
+        repo.wallet.listRequests(viewer.username, { role: "outgoing" }),
+      ]).then(
+        ([incoming, outgoing]) => ({ incoming, outgoing }),
+        (error: unknown) => {
+          console.error(
+            JSON.stringify({
+              level: "error",
+              message: "Reading the wallet's payment requests failed",
+              error: error instanceof Error ? error.message : String(error),
+            })
+          );
+          return null;
+        }
+      ),
+    ]);
+    return {
+      props: { activity, serverNow: new Date().toISOString() },
+      state: { walletUi: walletUiState(requests) },
+    };
+  },
   { feature: "wallet" }
 );
