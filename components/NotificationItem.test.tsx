@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { cleanup, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sessionState } from "../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../test/render";
@@ -8,6 +8,15 @@ import { INotification } from "../types/Notification";
 import { IFeatures } from "../types/Superapp";
 import NotificationItem from "./NotificationItem";
 import { viewNotification } from "./notifications/registry";
+
+// The lanes' renderers start empty, as F ships them, so the fallback below
+// keeps rendering their types whatever the orders and rides lanes add.
+vi.mock("./orders/notificationRenderers", () => ({
+  orderNotificationRenderers: {},
+}));
+vi.mock("./rides/notificationRenderers", () => ({
+  rideNotificationRenderers: {},
+}));
 
 const sarah = { username: "sarahcodes", fullname: "Sarah Chen", image: null };
 const base = { createdAt: "2026-10-09T12:00:00.000Z", actor: sarah };

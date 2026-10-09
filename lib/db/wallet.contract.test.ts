@@ -966,6 +966,79 @@ describe.each(subjects())("%s wallet", (name, create) => {
       }
     );
 
+    // Cancel and decline never write a wallet, so only the request's
+    // revision guard keeps its status in step with the ledger when they race
+    // a payment.
+    for (const [closer, action, status] of [
+      [bob, "cancel", "cancelled"],
+      [alice, "decline", "declined"],
+    ] as const) {
+      it.runIf(name === "sanity")(
+        `refuses a payment when the request is ${status} before it commits`,
+        async () => {
+          await fundAlice(1_000);
+          const { request } = await repo.wallet.createRequest(
+            requestInput(bob, alice, 500)
+          );
+          const client = subject.client!;
+          let competitors = 0;
+          client.beforeMutate = async () => {
+            if (competitors++ > 0) return;
+            await repo.wallet.closeRequest(request.id, closer.username, action);
+          };
+          const refused = repo.wallet.payRequest(payInput(alice, request.id));
+          await expect(refused).rejects.toBeInstanceOf(InvalidStateError);
+          await expect(refused).rejects.toThrow(`This request was ${status}`);
+          client.beforeMutate = undefined;
+
+          expect(competitors).toBe(1);
+          expect(await repo.wallet.getRequest(request.id)).toMatchObject({
+            status,
+            transferId: null,
+          });
+          expect(await balance(alice)).toBe(1_000);
+          expect(await balance(bob)).toBe(0);
+          await expectLedgerInvariants(subject);
+        }
+      );
+
+      it.runIf(name === "sanity")(
+        `refuses to ${action} a request paid before the ${action} commits`,
+        async () => {
+          await fundAlice(1_000);
+          const { request } = await repo.wallet.createRequest(
+            requestInput(bob, alice, 500)
+          );
+          const pay = payInput(alice, request.id);
+          const client = subject.client!;
+          let competitors = 0;
+          client.beforeMutate = async () => {
+            if (competitors++ > 0) return;
+            await repo.wallet.payRequest(pay);
+          };
+          const refused = repo.wallet.closeRequest(
+            request.id,
+            closer.username,
+            action
+          );
+          await expect(refused).rejects.toBeInstanceOf(InvalidStateError);
+          await expect(refused).rejects.toThrow(
+            "This request was already paid"
+          );
+          client.beforeMutate = undefined;
+
+          expect(competitors).toBe(1);
+          expect(await repo.wallet.getRequest(request.id)).toMatchObject({
+            status: "paid",
+            transferId: pay.operationId,
+          });
+          expect(await balance(alice)).toBe(500);
+          expect(await balance(bob)).toBe(500);
+          await expectLedgerInvariants(subject);
+        }
+      );
+    }
+
     it.runIf(name === "sanity")(
       "writes every money operation in exactly one transaction",
       async () => {
@@ -1285,6 +1358,34 @@ describe("memory ledger capacity", () => {
     await expect(
       repo.wallet.createRequest(requestInput(bob, alice, 450))
     ).resolves.toBeDefined();
+    expect((await repo.wallet.audit()).ok).toBe(true);
+  });
+
+  it("refuses new payment requests when the store is full, still replaying", async () => {
+    const state = createMemoryState(createSeedData(SUBJECT_NOW));
+    const capacity = state.wallet.requests.size + 1;
+    const repo = createMemoryRepository(state, {
+      now: () => SUBJECT_NOW,
+      limits: { paymentRequests: capacity },
+    });
+
+    const first = requestInput(bob, alice, 450);
+    const { request } = await repo.wallet.createRequest(first);
+    const refused = repo.wallet.createRequest(requestInput(bob, alice, 300));
+    await expect(refused).rejects.toBeInstanceOf(LimitExceededError);
+    await expect(refused).rejects.toThrow(
+      "The demo store is full; restart the server"
+    );
+    expect(state.wallet.requests.size).toBe(capacity);
+    expect(await repo.wallet.createRequest(first)).toEqual({
+      request,
+      replayed: true,
+    });
+    // Paying stores no new request, so it still works.
+    await repo.wallet.topUp(topUpInput(alice, 2_500));
+    await expect(
+      repo.wallet.payRequest(payInput(alice, request.id))
+    ).resolves.toMatchObject({ request: { status: "paid" } });
     expect((await repo.wallet.audit()).ok).toBe(true);
   });
 });

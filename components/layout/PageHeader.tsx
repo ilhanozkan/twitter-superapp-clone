@@ -5,6 +5,7 @@ import { HiArrowLeft } from "react-icons/hi2";
 import LiveActivityBanner from "../superapp/LiveActivityBanner";
 import AccountMenu from "./AccountMenu";
 import { useShell } from "./shell";
+import { useStickyHeader } from "./useStickyHeader";
 
 interface PageHeaderProps {
   title: string;
@@ -30,6 +31,7 @@ export default function PageHeader({
 }: PageHeaderProps) {
   const router = useRouter();
   const { layout } = useShell();
+  const header = useStickyHeader<HTMLDivElement>();
 
   const goBack = () => {
     if (window.history.length > 1) router.back();
@@ -37,7 +39,10 @@ export default function PageHeader({
   };
 
   return (
-    <div className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md">
+    <div
+      ref={header}
+      className="sticky top-0 z-20 border-b border-line bg-surface/85 backdrop-blur-md"
+    >
       <div className="flex min-h-[53px] items-center gap-6 px-4">
         {!back && <AccountMenu />}
         {back && (

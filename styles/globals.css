@@ -77,9 +77,11 @@
   }
 
   /* Keep focused elements clear of the sticky page header and, on phones,
-     the bottom tab bar when the browser scrolls them into view. */
+     the bottom tab bar when the browser scrolls them into view. The header
+     publishes its height (useStickyHeader), which grows with a live
+     activity banner; 53px is its one-row height before that runs. */
   html {
-    scroll-padding-top: 4rem;
+    scroll-padding-top: calc(var(--sticky-header, 53px) + 0.75rem);
   }
   @media (max-width: 499px) {
     html {
