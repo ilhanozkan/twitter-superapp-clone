@@ -15,8 +15,9 @@ interface AvailabilitySwitchProps {
 /**
  * An on/off switch (`role="switch"`, `aria-checked`) for a business's
  * "Accepting orders" and its products' availability. The thumb's position
- * shows the state, with 3:1 contrast against the track and the page in
- * both themes; the row next to it says it in words too.
+ * shows the state: the track has at least 3:1 contrast with the page, and
+ * the thumb (the page's colour) at least 3:1 with the track, in both
+ * themes; the row next to it says it in words too.
  */
 export default function AvailabilitySwitch({
   checked,

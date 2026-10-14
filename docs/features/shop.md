@@ -42,7 +42,7 @@ built is in [docs/SUPERAPP.md](../SUPERAPP.md).
   11:00", "Not taking orders right now"), and Order now is disabled with
   that reason. Sold out shows a "Sold out" badge.
 - The card's controls are real links and buttons, so a click on them never
-  opens the Tweet.
+  opens the Tweet; nor does a click on a disabled Order now or around it.
 
 ## The cart (for ordering)
 
@@ -56,7 +56,10 @@ has nowhere to go until then.
 - Up to 10 different products, up to 20 of each.
 - The steppers are named for the item ("Remove one Pistachio latte", "Add
   one Pistachio latte"); the cart's total is read out politely as it
-  changes. Focus moves to the control that replaces the one you pressed.
+  changes, in a product's details too (a modal dialog silences the rest of
+  the page, so the dialog has its own). Focus moves to the control that
+  replaces the one you pressed, and the page scrolls it clear of the cart
+  bar.
 - It is kept on this device in `localStorage["cart:v1"]` (other tabs follow
   along). Pages render with an empty cart on the server and restore it once
   they run. When storage is blocked or full, the cart still works on the
@@ -80,7 +83,8 @@ has nowhere to go until then.
 - A product's name is up to 60 characters, its description 140, its alt
   text 120, and its price 0.10 to 200.00 credits. A product shows only once
   it has a name, a section and a price, because Studio publishes a product
-  as it is typed.
+  as it is typed, and only while its business is a business's username
+  (in any case, without spaces).
 - The cart: one business, 10 products, 20 of each.
 
 ## Accessibility
@@ -88,14 +92,17 @@ has nowhere to go until then.
 - Open states, delivery and "Sold out" are text, never colour alone; icons
   next to them are decorative.
 - The switches are `role="switch"` with `aria-checked`, named by the
-  product or "Accepting orders". The thumb has 3:1 contrast with the track
-  and the page in both themes, and the row says "Available" or "Sold out".
+  product or "Accepting orders". The track has at least 3:1 contrast with
+  the page, and the thumb at least 3:1 with the track, in both themes; the
+  row says "Available" or "Sold out".
   While a change is saved the switch keeps focus and ignores presses.
 - The category chips are toggle buttons (`aria-pressed`); a polite status
   says how many places a filter left.
 - The Services row is a native list of links that scrolls sideways.
-- The product dialog and the picker are native `<dialog>`s: focus stays
-  inside, Escape closes them and focus returns to what opened them.
+- The product dialog, the picker and the new-cart prompt are native
+  `<dialog>`s: focus stays inside, Escape closes them and focus returns to
+  what opened them. The picker and the prompt close alone: the Compose
+  dialog keeps its draft, and a product's details stay open.
 
 ## Try it
 

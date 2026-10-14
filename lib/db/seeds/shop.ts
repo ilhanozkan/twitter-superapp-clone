@@ -241,7 +241,9 @@ export function createShopSeed({ at }: SeedContext): LaneSeed<ShopSeed> {
       "lahmacunlab",
       150,
       "seed-p-ll-lahmacun",
-      "@foodie_ankara asked for the best lahmacun in Ankara. We might be biased 😄 Thin, crispy, extra lemon. #Food #Ankara"
+      // A link right under the header's would make both too small a
+      // target (axe target-size): the mention comes later in the text.
+      "Thin, crispy, extra lemon. We might be biased 😄 but @foodie_ankara asked for the best lahmacun in Ankara. #Food #Ankara"
     ),
     tweet(
       "seed-t24",

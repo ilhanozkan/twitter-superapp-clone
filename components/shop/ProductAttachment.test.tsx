@@ -7,6 +7,7 @@ import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IFeatures } from "../../types/Superapp";
 import { ITweet } from "../../types/Tweet";
+import TweetCard from "../tweet/TweetCard";
 import ProductAttachment from "./ProductAttachment";
 import { card, status, tweet } from "./testing";
 
@@ -97,6 +98,30 @@ describe("ProductAttachment", () => {
       document.getElementById(orderNow().getAttribute("aria-describedby")!)
         ?.textContent
     ).toBe("Closed · Opens 18:00");
+  });
+
+  it("keeps clicks around a disabled Order now from opening the Tweet", async () => {
+    const paused = tweet({
+      type: "product",
+      product: card({}, { status: status.paused }),
+    });
+    const { router } = renderWithStore(<TweetCard tweet={paused} />, {
+      state: {
+        session: sessionState({
+          viewer: testViewer,
+          readOnly: false,
+          features: featuresWith("shop", "orders"),
+        }),
+      },
+    });
+    // A disabled button has no pointer events: the click lands on its row.
+    const row = orderNow().parentElement!;
+    await userEvent.click(row);
+    await userEvent.click(within(row).getByText("Not taking orders right now"));
+    expect(router.push).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByText(paused.text));
+    expect(router.push).toHaveBeenCalledWith("/kizilaykahve/status/seed-t22");
   });
 
   it("says when the business has paused orders", () => {

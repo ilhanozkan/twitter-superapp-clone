@@ -4,6 +4,7 @@ import Dialog from "../common/Dialog";
 import Money from "../superapp/Money";
 import AddToCart from "./AddToCart";
 import BusinessStatus from "./BusinessStatus";
+import CartStatus from "./CartStatus";
 import { deliveryText } from "./format";
 import ProductThumb from "./ProductThumb";
 import SoldOutBadge from "./SoldOutBadge";
@@ -57,6 +58,8 @@ export default function ProductDialog({
               reasonId={reasonId}
             />
           </div>
+          {/* The page's own cart status is inert behind this dialog. */}
+          <CartStatus />
         </div>
       )}
     </Dialog>

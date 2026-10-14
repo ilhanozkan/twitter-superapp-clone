@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, Page, test } from "@playwright/test";
 
 import {
   expectNoHorizontalScroll,
@@ -186,6 +186,66 @@ test.describe("product cards on Tweets", () => {
   });
 });
 
+test.describe("attaching a product in the Compose dialog", () => {
+  const OPENERS = [
+    {
+      label: "the sidebar's Tweet button",
+      width: 1366,
+      opener: (page: Page) =>
+        page
+          .getByRole("banner")
+          .getByRole("button", { name: "Tweet", exact: true }),
+    },
+    {
+      label: "the phone's Compose button",
+      width: 390,
+      opener: (page: Page) =>
+        page.getByRole("button", { name: "Compose a Tweet" }),
+    },
+  ];
+
+  for (const { label, width, opener } of OPENERS) {
+    test(`keeps the draft, from ${label}`, async ({ page }) => {
+      await page.setViewportSize({ width, height: 844 });
+      const text = unique("Stickers from the dialog");
+      await page.goto("/notifications");
+      await opener(page).click();
+      const compose = page.getByRole("dialog", { name: "Compose Tweet" });
+      await compose.getByLabel("Tweet text").fill(text);
+      const attach = compose.getByRole("button", { name: "Attach a product" });
+      const picker = page.getByRole("dialog", { name: "Attach a product" });
+
+      // Escape closes the picker only, and focus returns to its button.
+      await attach.click();
+      await expect(
+        picker.getByRole("button", { name: /Sticker pack/ })
+      ).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(picker).toBeHidden();
+      await expect(compose).toBeVisible();
+      await expect(attach).toBeFocused();
+
+      await attach.click();
+      await picker.getByRole("button", { name: /Sticker pack/ }).click();
+      await expect(picker).toBeHidden();
+      await expect(compose.getByLabel("Tweet text")).toHaveValue(text);
+      await expect(
+        compose.getByRole("group", { name: "Attached product" })
+      ).toContainText("Sticker pack");
+
+      await compose.getByRole("button", { name: "Tweet", exact: true }).click();
+      await expect(compose).toBeHidden();
+      await page.goto("/");
+      await expect(
+        page
+          .locator("main article")
+          .filter({ hasText: text })
+          .getByRole("group", { name: "Product: Sticker pack" })
+      ).toBeVisible();
+    });
+  }
+});
+
 test.describe("Food and Services", () => {
   test("the Food hub filters places by category", async ({ page }) => {
     await page.goto("/food");
@@ -253,8 +313,9 @@ test.describe("the Business page", () => {
       await expect(toggle).toHaveAttribute("aria-checked", "false");
 
       await page.goto("/superapp/menu");
+      // The badge (and, once orders are on, the disabled Add says it too).
       await expect(
-        mugOnMenu.getByText("Sold out", { exact: true })
+        mugOnMenu.getByText("Sold out", { exact: true }).first()
       ).toBeVisible();
 
       await page.goto("/business");
@@ -290,8 +351,9 @@ test.describe("the Business page", () => {
       ).toBeVisible();
 
       await page.goto("/superapp");
+      // The profile's details; once orders are on, its cards say it too.
       await expect(
-        page.getByText("Not taking orders right now", { exact: true })
+        page.getByText("Not taking orders right now", { exact: true }).first()
       ).toBeVisible();
 
       await page.goto("/business");
@@ -319,9 +381,126 @@ test.describe("the Business page", () => {
   });
 });
 
+// What C1 builds for ordering: it shows only once the orders feature is on.
+test.describe("with orders on", () => {
+  test.beforeEach(async ({ request }) => {
+    test.skip(!(await features(request)).orders, "Orders are off");
+  });
+
+  test("the new-cart prompt leaves a product's details open", async ({
+    page,
+  }) => {
+    await page.goto("/kizilaykahve/menu");
+    await page.getByRole("button", { name: "Add Simit" }).click();
+    await page.goto("/lahmacunlab/menu");
+    await page.getByRole("link", { name: "Lahmacun", exact: true }).click();
+    const details = page.getByRole("dialog", { name: "Lahmacun" });
+    const prompt = page.getByRole("dialog", { name: "Start a new cart?" });
+    const url = /\/lahmacunlab\/menu\?product=seed-p-ll-lahmacun$/;
+
+    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await prompt.getByRole("button", { name: "Cancel" }).click();
+    await expect(prompt).toBeHidden();
+    await expect(details).toBeVisible();
+    await expect(page).toHaveURL(url);
+
+    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await page.keyboard.press("Escape");
+    await expect(prompt).toBeHidden();
+    await expect(details).toBeVisible();
+
+    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await prompt.getByRole("button", { name: "Start new cart" }).click();
+    await expect(details).toBeVisible();
+    await expect(page).toHaveURL(url);
+    await expect(
+      details.getByRole("button", { name: "Add one Lahmacun" })
+    ).toBeFocused();
+    // The page's own status is inert behind the dialog: it has its own.
+    await expect(details.locator('[aria-live="polite"]')).toHaveText(
+      "Your cart: 1 item · 4.00 credits"
+    );
+  });
+
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 1280, height: 800 },
+  ]) {
+    test(`focus stays clear of the cart bar at ${viewport.width}px`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/kizilaykahve/menu");
+      await page.getByRole("button", { name: "Add Simit" }).click();
+      await page.reload();
+      await expect(
+        page.getByRole("link", { name: /^View cart/ })
+      ).toBeVisible();
+
+      // Tab from the top through every control on the menu.
+      await page.locator("main").focus();
+      const hidden: string[] = [];
+      for (let step = 0; step < 40; step++) {
+        await page.keyboard.press("Tab");
+        const state = await page.evaluate(() => {
+          const focused = document.activeElement as HTMLElement | null;
+          if (!focused || !focused.closest("main")) return null;
+          const box = focused.getBoundingClientRect();
+          const hit = document.elementFromPoint(
+            box.left + box.width / 2,
+            box.top + box.height / 2
+          );
+          return {
+            name:
+              focused.getAttribute("aria-label") ?? focused.textContent ?? "",
+            covered: !!hit && !focused.contains(hit),
+            isBar: focused.getAttribute("href") === "/checkout",
+          };
+        });
+        if (!state || state.isBar) break;
+        if (state.covered) hidden.push(state.name);
+      }
+      expect(hidden).toEqual([]);
+    });
+  }
+
+  test("clicking a disabled Order now doesn't open the Tweet", async ({
+    page,
+    request,
+  }) => {
+    try {
+      const paused = await request.put("/api/businesses/superapp/settings", {
+        data: { acceptingOrders: false },
+      });
+      expect(paused.status()).toBe(200);
+      await page.goto("/superapp");
+      const order = page
+        .getByRole("article")
+        .filter({ hasText: "The SuperApp store is open" })
+        .getByRole("button", { name: "Order now" });
+      await order.scrollIntoViewIfNeeded();
+      await expect(order).toBeDisabled();
+      // A disabled button has no pointer events: the click lands around it.
+      const opened = page.waitForURL(/\/status\//, { timeout: 2_000 }).then(
+        () => true,
+        () => false
+      );
+      const box = (await order.boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      expect(await opened).toBe(false);
+    } finally {
+      await request.put("/api/businesses/superapp/settings", {
+        data: { acceptingOrders: true },
+      });
+    }
+  });
+});
+
 test.describe("accessibility (axe)", () => {
   const AXE_PAGES = [
     "/food",
+    // Its seed Tweet, first on the page, has a mention.
+    "/lahmacunlab",
     "/kizilaykahve/menu",
     "/kizilaykahve/menu?product=seed-p-kk-latte",
     "/kizilaykahve/status/seed-t22",

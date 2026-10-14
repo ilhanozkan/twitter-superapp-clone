@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IProduct } from "../../types/Shop";
+import ComposeDialog from "../tweet/ComposeDialog";
 import Composer from "../tweet/Composer";
 import { card, product, stubFetch, tweet } from "./testing";
 
@@ -40,7 +41,8 @@ const stickersCard = card(
 function setup({
   attachable = [stickers, mug],
   prefill,
-}: { attachable?: IProduct[]; prefill?: string } = {}) {
+  inDialog = false,
+}: { attachable?: IProduct[]; prefill?: string; inDialog?: boolean } = {}) {
   const api = stubFetch({
     "/api/products/attachable": () => [200, { items: attachable }],
     [`/api/products/${stickers.id}`]: () => [
@@ -59,22 +61,35 @@ function setup({
   });
   vi.stubGlobal("fetch", vi.fn(api.fetch));
   const result = renderWithStore(
-    <Composer
-      prefill={
-        prefill
-          ? {
-              text: "Look",
-              attachment: { type: "product", productId: prefill },
-            }
-          : null
-      }
-    />,
+    inDialog ? (
+      <ComposeDialog />
+    ) : (
+      <Composer
+        prefill={
+          prefill
+            ? {
+                text: "Look",
+                attachment: { type: "product", productId: prefill },
+              }
+            : null
+        }
+      />
+    ),
     {
       state: {
         session: sessionState({
           viewer: testViewer,
           readOnly: false,
           features: featuresWith("shop"),
+        }),
+        ...(inDialog && {
+          ui: {
+            composeOpen: true,
+            composePrefill: null,
+            dialog: null,
+            dialogArgs: null,
+            toasts: [],
+          },
         }),
       },
     }
@@ -149,6 +164,34 @@ describe("ComposerProductPicker", () => {
         screen.queryByRole("group", { name: "Attached product" })
       ).toBeNull()
     );
+  });
+
+  it("keeps the Compose dialog and its draft when the picker closes", async () => {
+    const { store } = setup({ inDialog: true });
+    const compose = screen.getByRole("dialog", { name: "Compose Tweet" });
+    await userEvent.type(within(compose).getByLabelText("Tweet text"), "Hi");
+
+    let picker = await openPicker();
+    await userEvent.click(
+      await within(picker).findByRole("button", { name: /Sticker pack/ })
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Attach a product" })
+    ).toBeNull();
+    picker = await openPicker();
+    await userEvent.click(
+      within(picker).getByRole("button", { name: "Close" })
+    );
+
+    expect(store.getState().ui.composeOpen).toBe(true);
+    expect(screen.getByRole("dialog", { name: "Compose Tweet" })).toBe(compose);
+    expect(
+      (within(compose).getByLabelText("Tweet text") as HTMLTextAreaElement)
+        .value
+    ).toBe("Hi");
+    expect(
+      within(compose).getByRole("group", { name: "Attached product" })
+    ).toBeTruthy();
   });
 
   it("removes the product, keeping focus in the toolbar", async () => {

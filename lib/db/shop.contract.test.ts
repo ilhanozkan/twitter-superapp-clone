@@ -254,6 +254,48 @@ describe.each(subjects())("%s shop", (_name, create) => {
         business: "kizilaykahve",
       });
     });
+
+    it("hides a product whose business has stray spaces from every read", async () => {
+      // Studio flags such a username but still publishes it (live edit).
+      const padded = [
+        product({
+          id: "studio-pad-end",
+          business: "superapp ",
+          section: "Merch",
+          name: "Padded cap",
+          position: -1,
+        }),
+        product({
+          id: "studio-pad-start",
+          business: " superapp",
+          section: "Merch",
+          name: "Padded tote",
+          position: -1,
+        }),
+      ];
+      for (const item of padded) addProduct(subject, item);
+      const padIds = ids(padded);
+
+      for (const id of padIds) {
+        expect(await repo.shop.getProduct(id), id).toBeNull();
+        await expect(
+          repo.shop.setProductAvailability(id, false),
+          id
+        ).rejects.toBeInstanceOf(NotFoundError);
+      }
+      expect(await repo.shop.getProducts(padIds)).toEqual([]);
+      expect(await repo.shop.getProductCards(padIds)).toEqual(new Map());
+      expect(
+        ids((await repo.shop.getMenu("superapp")).flatMap((s) => s.products))
+      ).toEqual(["seed-p-sa-stickers", "seed-p-sa-mug", "seed-p-sa-hoodie"]);
+      expect(
+        ids(await repo.shop.listAttachableProducts(DEMO_USERNAME))
+      ).toEqual(["seed-p-sa-stickers", "seed-p-sa-mug"]);
+      const summaries = await repo.shop.listBusinessSummaries();
+      expect(
+        summaries.find((s) => s.username === "superapp")!.highlights
+      ).toEqual(["Sticker pack", "SuperApp mug"]);
+    });
   });
 
   describe("product cards on Tweets", () => {
@@ -701,6 +743,16 @@ describe("C1 seed", () => {
         likes.some((like) => like.tweetId === tweetId),
         tweetId
       ).toBe(true);
+    }
+  });
+
+  it("keeps links off the start of its Tweets", () => {
+    // The first line of a Tweet sits right under the header's links (name,
+    // handle, time), ~40 characters wide: a mention or hashtag there makes
+    // them too small a target (axe target-size, WCAG 2.5.8).
+    for (const tweet of world.tweets.filter((item) => item.attachment)) {
+      const firstLink = tweet.text.search(/[@#]|https?:/);
+      expect(firstLink, tweet.id).toBeGreaterThanOrEqual(40);
     }
   });
 

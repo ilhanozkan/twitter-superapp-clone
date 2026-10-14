@@ -2,7 +2,11 @@
 import { act, cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
-import { CART_STORAGE_KEY, itemAdded } from "../../slices/cartSlice";
+import {
+  CART_STORAGE_KEY,
+  itemAdded,
+  itemRemoved,
+} from "../../slices/cartSlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import CartBar from "./CartBar";
@@ -79,6 +83,40 @@ describe("CartBar", () => {
     });
     expect(status.textContent).toBe("Your cart: 1 item · 2.50 credits");
     expect(screen.getByRole("link", { name: /View cart/ })).toBeTruthy();
+  });
+
+  it("keeps focused controls from scrolling under it while shown", async () => {
+    const { store, unmount } = renderBar();
+    await act(async () => {});
+    const padding = () => document.documentElement.style.scrollPaddingBottom;
+    expect(padding()).toBe("");
+
+    act(() => {
+      store.dispatch(
+        itemAdded({
+          business: kahve,
+          product: { id: "seed-p-kk-simit", name: "Simit", price: 250 },
+        })
+      );
+    });
+    // jsdom has no layout: the bar measures 0px, leaving the gap.
+    expect(padding()).toBe("16px");
+
+    act(() => {
+      store.dispatch(itemRemoved("seed-p-kk-simit"));
+    });
+    expect(padding()).toBe("");
+
+    act(() => {
+      store.dispatch(
+        itemAdded({
+          business: kahve,
+          product: { id: "seed-p-kk-simit", name: "Simit", price: 250 },
+        })
+      );
+    });
+    unmount();
+    expect(padding()).toBe("");
   });
 
   it("follows changes made in another tab", async () => {

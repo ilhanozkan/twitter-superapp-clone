@@ -8,9 +8,9 @@ import { formatCredits } from "../../lib/superapp/money";
 import { IProduct } from "../../types/Shop";
 import { TweetAttachmentInput } from "../../types/Tweet";
 import { Button, ButtonLink } from "../common/Button";
-import Dialog from "../common/Dialog";
 import Spinner from "../common/Spinner";
 import AttachmentPreview from "./AttachmentPreview";
+import NestedDialog from "./NestedDialog";
 import { FOOD_PATH } from "./paths";
 import ProductThumb from "./ProductThumb";
 
@@ -105,7 +105,7 @@ export default function ComposerProductPicker({
           ? createPortal(preview, slot)
           : preview)}
 
-      <Dialog
+      <NestedDialog
         open={open}
         onClose={() => setOpen(false)}
         title="Attach a product"
@@ -172,7 +172,7 @@ export default function ComposerProductPicker({
             })}
           </ul>
         )}
-      </Dialog>
+      </NestedDialog>
     </>
   );
 }

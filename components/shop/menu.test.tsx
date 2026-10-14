@@ -138,6 +138,91 @@ describe("ProductDialog", () => {
   });
 });
 
+describe("ProductDialog with orders on", () => {
+  it("announces the cart from inside the dialog, which makes the page inert", async () => {
+    renderWithStore(
+      <ProductDialog product={latte} business={business()} onClose={vi.fn()} />,
+      { state: state() }
+    );
+    const dialog = screen.getByRole("dialog", { name: "Pistachio latte" });
+    const status = dialog.querySelector('[aria-live="polite"]')!;
+    expect(status.textContent).toBe("");
+
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Add Pistachio latte" })
+    );
+    expect(status.textContent).toBe("Your cart: 1 item · 5.00 credits");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Add one Pistachio latte" })
+    );
+    expect(status.textContent).toBe("Your cart: 2 items · 10.00 credits");
+  });
+
+  it("has no cart status until orders are on", () => {
+    renderWithStore(
+      <ProductDialog product={latte} business={business()} onClose={vi.fn()} />,
+      { state: state(featuresWith("shop")) }
+    );
+    expect(
+      screen
+        .getByRole("dialog", { name: "Pistachio latte" })
+        .querySelector("[aria-live]")
+    ).toBeNull();
+  });
+});
+
+describe("ProductDialog over a cart from another business", () => {
+  const lahmacunCart = {
+    business: { username: "lahmacunlab", fullname: "Lahmacun Lab" },
+    lines: [
+      {
+        productId: "seed-p-ll-lahmacun",
+        name: "Lahmacun",
+        unitPrice: 400,
+        quantity: 1,
+      },
+    ],
+    restored: true,
+  };
+
+  it("stays open whichever way the new-cart prompt is answered", async () => {
+    const onClose = vi.fn();
+    const { store } = renderWithStore(
+      <ProductDialog product={latte} business={business()} onClose={onClose} />,
+      { state: { ...state(), cart: lahmacunCart } }
+    );
+    const details = screen.getByRole("dialog", { name: "Pistachio latte" });
+    const add = () =>
+      userEvent.click(
+        within(details).getByRole("button", { name: "Add Pistachio latte" })
+      );
+
+    await add();
+    await userEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Start a new cart?" })
+      ).getByRole("button", { name: "Cancel" })
+    );
+    expect(
+      screen.queryByRole("dialog", { name: "Start a new cart?" })
+    ).toBeNull();
+    expect(store.getState().cart.business?.username).toBe("lahmacunlab");
+
+    await add();
+    await userEvent.click(
+      within(
+        screen.getByRole("dialog", { name: "Start a new cart?" })
+      ).getByRole("button", { name: "Start new cart" })
+    );
+    expect(store.getState().cart.business?.username).toBe("kizilaykahve");
+
+    expect(onClose).not.toHaveBeenCalled();
+    expect(screen.getByRole("dialog", { name: "Pistachio latte" })).toBe(
+      details
+    );
+  });
+});
+
 describe("BusinessSwitcher", () => {
   const businesses = [
     { username: "superapp", fullname: "Twitter SuperApp", image: null },

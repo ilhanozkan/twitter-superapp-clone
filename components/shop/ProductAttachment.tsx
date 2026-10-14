@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useId } from "react";
+import { MouseEvent, useId } from "react";
 import { HiOutlineShoppingBag } from "react-icons/hi2";
 
 import { openDialog } from "../../slices/uiSlice";
@@ -18,6 +18,8 @@ export interface ProductAttachmentProps {
   /** In a timeline card, or on the Tweet's own page. */
   variant: "card" | "detail";
 }
+
+const keepInCard = (event: MouseEvent) => event.stopPropagation();
 
 /** Why Order now is off for this card, or null when it can be ordered. */
 function orderBlocker(card: IProductCard, readOnly: boolean): string | null {
@@ -88,7 +90,14 @@ export default function ProductAttachment({
           </p>
         </div>
       </div>
-      <div className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2">
+      {/* A disabled button lets clicks through to this row (it has no
+          pointer events), and TweetCard opens the Tweet on a click that
+          isn't on a control: the row keeps them. */}
+      <div
+        onClick={keepInCard}
+        onAuxClick={keepInCard}
+        className="flex flex-wrap items-center gap-2 border-t border-line px-3 py-2"
+      >
         {ordersOn && (
           <Button
             size="sm"

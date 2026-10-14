@@ -40,12 +40,17 @@ const text = (value: unknown) =>
 const optionalText = (value: unknown) => text(value) || null;
 const numeric = (value: unknown) => (typeof value === "number" ? value : 0);
 
-/** Studio data as the app's product: blanks become null, unsafe image URLs are dropped. */
+/**
+ * Studio data as the app's product: blanks become null, unsafe image URLs
+ * are dropped. `business` is kept as typed: menus and the picker match it
+ * in GROQ, which can't trim, so a padded username must name no business in
+ * any read (memory's rule too) rather than in some.
+ */
 function toProduct(row: ProductRow): IProduct {
   const image = optionalText(row.image);
   return {
     id: row.id,
-    business: text(row.business),
+    business: typeof row.business === "string" ? row.business : "",
     section: text(row.section),
     name: text(row.name),
     description: optionalText(row.description),
