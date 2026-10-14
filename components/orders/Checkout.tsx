@@ -84,6 +84,15 @@ export default function Checkout() {
   useCartSync();
   // After a success the cart is emptied before the tracker opens.
   const [placed, setPlaced] = useState<OrderEntry | null>(null);
+  const browseFood = useRef<HTMLAnchorElement>(null);
+  // Emptying the cart here takes the form, and the focused button, away:
+  // focus moves on to what the empty cart offers.
+  const focusEmpty = useRef(false);
+  const empty = cart.lines.length === 0;
+  useEffect(() => {
+    if (focusEmpty.current && empty) browseFood.current?.focus();
+    focusEmpty.current = false;
+  }, [empty]);
 
   if (placed) {
     return (
@@ -97,7 +106,11 @@ export default function Checkout() {
     return (
       <EmptyState
         title="Your cart is empty"
-        action={<ButtonLink href={FOOD_PATH}>Browse Food</ButtonLink>}
+        action={
+          <ButtonLink ref={browseFood} href={FOOD_PATH}>
+            Browse Food
+          </ButtonLink>
+        }
       >
         Add something from a menu and it shows up here.
       </EmptyState>
@@ -109,6 +122,9 @@ export default function Checkout() {
       key={cart.business.username}
       cartBusiness={cart.business}
       lines={cart.lines}
+      onEmptied={() => {
+        focusEmpty.current = true;
+      }}
       onPlaced={(entry) => {
         setPlaced(entry);
         // Emptied in this page's store before it is replaced, so the next
@@ -126,10 +142,13 @@ export default function Checkout() {
 function CheckoutForm({
   cartBusiness,
   lines,
+  onEmptied,
   onPlaced,
 }: {
   cartBusiness: CartBusiness;
   lines: CartLine[];
+  /** About to empty the cart from here. */
+  onEmptied: () => void;
   onPlaced: (entry: OrderEntry) => void;
 }) {
   const dispatch = useAppDispatch();
@@ -148,6 +167,9 @@ function CheckoutForm({
     text: "",
   });
   const inFlight = useRef(false);
+  // Each line's first button, by product, for focus to land on.
+  const lineControls = useRef(new Map<string, HTMLButtonElement>());
+  const focusLine = useRef<string | null>(null);
   const [bar, setBar] = useState<HTMLDivElement | null>(null);
   useBottomScrollPadding(bar);
   const reasonId = useId();
@@ -167,9 +189,23 @@ function CheckoutForm({
     };
   }, [cartBusiness.username]);
 
+  useEffect(() => {
+    if (focusLine.current) lineControls.current.get(focusLine.current)?.focus();
+    focusLine.current = null;
+  }, [lines.length]);
+
   const reload = () => {
     loadMenu(cartBusiness.username).then(setMenu);
   };
+
+  const lineControl =
+    (productId: string) => (button: HTMLButtonElement | null) => {
+      if (!button) return;
+      lineControls.current.set(productId, button);
+      return () => {
+        lineControls.current.delete(productId);
+      };
+    };
 
   const loaded = menu.state === "loaded" ? menu : null;
   const checkoutLines: CheckoutLine[] = lines.map((line) => {
@@ -204,7 +240,14 @@ function CheckoutForm({
       <EmptyState
         title={`${cartBusiness.fullname} isn’t taking orders here anymore`}
         action={
-          <Button onClick={() => dispatch(cartCleared())}>Clear cart</Button>
+          <Button
+            onClick={() => {
+              onEmptied();
+              dispatch(cartCleared());
+            }}
+          >
+            Clear cart
+          </Button>
         }
       >
         Its menu is gone, so this cart can’t be ordered.
@@ -254,6 +297,17 @@ function CheckoutForm({
   const edit = (action: Parameters<typeof dispatch>[0]) => {
     setError(undefined);
     dispatch(action);
+  };
+
+  // Remove (or the last "Remove one") takes the line away with the focused
+  // button: focus moves on to the line that takes its place, or the one
+  // before it. Without either the cart is empty (see Checkout).
+  const removeLine = (productId: string) => {
+    const index = lines.findIndex((line) => line.productId === productId);
+    const neighbour = lines[index + 1] ?? lines[index - 1];
+    if (neighbour) focusLine.current = neighbour.productId;
+    else onEmptied();
+    edit(lineRemoved(productId));
   };
 
   const submit = async () => {
@@ -366,7 +420,12 @@ function CheckoutForm({
                         })
                       )
                     }
-                    onRemove={() => edit(itemRemoved(line.productId))}
+                    onRemove={() =>
+                      line.quantity > 1
+                        ? edit(itemRemoved(line.productId))
+                        : removeLine(line.productId)
+                    }
+                    removeRef={lineControl(line.productId)}
                   />
                   <Money
                     amount={line.unitPrice * line.quantity}
@@ -375,10 +434,11 @@ function CheckoutForm({
                 </>
               ) : (
                 <Button
+                  ref={lineControl(line.productId)}
                   variant="outline"
                   size="sm"
                   aria-label={`Remove ${line.name}`}
-                  onClick={() => edit(lineRemoved(line.productId))}
+                  onClick={() => removeLine(line.productId)}
                 >
                   Remove
                 </Button>

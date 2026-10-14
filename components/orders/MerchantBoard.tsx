@@ -128,14 +128,23 @@ export default function MerchantBoard({
       add(page.items.map((order) => order.id));
       setSummary(latest.summary);
       setWallet(latest.wallet);
-      setServerNow(latest.serverNow);
+      // When the list was read: what is due before then has left it.
+      setServerNow(page.serverNow);
     },
     { interval: BOARD_POLL_MS }
   );
 
-  const nextChange = active
+  // Read from the server's copies, which change only when a poll answers:
+  // copies re-derived on the 5 s tick change on the tick that passes a
+  // change, and would cancel this timer if it came less than 500 ms after.
+  // A copy due before the last poll is of an order that has left the list
+  // since (delivered or cancelled), and is never asked about again.
+  const nextChange = orders
     .map((order) => order.nextChangeAt)
-    .filter((at): at is string => at !== null)
+    .filter(
+      (at): at is string =>
+        at !== null && Date.parse(at) > Date.parse(serverNow)
+    )
     .sort()[0];
   useEffect(() => {
     if (!nextChange) return;

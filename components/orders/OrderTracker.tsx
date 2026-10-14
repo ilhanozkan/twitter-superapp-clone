@@ -102,7 +102,10 @@ export default function OrderTracker({
   );
 
   // Ask again just after the next stage is due, rather than up to 5 s late.
-  const nextChange = settled ? null : order.nextChangeAt;
+  // Read from the server's copy, which changes only when a poll answers:
+  // the copy re-derived every second changes on the tick that passes the
+  // stage, and would cancel this timer if it came less than 500 ms after.
+  const nextChange = settled ? null : entry.order.nextChangeAt;
   useEffect(() => {
     if (!nextChange) return;
     const wait = Date.parse(nextChange) - clock.now().getTime();

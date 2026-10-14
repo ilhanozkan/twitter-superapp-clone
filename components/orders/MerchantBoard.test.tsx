@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -7,6 +7,7 @@ import { ordersState } from "../../slices/ordersSlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { stubFetch } from "../shop/testing";
+import { inProgress } from "./format";
 import MerchantBoard, { BoardData, summaryText } from "./MerchantBoard";
 import { at, iso, marco, order, wallet } from "./testing";
 
@@ -151,6 +152,7 @@ const codes = (name: string) =>
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllGlobals();
 });
 
@@ -241,5 +243,98 @@ describe("MerchantBoard", () => {
     }
     expect(screen.queryByRole("dialog")).toBeNull();
     expect(calls.some((call) => call.init?.method === "POST")).toBe(false);
+  });
+});
+
+describe("MerchantBoard over time", () => {
+  it("asks again just after each order is due to change", async () => {
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    // Two orders on the e2e scale: the first is accepted at 15 s, leaves
+    // at 18 s and arrives at 24 s; the second, placed 2 s later, at 17, 20
+    // and 26 s.
+    const first = (now: Date) =>
+      order({ id: "order-a", code: "A1A1", business: superapp }, { now });
+    const second = (now: Date) =>
+      order(
+        { id: "order-b", code: "B2B2", business: superapp },
+        { now, placedAfter: 2 }
+      );
+    // Mounted 3.2 s in, the board's 5 s tick passes 18 s 200 ms late, when
+    // the early poll is still due; its 10 s poll comes at 13.2 s, and then
+    // 10 s after the last one.
+    const mounted = new Date(at(3).getTime() + 200);
+    vi.setSystemTime(mounted);
+    const polledAt: number[] = [];
+    const api = stubFetch({
+      "/api/orders": () => {
+        const now = new Date();
+        polledAt.push((now.getTime() - at(0).getTime()) / 1000);
+        return [
+          200,
+          {
+            items: [first(now), second(now)].filter(inProgress),
+            nextCursor: null,
+            serverNow: now.toISOString(),
+          },
+        ];
+      },
+      "/api/businesses/superapp/summary": () => [
+        200,
+        {
+          summary,
+          wallet: wallet(600, "superapp"),
+          since: iso(0),
+          serverNow: new Date().toISOString(),
+        },
+      ],
+    });
+    vi.stubGlobal("fetch", vi.fn(api.fetch));
+    renderWithStore(
+      <MerchantBoard
+        business={{ username: "superapp", fullname: "Twitter SuperApp" }}
+        data={{
+          summary,
+          wallet: wallet(600, "superapp"),
+          since: iso(0),
+          ids: ["order-a", "order-b"],
+          nextCursor: null,
+          serverNow: mounted.toISOString(),
+        }}
+      />,
+      {
+        path: "/business",
+        state: {
+          session: sessionState({
+            viewer: testViewer,
+            readOnly: false,
+            features: featuresWith("wallet", "shop", "orders"),
+          }),
+          orders: ordersState(
+            [first(mounted), second(mounted)],
+            mounted.toISOString()
+          ),
+        },
+      }
+    );
+
+    // Renders happen when an act() ends: 100 ms steps keep them close to
+    // the timers that cause them.
+    for (let step = 0; step < 280; step++) {
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(100);
+      });
+    }
+    // The first order's last copy (on its way, due at 24 s) stays in the
+    // store once it has left the list, and must not hold up the second's.
+    for (const due of [15, 17, 18, 20, 24, 26]) {
+      expect(
+        polledAt.some((time) => time >= due + 0.5 && time < due + 0.6),
+        `a poll at ${due + 0.5} s in ${polledAt}`
+      ).toBe(true);
+    }
   });
 });

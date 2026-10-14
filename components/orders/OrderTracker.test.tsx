@@ -32,15 +32,20 @@ function setup({
   readOnly?: boolean;
   inLiveActivity?: boolean;
 } = {}) {
+  // When the tracker asked, in seconds after T0.
+  const polledAt: number[] = [];
   const api = stubFetch({
     // The order as the (fake) clock has it now.
-    "/api/orders/order-abc": () => [
-      200,
-      {
-        order: order({}, { now: new Date() }),
-        serverNow: new Date().toISOString(),
-      },
-    ],
+    "/api/orders/order-abc": () => {
+      polledAt.push((Date.now() - at(0).getTime()) / 1000);
+      return [
+        200,
+        {
+          order: order({}, { now: new Date() }),
+          serverNow: new Date().toISOString(),
+        },
+      ];
+    },
     "/api/orders/order-abc/cancel": () => [
       200,
       {
@@ -101,7 +106,7 @@ function setup({
       },
     }
   );
-  return { ...result, calls: api.calls };
+  return { ...result, calls: api.calls, polledAt };
 }
 
 const liveRegion = () =>
@@ -165,6 +170,31 @@ describe("OrderTracker over time", () => {
       await vi.advanceTimersByTimeAsync(60_000);
     });
     expect(polls()).toBe(settled);
+  });
+
+  it("asks again just after each stage is due, whatever the tick's phase", async () => {
+    // Stages fall on whole seconds after placedAt (15, 18 and 24 s), so the
+    // once-a-second tick that moves past one lands at the same fraction of
+    // a second after each. Under 500 ms, it must not cancel the poll due
+    // then. Renders happen when an act() ends: 100 ms steps keep them
+    // close to the timers that cause them.
+    for (const phase of [100, 400, 700]) {
+      const mounted = new Date(at(1).getTime() + phase);
+      vi.setSystemTime(mounted);
+      const { polledAt } = setup({ serverNow: mounted.toISOString() });
+      for (let step = 0; step < 300; step++) {
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(100);
+        });
+      }
+      for (const due of [15, 18, 24]) {
+        expect(
+          polledAt.some((time) => time >= due + 0.5 && time < due + 0.6),
+          `phase ${phase} ms: a poll at ${due + 0.5} s in ${polledAt}`
+        ).toBe(true);
+      }
+      cleanup();
+    }
   });
 
   it("leaves what the shell's live activity reads out to it", async () => {

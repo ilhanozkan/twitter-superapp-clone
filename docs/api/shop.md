@@ -100,7 +100,8 @@ the settings switch):
 ```
 
 - `available: false` means sold out: still on the menu, but it can't be
-  attached to a new Tweet (or, once orders ship, ordered).
+  attached to a new Tweet or ordered (`POST /api/orders` answers 422
+  `unavailable`, see [orders](orders.md#post-apiorders)).
 - `imageAlt` describes the image; show it as the image's alternative text.
 - A product appears only while its business is a business account with a
   profile, and once Studio has its name, section and a price of
@@ -185,8 +186,11 @@ Unknown ids, and ids that aren't plain keys (such as `drafts.…`), are 404.
 
 What the composer's product picker suggests: the available products of the
 businesses the current user runs (their own account's first, then those
-they manage), each in menu order. It's only a suggestion: any account can
-attach any available product by id, like sharing a link (see
+they manage), each in menu order. While [orders](orders.md) are on, the
+available products from the user's last 50 delivered orders follow, latest
+delivery first, each once (so someone who runs nothing still gets what they
+bought). It's only a suggestion: any account can attach any available
+product by id, like sharing a link (see
 [product attachments](../API.md#product-attachments-on-tweets)).
 
 ## Managing a business

@@ -587,6 +587,39 @@ describe.each(subjects())("%s orders", SLOW, (name, create) => {
       expect((await wallet("alice_test")).balance).toBe(5_000 - 650 * kept);
       await expectLedgerInvariants(subject);
     });
+
+    it("places one order, not three, when they race for the 5th place", async () => {
+      // On Sanity the race from none above stops short of the limit (each
+      // round of retries places one), so this one starts at the limit's edge.
+      await fund(alice, 5_000);
+      for (let placed = 0; placed < 4; placed++) {
+        await repo.orders.placeOrder(orderInput(alice));
+      }
+      if (subject.client) {
+        subject.client.fetchDelay = () =>
+          new Promise((resolve) => setImmediate(resolve));
+      }
+      const outcomes = await Promise.allSettled(
+        Array.from({ length: 3 }, () =>
+          repo.orders.placeOrder(orderInput(alice))
+        )
+      );
+      if (subject.client) subject.client.fetchDelay = undefined;
+
+      for (const outcome of outcomes) {
+        if (outcome.status === "rejected") {
+          expect(
+            outcome.reason instanceof LimitExceededError ||
+              outcome.reason instanceof ConflictError,
+            String(outcome.reason)
+          ).toBe(true);
+        }
+      }
+      expect(outcomes.filter((o) => o.status === "fulfilled")).toHaveLength(1);
+      expect(await ordersOf("alice_test", "active")).toHaveLength(5);
+      expect((await wallet("alice_test")).balance).toBe(5_000 - 650 * 5);
+      await expectLedgerInvariants(subject);
+    });
   });
 
   describe("progress", () => {

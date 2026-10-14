@@ -37,6 +37,7 @@ function setup({
   answer = [201, { order: order(), wallet: wallet(29_410), serverNow: iso(1) }],
   available = 30_860,
   readOnly = false,
+  gone = false,
 }: {
   lines?: CartLine[];
   /** The menu on each read, the last one repeating. */
@@ -44,21 +45,26 @@ function setup({
   answer?: Answer;
   available?: number;
   readOnly?: boolean;
+  /** The business is gone (its menu answers 404). */
+  gone?: boolean;
 } = {}) {
   let reads = 0;
   const api = stubFetch({
-    "/api/businesses/kizilaykahve": () => [
-      200,
-      {
-        business: business(),
-        menu: [
-          {
-            title: "Menu",
-            products: menus[Math.min(reads++, menus.length - 1)],
-          },
-        ],
-      },
-    ],
+    "/api/businesses/kizilaykahve": () =>
+      gone
+        ? failure(404, "not_found", "Business not found")
+        : [
+            200,
+            {
+              business: business(),
+              menu: [
+                {
+                  title: "Menu",
+                  products: menus[Math.min(reads++, menus.length - 1)],
+                },
+              ],
+            },
+          ],
     "/api/orders": () => answer,
     "/api/activity": () => [
       200,
@@ -218,6 +224,51 @@ describe("Checkout", () => {
     expect(place.getAttribute("aria-disabled")).toBeNull();
     expect(place.textContent).toContain("11.50 credits");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("keeps focus on the lines when one goes, then on Browse Food", async () => {
+    setup({ lines: [line(latte, 1), line(simit, 1)] });
+    await placeButton();
+    const button = (name: string) => screen.getByRole("button", { name });
+
+    // The last line's last "Remove one": focus moves to the line before it.
+    button("Remove one Simit").focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.queryByText("Simit")).toBeNull();
+    expect(document.activeElement).toBe(button("Remove one Pistachio latte"));
+
+    // The only line: the cart is empty, and Browse Food takes focus.
+    await userEvent.keyboard("{Enter}");
+    expect(
+      screen.getByRole("heading", { name: "Your cart is empty" })
+    ).toBeTruthy();
+    expect(document.activeElement).toBe(
+      screen.getByRole("link", { name: "Browse Food" })
+    );
+  });
+
+  it("moves focus to the next line when a sold-out one is removed", async () => {
+    setup({
+      lines: [line(simit, 1), line(latte, 2)],
+      menus: [[latte, { ...simit, available: false }]],
+    });
+    await placeButton();
+    screen.getByRole("button", { name: "Remove Simit" }).focus();
+    await userEvent.keyboard("{Enter}");
+    expect(screen.queryByText("Sold out")).toBeNull();
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Remove one Pistachio latte" })
+    );
+  });
+
+  it("clears the cart of a business that is gone, focusing Browse Food", async () => {
+    setup({ gone: true });
+    const clear = await screen.findByRole("button", { name: "Clear cart" });
+    clear.focus();
+    await userEvent.keyboard("{Enter}");
+    expect(document.activeElement).toBe(
+      screen.getByRole("link", { name: "Browse Food" })
+    );
   });
 
   it("explains what stands in the way before anything is sent", async () => {
