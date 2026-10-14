@@ -695,3 +695,63 @@ describe("lib/client/storiesApi", () => {
     });
   });
 });
+
+describe("the /stories/[username] page", () => {
+  /** getServerSideProps of pages/stories/[username].tsx, as Next.js calls it. */
+  async function loadPage(
+    username: string,
+    query: Record<string, string> = {}
+  ) {
+    const { getServerSideProps } =
+      await import("../../pages/stories/[username]");
+    const context = {
+      params: { username },
+      query: { username, ...query },
+      req: { headers: {} },
+      res: { setHeader: () => {} },
+      resolvedUrl: `/stories/${username}`,
+    };
+    return (await getServerSideProps(context as never)) as any;
+  }
+
+  it("serves the author's stories, oldest first, with the linked one", async () => {
+    const result = await loadPage("foodie_ankara", { story: "seed-story04" });
+    expect(result.props.author).toEqual({
+      username: "foodie_ankara",
+      fullname: "Mert Demir",
+      image: "/avatars/foodie_ankara.svg",
+    });
+    expect(result.props.stories.map((story: IStory) => story.id)).toEqual([
+      "seed-story03",
+      "seed-story04",
+    ]);
+    expect(result.props.requested).toBe("seed-story04");
+    expect(result.props.initialState.session.features.stories).toBe(true);
+  });
+
+  it("serves an account with no stories (the page says so)", async () => {
+    const result = await loadPage("devmarco");
+    expect(result.props.stories).toEqual([]);
+    expect(result.props.requested).toBeNull();
+  });
+
+  it("redirects to the canonical casing, keeping the story", async () => {
+    expect(await loadPage("Foodie_Ankara", { story: "seed-story04" })).toEqual({
+      redirect: {
+        destination: "/stories/foodie_ankara?story=seed-story04",
+        permanent: false,
+      },
+    });
+  });
+
+  it("is a 404 for unknown or invalid usernames", async () => {
+    expect(await loadPage("nobody_here")).toEqual({ notFound: true });
+    expect(await loadPage("not a user")).toEqual({ notFound: true });
+  });
+
+  it("is a 404 while stories is off", async () => {
+    // Before the first read: the repository settles its features once.
+    vi.stubEnv("DISABLED_FEATURES", "stories");
+    expect(await loadPage("foodie_ankara")).toEqual({ notFound: true });
+  });
+});

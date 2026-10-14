@@ -182,6 +182,17 @@ ids are ignored. `ids` must be a list of 1–50 story ids (400 otherwise).
 On a `READ_ONLY` deployment this is a 403 like every write; the viewer keeps
 what you have seen in the browser instead.
 
+### Replies
+
+A reply to a story is a direct message to its author, sent through the
+[Messages API](messages.md): `POST /api/conversations { "with": author }`
+opens (or finds) the conversation, then
+`POST /api/conversations/:id/messages { "text", "storyId" }` sends the text
+with the story attached (an `Idempotency-Key` makes a retry safe). The
+message keeps a preview of the story until it expires. The viewer offers
+replies only while the `messages` feature is on and the deployment is
+writable.
+
 ## Moderation and storage
 
 On Sanity, stories are public `story` documents (readable without a token;
