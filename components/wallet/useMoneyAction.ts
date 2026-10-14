@@ -6,8 +6,15 @@ import { fetchWallet } from "../../slices/walletSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 
 // Errors after which the wallet in the store is out of date: re-read it, so
-// the review step's "available" and the frozen banner catch up.
-const STALE_WALLET = new Set(["insufficient_funds", "wallet_frozen"]);
+// the review step's "available", the frozen banner and the limits (top-ups
+// left today) catch up. invalid_state: a request answered elsewhere may
+// have moved credits.
+const STALE_WALLET = new Set([
+  "insufficient_funds",
+  "wallet_frozen",
+  "limit_exceeded",
+  "invalid_state",
+]);
 
 const FROZEN = /^@([A-Za-z0-9_]+)'s wallet is frozen/;
 

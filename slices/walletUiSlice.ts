@@ -1,4 +1,5 @@
 import {
+  createAction,
   createAsyncThunk,
   createSlice,
   PayloadAction,
@@ -6,11 +7,13 @@ import {
   UnknownAction,
 } from "@reduxjs/toolkit";
 
+import { ApiRequestError } from "../lib/client/api";
 import { walletApi } from "../lib/client/walletApi";
 import { Cents } from "../types/Money";
 import { ITweet } from "../types/Tweet";
 import { IAuthor } from "../types/User";
 import { IPaymentRequest, ITransfer } from "../types/Wallet";
+import { startAppListening } from "./listeners";
 import type { SessionState } from "./sessionSlice";
 import { tweetsReceived } from "./tweetsSlice";
 import { balanceChanged, fetchWallet } from "./walletSlice";
@@ -26,7 +29,11 @@ export interface WalletRequestsState {
   incoming: IPaymentRequest[];
   /** The viewer's own requests, newest first. */
   outgoing: IPaymentRequest[];
-  status: LoadStatus;
+  /**
+   * "retrying": read again after a failure. The failure stays on screen
+   * meanwhile, so the Retry that was pressed keeps focus.
+   */
+  status: LoadStatus | "retrying";
 }
 
 export interface WalletUiState {
@@ -106,8 +113,10 @@ export const fetchRequests = createAsyncThunk<
     return { incoming: incoming.items, outgoing: outgoing.items };
   },
   {
-    condition: (_, { getState }) =>
-      getState().walletUi.requests.status !== "loading",
+    condition: (_, { getState }) => {
+      const { status } = getState().walletUi.requests;
+      return status !== "loading" && status !== "retrying";
+    },
   }
 );
 
@@ -172,7 +181,8 @@ const walletUiSlice = createSlice({
   extraReducers: (builder) => {
     builder
       .addCase(fetchRequests.pending, (state) => {
-        state.requests.status = "loading";
+        state.requests.status =
+          state.requests.status === "failed" ? "retrying" : "loading";
       })
       .addCase(fetchRequests.fulfilled, (state, action) => {
         state.requests = { ...action.payload, status: "loaded" };
@@ -202,6 +212,32 @@ const walletUiSlice = createSlice({
 
 export const { transferCreated, requestCreated, requestChanged } =
   walletUiSlice.actions;
+
+/** A request as this device last read it, from either list. */
+export function findRequest(
+  state: { walletUi: WalletUiState },
+  id: string
+): IPaymentRequest | undefined {
+  const { incoming, outgoing } = state.walletUi.requests;
+  return [...incoming, ...outgoing].find((request) => request.id === id);
+}
+
+/**
+ * The Tweet a confirmed tip returned. A listener (below) writes it to the
+ * tweets cache, in the store that dispatched it and, because it follows
+ * navigations, in the current page's store too: a tip confirmed after the
+ * reader moved on still shows on the page they are on. (tweetsReceived
+ * itself must not follow: a late timeline page would overwrite fresher
+ * copies.)
+ */
+export const tweetTipped = createAction<ITweet>("walletUi/tweetTipped");
+
+startAppListening({
+  actionCreator: tweetTipped,
+  effect: (action, api) => {
+    api.dispatch(tweetsReceived([action.payload]));
+  },
+});
 
 // Money operations. Plain thunks rather than createAsyncThunk: a failure
 // stays the ApiRequestError the server sent (status and code), which the
@@ -264,22 +300,56 @@ export const topUpCredits =
     return transfer;
   };
 
+/**
+ * Sends an answer to `request` (pay, decline or cancel). A 409
+ * invalid_state means it was answered elsewhere: in a chat, in another tab,
+ * or by an attempt whose response was lost. Re-read it, so its card shows
+ * how (and a payment by the viewer joins the activity), then fail as
+ * before so the caller can say why; findRequest has what was read.
+ */
+async function answer<R>(
+  dispatch: Parameters<WalletThunk<R>>[0],
+  request: IPaymentRequest,
+  viewerPays: boolean,
+  send: () => Promise<R>
+): Promise<R> {
+  try {
+    return await send();
+  } catch (error) {
+    if (error instanceof ApiRequestError && error.code === "invalid_state") {
+      try {
+        const { request: fresh } = await walletApi.getRequest(request.id);
+        dispatch(requestChanged(fresh));
+        if (viewerPays && fresh.status === "paid" && fresh.transferId) {
+          const { transfer } = await walletApi.getTransfer(fresh.transferId);
+          dispatch(transferCreated(transfer));
+        }
+      } catch {
+        // The card keeps what it showed; the error still says what happened.
+      }
+    }
+    throw error;
+  }
+}
+
 export const payRequest =
   (
     request: IPaymentRequest,
     key: string
   ): WalletThunk<{ request: IPaymentRequest; transfer: ITransfer }> =>
-  async (dispatch) => {
-    const result = await walletApi.payRequest(request.id, key);
-    dispatch(balanceChanged(result.wallet));
-    dispatch(requestChanged(result.request));
-    dispatch(transferCreated(result.transfer));
-    return { request: result.request, transfer: result.transfer };
-  };
+  (dispatch) =>
+    answer(dispatch, request, true, async () => {
+      const result = await walletApi.payRequest(request.id, key);
+      dispatch(balanceChanged(result.wallet));
+      dispatch(requestChanged(result.request));
+      dispatch(transferCreated(result.transfer));
+      return { request: result.request, transfer: result.transfer };
+    });
 
 /**
  * The server answers with the Tweet as the viewer now sees it (one more
- * tip, `tipped`), which replaces the cached copy every timeline shows.
+ * tip, `tipped`), which replaces the cached copy every timeline shows
+ * (tweetTipped).
  */
 export const tipTweet =
   (
@@ -294,7 +364,7 @@ export const tipTweet =
       key
     );
     dispatch(balanceChanged(wallet));
-    dispatch(tweetsReceived([tweet]));
+    dispatch(tweetTipped(tweet));
     dispatch(transferCreated(transfer));
     return { transfer, tweet };
   };
@@ -305,20 +375,22 @@ export const closeRequest =
     request: IPaymentRequest,
     action: "decline" | "cancel"
   ): WalletThunk<IPaymentRequest> =>
-  async (dispatch) => {
-    const { request: closed } =
-      action === "decline"
-        ? await walletApi.declineRequest(request.id)
-        : await walletApi.cancelRequest(request.id);
-    dispatch(requestChanged(closed));
-    return closed;
-  };
+  (dispatch) =>
+    answer(dispatch, request, action === "decline", async () => {
+      const { request: closed } =
+        action === "decline"
+          ? await walletApi.declineRequest(request.id)
+          : await walletApi.cancelRequest(request.id);
+      dispatch(requestChanged(closed));
+      return closed;
+    });
 
 /** Action types that settle in the current page's store after a navigation (see store.ts). */
 export const followsNavigation: string[] = [
   transferCreated.type,
   requestCreated.type,
   requestChanged.type,
+  tweetTipped.type,
 ];
 
 export default walletUiSlice.reducer;

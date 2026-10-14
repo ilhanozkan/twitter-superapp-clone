@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 import { useIdempotencyKey } from "../../lib/client/useIdempotencyKey";
 import { LIMITS } from "../../lib/superapp/limits";
 import { formatCredits, parseCredits } from "../../lib/superapp/money";
-import { openDialog, showToast } from "../../slices/uiSlice";
+import { showToast } from "../../slices/uiSlice";
 import { tipTweet } from "../../slices/walletUiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { Cents } from "../../types/Money";
@@ -14,6 +14,7 @@ import PaymentConfirm from "../superapp/PaymentConfirm";
 import DialogProblem from "./DialogProblem";
 import { receiptPath } from "./dialogArgs";
 import TipAmountStep, { TipChoice } from "./TipAmountStep";
+import { useAddCredits } from "./useAddCredits";
 import { useMoneyAction } from "./useMoneyAction";
 import { useWalletDialog } from "./useWalletDialog";
 
@@ -23,7 +24,15 @@ function defaultChoice(presets: readonly Cents[]): TipChoice {
 }
 
 /** Amount & thanks → Review; a success closes the sheet. */
-function TipFlow({ tweet, onClose }: { tweet: ITweet; onClose: () => void }) {
+function TipFlow({
+  tweet,
+  onClose,
+  onAddCredits,
+}: {
+  tweet: ITweet;
+  onClose: () => void;
+  onAddCredits: () => void;
+}) {
   const dispatch = useAppDispatch();
   const run = useMoneyAction();
   const limits = useAppSelector((state) => state.wallet.limits);
@@ -75,7 +84,7 @@ function TipFlow({ tweet, onClose }: { tweet: ITweet; onClose: () => void }) {
           onClose();
         }}
         onBack={() => setStep("amount")}
-        onAddCredits={() => dispatch(openDialog("topUp"))}
+        onAddCredits={onAddCredits}
       />
     );
   }
@@ -106,6 +115,17 @@ function TipFlow({ tweet, onClose }: { tweet: ITweet; onClose: () => void }) {
  */
 export default function TipDialog() {
   const { open, args, close } = useWalletDialog("tip");
+  // The Tip button that opened the sheet, found before the sheet takes
+  // focus: Add credits closes the sheet, so focus goes back there after it.
+  const opener = useRef<HTMLElement | null>(null);
+  useLayoutEffect(() => {
+    if (open && document.activeElement instanceof HTMLElement) {
+      opener.current = document.activeElement;
+    }
+  }, [open]);
+  const addCredits = useAddCredits(() =>
+    opener.current?.isConnected ? opener.current : null
+  );
   const tweetId = args?.tweetId ?? null;
   const tweet = useAppSelector((state) =>
     tweetId ? state.tweets.entities[tweetId] : undefined
@@ -133,7 +153,12 @@ export default function TipDialog() {
           You can’t tip your own Tweet.
         </DialogProblem>
       ) : (
-        <TipFlow key={tweet.id} tweet={tweet} onClose={close} />
+        <TipFlow
+          key={tweet.id}
+          tweet={tweet}
+          onClose={close}
+          onAddCredits={addCredits}
+        />
       )}
     </Dialog>
   );

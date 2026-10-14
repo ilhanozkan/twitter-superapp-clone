@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { errorMessage } from "../../lib/client/api";
 import { formatAmount } from "../../lib/superapp/money";
 import { showToast } from "../../slices/uiSlice";
-import { closeRequest } from "../../slices/walletUiSlice";
+import { closeRequest, findRequest } from "../../slices/walletUiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { IPaymentRequest, PaymentRequestStatus } from "../../types/Wallet";
 import Avatar from "../common/Avatar";
@@ -12,6 +12,7 @@ import { Button } from "../common/Button";
 import RelativeTime from "../common/RelativeTime";
 import Money from "../superapp/Money";
 import { receiptPath } from "./dialogArgs";
+import { useAppStore } from "./useAppStore";
 import { useMoneyAction } from "./useMoneyAction";
 
 export const STATUS_LABELS: Record<PaymentRequestStatus, string> = {
@@ -49,6 +50,7 @@ export default function RequestCard({
   onPay,
 }: RequestCardProps) {
   const dispatch = useAppDispatch();
+  const store = useAppStore();
   const run = useMoneyAction();
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const [busy, setBusy] = useState(false);
@@ -87,7 +89,10 @@ export default function RequestCard({
         })
       );
     } catch (reason) {
-      refocus.current = false;
+      // Answered elsewhere (closeRequest re-read it): its buttons are gone
+      // too, so focus still moves to the summary, with the error under it.
+      const fresh = findRequest(store.getState(), request.id);
+      if (!fresh || fresh.status === "pending") refocus.current = false;
       setError(errorMessage(reason));
     } finally {
       setBusy(false);

@@ -125,12 +125,34 @@ export const fail = (status: number, code: string, message: string): Reply => ({
 });
 
 /**
+ * A reply that waits for `release()`: what happens while a request is in
+ * flight (a navigation, a second click).
+ */
+export function held(reply: Reply) {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return {
+    reply: async () => {
+      await gate;
+      return reply;
+    },
+    release,
+  };
+}
+
+/**
  * Stubs fetch with routes like "POST /api/wallet/transfers" (matched on the
  * path without its query). A list of replies is used in order, the last
- * one repeating. Returns every call, with its body and Idempotency-Key.
+ * one repeating; a function may answer later (see held). Returns every
+ * call, with its body and Idempotency-Key.
  */
 export function stubApi(
-  routes: Record<string, Reply | Reply[] | ((call: ApiCall) => Reply)>
+  routes: Record<
+    string,
+    Reply | Reply[] | ((call: ApiCall) => Reply | Promise<Reply>)
+  >
 ) {
   const calls: ApiCall[] = [];
   const used = new Map<string, number>();
@@ -152,7 +174,7 @@ export function stubApi(
       const handler = routes[route];
       if (!handler) throw new Error(`No stub for ${route}`);
       let reply: Reply;
-      if (typeof handler === "function") reply = handler(call);
+      if (typeof handler === "function") reply = await handler(call);
       else if (Array.isArray(handler)) {
         const index = used.get(route) ?? 0;
         used.set(route, index + 1);

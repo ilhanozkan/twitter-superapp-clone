@@ -124,6 +124,22 @@ describe("RequestDialog", () => {
     });
   });
 
+  it("moves Back from the amount to From, focusing the field", async () => {
+    api();
+    renderRequest();
+    const user = userEvent.setup();
+
+    await user.type(screen.getByRole("combobox", { name: "From" }), "sar");
+    await user.click(await screen.findByRole("option", { name: /Sarah Chen/ }));
+    expect(document.activeElement).toBe(
+      screen.getByRole("textbox", { name: "Amount in credits" })
+    );
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(document.activeElement).toBe(
+      screen.getByRole("combobox", { name: "From" })
+    );
+  });
+
   it("moves Back from the review to the amount", async () => {
     api();
     renderRequest(creditsDialogArgs(sarah));

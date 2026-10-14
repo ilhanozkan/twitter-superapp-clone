@@ -10,6 +10,8 @@ import { IPaymentRequest } from "../../types/Wallet";
 import OutgoingRequests from "./OutgoingRequests";
 import {
   fail,
+  held,
+  limits,
   marco,
   ok,
   paymentRequest,
@@ -18,6 +20,7 @@ import {
   wallet,
   walletState,
 } from "./testing";
+import WalletDialogs from "./WalletDialogs";
 import WalletRequests from "./WalletRequests";
 
 afterEach(() => {
@@ -47,6 +50,7 @@ function renderRequests(
     outgoing = [] as IPaymentRequest[],
     readOnly = false,
     failed = false,
+    current = wallet(),
   } = {}
 ) {
   return renderWithStore(ui, {
@@ -56,11 +60,14 @@ function renderRequests(
         readOnly,
         features: featuresWith("wallet"),
       }),
-      wallet: walletState(),
+      wallet: walletState(current),
       walletUi: walletUiState(failed ? null : { incoming, outgoing }),
     },
   });
 }
+
+const summary = (id: string) =>
+  document.querySelector<HTMLElement>(`[data-request-summary="${id}"]`);
 
 const card = (id: string) =>
   document
@@ -195,6 +202,149 @@ describe("WalletRequests (requests for you)", () => {
     expect(decline.getAttribute("aria-describedby")).toContain(alert.id);
   });
 
+  describe("a request answered elsewhere (409 invalid_state)", () => {
+    const paidElsewhere = {
+      ...coffee,
+      status: "paid" as const,
+      transferId: "tx-lost",
+      respondedAt: "2026-10-09T12:00:00.000Z",
+    };
+    const conflict = fail(
+      409,
+      "invalid_state",
+      "This request was already paid"
+    );
+    const current = wallet({ balance: 30_410, available: 30_410 });
+    const reread = {
+      "GET /api/wallet/requests/seed-req01": ok({ request: paidElsewhere }),
+      "GET /api/wallet/transfers/tx-lost": ok({
+        transfer: transfer({ id: "tx-lost", kind: "request", amount: 450 }),
+      }),
+      "GET /api/wallet": ok({
+        wallet: current,
+        limits: limits(),
+        serverNow: new Date().toISOString(),
+      }),
+    };
+
+    it("closes the pay sheet, and the card, balance and activity catch up", async () => {
+      // An earlier attempt went through but its response was lost.
+      stubApi({
+        ...reread,
+        "POST /api/wallet/requests/seed-req01/pay": conflict,
+      });
+      const { store } = renderRequests();
+      const user = userEvent.setup();
+
+      await user.click(
+        screen.getByRole("button", { name: "Pay 4.50 credits to Sarah Chen" })
+      );
+      await user.click(
+        within(screen.getByRole("dialog", { name: "Pay request" })).getByRole(
+          "button",
+          { name: "Pay 4.50 credits to Sarah Chen" }
+        )
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Pay request" })).toBeNull()
+      );
+
+      const paidCard = card("seed-req01");
+      expect(within(paidCard).getByText("Paid")).toBeTruthy();
+      expect(
+        within(paidCard)
+          .getByRole("link", { name: "View receipt" })
+          .getAttribute("href")
+      ).toBe("/wallet/transactions/tx-lost");
+      expect(within(paidCard).queryByRole("button")).toBeNull();
+      await waitFor(() =>
+        expect(document.activeElement).toBe(summary("seed-req01"))
+      );
+      expect(store.getState().ui.toasts.at(-1)?.message).toBe(
+        "This request was already paid"
+      );
+      await waitFor(() =>
+        expect(store.getState().wallet.wallet).toEqual(current)
+      );
+      expect(store.getState().walletUi.created.map((t) => t.id)).toEqual([
+        "tx-lost",
+      ]);
+    });
+
+    it("shows a decline's error on the card it re-read, moving focus to its summary", async () => {
+      stubApi({
+        ...reread,
+        "POST /api/wallet/requests/seed-req01/decline": conflict,
+      });
+      renderRequests();
+      const user = userEvent.setup();
+
+      await user.click(
+        screen.getByRole("button", { name: "Decline Sarah Chen’s request" })
+      );
+      const paidCard = card("seed-req01");
+      expect(await within(paidCard).findByText("Paid")).toBeTruthy();
+      expect(within(paidCard).queryByRole("button")).toBeNull();
+      expect(within(paidCard).getByRole("alert").textContent).toBe(
+        "This request was already paid"
+      );
+      await waitFor(() =>
+        expect(document.activeElement).toBe(summary("seed-req01"))
+      );
+    });
+  });
+
+  it("comes back to the review's confirm from Add credits", async () => {
+    stubApi({
+      "GET /api/wallet": ok({
+        wallet: wallet({ balance: 5_100, available: 5_100 }),
+        limits: limits({ topUpsLeftToday: 1 }),
+        serverNow: new Date().toISOString(),
+      }),
+      "POST /api/wallet/top-ups": ok(
+        {
+          transfer: transfer({ id: "tx-top", kind: "issue", from: null }),
+          wallet: wallet({ balance: 5_100, available: 5_100 }),
+        },
+        201
+      ),
+    });
+    renderRequests(
+      <>
+        <WalletRequests />
+        <WalletDialogs />
+      </>,
+      { current: wallet({ balance: 100, available: 100 }) }
+    );
+    const user = userEvent.setup();
+
+    await user.click(
+      screen.getByRole("button", { name: "Pay 4.50 credits to Sarah Chen" })
+    );
+    const sheet = screen.getByRole("dialog", { name: "Pay request" });
+    await user.click(
+      within(within(sheet).getByRole("alert")).getByRole("button", {
+        name: "Add credits",
+      })
+    );
+    await user.click(
+      screen.getByRole("button", { name: "Add 50.00 demo credits" })
+    );
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Add credits" })).toBeNull()
+    );
+
+    // The alert that held Add credits is gone now that 51.00 is enough.
+    expect(within(sheet).queryByRole("alert")).toBeNull();
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(sheet).getByRole("button", {
+          name: "Pay 4.50 credits to Sarah Chen",
+        })
+      )
+    );
+  });
+
   it("disables Pay and Decline on a read-only demo, saying why", () => {
     renderRequests(<WalletRequests />, { readOnly: true });
     const first = card("seed-req01");
@@ -233,6 +383,66 @@ describe("WalletRequests (requests for you)", () => {
       "/api/wallet/requests?role=incoming&status=pending",
       "/api/wallet/requests?role=outgoing",
     ]);
+  });
+
+  it("keeps Retry (busy) while retrying, then moves focus to the requests", async () => {
+    const incoming = held(ok({ items: [coffee] }));
+    const calls = stubApi({
+      "GET /api/wallet/requests": (call) =>
+        call.url.includes("incoming") ? incoming.reply() : ok({ items: [] }),
+    });
+    renderRequests(<WalletRequests />, { failed: true });
+    const user = userEvent.setup();
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    await user.click(retry);
+    expect(retry.isConnected).toBe(true);
+    expect(retry.getAttribute("aria-busy")).toBe("true");
+    expect(retry.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(retry);
+    // A second press while it runs reads nothing more.
+    await user.click(retry);
+    expect(calls.to("GET /api/wallet/requests")).toHaveLength(2);
+
+    incoming.release();
+    const heading = await screen.findByRole("heading", {
+      name: "Requests for you",
+    });
+    await waitFor(() => expect(document.activeElement).toBe(heading));
+  });
+
+  it("says so when Retry finds nobody waiting, focusing that", async () => {
+    stubApi({ "GET /api/wallet/requests": ok({ items: [] }) });
+    renderRequests(<WalletRequests />, { failed: true });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    const section = await screen.findByRole("region", {
+      name: "Requests for you",
+    });
+    expect(section.textContent).toContain("Nobody is waiting for you to pay.");
+    await waitFor(() =>
+      expect(document.activeElement).toBe(
+        within(section).getByRole("heading", { name: "Requests for you" })
+      )
+    );
+  });
+
+  it("keeps Retry and its focus when the retry fails too", async () => {
+    stubApi({
+      "GET /api/wallet/requests": fail(500, "internal", "Something broke"),
+    });
+    const { store } = renderRequests(<WalletRequests />, { failed: true });
+    const user = userEvent.setup();
+
+    const retry = screen.getByRole("button", { name: "Retry" });
+    await user.click(retry);
+    await waitFor(() =>
+      expect(store.getState().walletUi.requests.status).toBe("failed")
+    );
+    expect(retry.isConnected).toBe(true);
+    expect(retry.getAttribute("aria-disabled")).toBe("false");
+    expect(document.activeElement).toBe(retry);
   });
 });
 
@@ -285,6 +495,20 @@ describe("OutgoingRequests (the Requests tab)", () => {
     ).toBe(true);
     expect(pending.textContent).toContain(
       "Cancelling is off on this read-only demo."
+    );
+  });
+
+  it("moves focus to the first request once Retry has read them", async () => {
+    stubApi({
+      "GET /api/wallet/requests": (call) =>
+        ok({ items: call.url.includes("outgoing") ? [lunch] : [] }),
+    });
+    renderRequests(<OutgoingRequests />, { failed: true });
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() =>
+      expect(document.activeElement).toBe(summary("req-out"))
     );
   });
 

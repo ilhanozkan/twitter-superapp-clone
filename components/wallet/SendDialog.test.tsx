@@ -177,7 +177,10 @@ describe("SendDialog", () => {
     ).toHaveProperty("value", "10");
 
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("combobox", { name: "To" })).toBeTruthy();
+    // The To step takes focus back: Back itself is gone.
+    expect(document.activeElement).toBe(
+      screen.getByRole("combobox", { name: "To" })
+    );
   });
 
   it("asks for a valid amount before the review, and fills quick amounts", async () => {

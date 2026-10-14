@@ -64,6 +64,43 @@ async function openTip(page: Page): Promise<Locator> {
   return sheet;
 }
 
+/**
+ * The contrast of an element's outline (2px or more) against the first
+ * opaque background behind it; 0 without one.
+ */
+async function outlineContrast(element: Locator): Promise<number> {
+  return element.evaluate((node) => {
+    const style = getComputedStyle(node);
+    if (style.outlineStyle === "none" || parseFloat(style.outlineWidth) < 2) {
+      return 0;
+    }
+    const channels = (color: string) =>
+      (color.match(/[\d.]+/g) ?? []).map(Number);
+    let behind = [255, 255, 255];
+    for (let at = node.parentElement; at; at = at.parentElement) {
+      const [r, g, b, alpha = 1] = channels(
+        getComputedStyle(at).backgroundColor
+      );
+      if (alpha === 1) {
+        behind = [r, g, b];
+        break;
+      }
+    }
+    const luminance = ([r, g, b]: number[]) => {
+      const [lr, lg, lb] = [r, g, b].map((value) => {
+        const c = value / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      });
+      return 0.2126 * lr + 0.7152 * lg + 0.0722 * lb;
+    };
+    const [l1, l2] = [
+      luminance(channels(style.outlineColor)),
+      luminance(behind),
+    ].sort((x, y) => y - x);
+    return (l1 + 0.05) / (l2 + 0.05);
+  });
+}
+
 async function chooseSarah(dialog: Locator) {
   await dialog.getByRole("combobox", { name: "To" }).fill("sarah");
   await dialog.getByRole("option", { name: /Sarah Chen/ }).click();
@@ -314,6 +351,62 @@ test("tips seed-t02, which then shows the tip and links its receipt", async ({
   expect(problems).toEqual([]);
 });
 
+test("a tip confirmed after going Back closes the sheet and shows on the page left", async ({
+  page,
+  request,
+}) => {
+  await topUp(request, 500);
+  const before = await available(request);
+  const tips = (await (await request.get("/api/tweets/seed-t02")).json()).tweet
+    .stats.tips;
+
+  // From the Tweet's page to Sarah's profile (a client navigation), to tip there.
+  await page.goto("/sarahcodes/status/seed-t02");
+  await page.locator("#focused-tweet-author").click();
+  await expect(page).toHaveURL(/\/sarahcodes$/);
+  const card = page
+    .locator("main article")
+    .filter({ hasText: "Hot take: every icon-only button" });
+  await tipButton(card).click();
+  const sheet = page.getByRole("dialog", { name: "Tip @sarahcodes" });
+  await sheet.getByRole("button", { name: "Tip 2.00 credits" }).click();
+
+  // The tip reaches the server only once Back has read the Tweet's page.
+  let release = () => {};
+  const readBack = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/tweets/seed-t02/tip", async (route) => {
+    await readBack;
+    await route.fulfill({ response: await route.fetch() });
+  });
+  await sheet
+    .getByRole("button", { name: "Tip 2.00 credits to Sarah Chen" })
+    .click();
+  const pageData = page.waitForResponse(
+    (response) =>
+      response.url().includes("/_next/data/") &&
+      response.url().includes("seed-t02")
+  );
+  await page.goBack();
+  await pageData;
+  await expect(page).toHaveURL(/\/sarahcodes\/status\/seed-t02$/);
+  release();
+
+  await expect(
+    page.getByRole("status").filter({
+      hasText: "You tipped @sarahcodes 2.00 credits",
+    })
+  ).toBeVisible();
+  // Closed, so nothing can tip a second time with a new key.
+  await expect(sheet).toBeHidden();
+  const count = tips + 1;
+  await expect(
+    page.locator("main").getByRole("button", {
+      name: `Tip again. You tipped this Tweet. ${count} ${count === 1 ? "tip" : "tips"}`,
+    })
+  ).toBeVisible();
+  expect(await available(request)).toBe(before - 200);
+});
+
 test("Send credits opens for the person from a profile and from a Tweet's menu", async ({
   page,
 }) => {
@@ -400,7 +493,15 @@ test.describe("accessibility (axe)", () => {
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
 
       const dialog = await openSend(page);
-      await chooseSarah(dialog);
+      // Focus stays in the field, so the highlighted suggestion's outline is
+      // the listbox's focus indicator: 3:1 against the sheet (1.4.11).
+      await dialog.getByRole("combobox", { name: "To" }).fill("sarah");
+      const option = dialog.getByRole("option", { name: /Sarah Chen/ });
+      await expect(option).toBeVisible();
+      await page.keyboard.press("ArrowDown");
+      await expect(option).toHaveAttribute("aria-selected", "true");
+      expect(await outlineContrast(option)).toBeGreaterThanOrEqual(3);
+      await page.keyboard.press("Enter");
       await dialog
         .getByRole("textbox", { name: "Amount in credits" })
         .fill("5");

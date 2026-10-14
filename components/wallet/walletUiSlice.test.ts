@@ -1,20 +1,28 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { sessionState } from "../../slices/sessionSlice";
+import { tweetsReceived } from "../../slices/tweetsSlice";
 import reducer, {
+  closeRequest,
+  fetchRequests,
+  findRequest,
   followsNavigation,
+  payRequest,
   recentPeople,
   requestChanged,
   requestCreated,
   tipTweet,
   transferCreated,
+  tweetTipped,
   walletUiState,
 } from "../../slices/walletUiSlice";
 import { FOLLOWS_NAVIGATION, makeStore } from "../../store";
 import { testViewer } from "../../test/render";
 import {
   fail,
+  held,
   marco,
+  ok,
   paymentRequest,
   sarah,
   stubApi,
@@ -113,6 +121,31 @@ describe("walletUi reducer", () => {
       expect(FOLLOWS_NAVIGATION.has(type)).toBe(true);
     }
     expect(followsNavigation).toContain(transferCreated.type);
+    // A confirmed tip's Tweet follows; late timeline pages must not.
+    expect(followsNavigation).toContain(tweetTipped.type);
+    expect(FOLLOWS_NAVIGATION.has(tweetsReceived.type)).toBe(false);
+  });
+
+  it("keeps a failed read on screen while it is retried", async () => {
+    const response = held(ok({ items: [] }));
+    stubApi({ "GET /api/wallet/requests": response.reply });
+    const store = makeStore({
+      session: sessionState({ viewer: testViewer, readOnly: false }),
+      walletUi: walletUiState(null),
+    });
+
+    const read = store.dispatch(fetchRequests());
+    expect(store.getState().walletUi.requests.status).toBe("retrying");
+    // One read at a time.
+    expect(await store.dispatch(fetchRequests())).toMatchObject({
+      meta: { condition: true },
+    });
+    response.release();
+    await read;
+    expect(store.getState().walletUi.requests.status).toBe("loaded");
+    expect(
+      reducer(initial, fetchRequests.pending("", undefined)).requests
+    ).toMatchObject({ status: "loading" });
   });
 
   it("is registered in the store", () => {
@@ -178,5 +211,98 @@ describe("tipTweet", () => {
     ).rejects.toMatchObject({ status: 402, code: "insufficient_funds" });
     expect(store.getState().tweets.entities["seed-t03"]).toEqual(tweet());
     expect(store.getState().walletUi.created).toEqual([]);
+  });
+});
+
+describe("answering a request answered elsewhere (409 invalid_state)", () => {
+  const owed = paymentRequest({ id: "req-9", requester: marco, amount: 600 });
+  const paid = {
+    ...owed,
+    status: "paid" as const,
+    transferId: "tx-lost",
+    respondedAt: "2026-10-09T12:00:00.000Z",
+  };
+  const payment = transfer({
+    id: "tx-lost",
+    kind: "request",
+    to: marco,
+    amount: 600,
+  });
+
+  function storeWith(
+    incoming: (typeof owed)[],
+    outgoing: (typeof owed)[] = []
+  ) {
+    return makeStore({
+      session: sessionState({ viewer: testViewer, readOnly: false }),
+      walletUi: walletUiState({ incoming, outgoing }),
+    });
+  }
+
+  it("re-reads it, so its card shows how, and adds the viewer's payment to the activity", async () => {
+    const calls = stubApi({
+      "POST /api/wallet/requests/req-9/pay": fail(
+        409,
+        "invalid_state",
+        "This request was already paid"
+      ),
+      "GET /api/wallet/requests/req-9": ok({ request: paid }),
+      "GET /api/wallet/transfers/tx-lost": ok({ transfer: payment }),
+    });
+    const store = storeWith([owed]);
+
+    await expect(
+      store.dispatch(payRequest(owed, "key-12345678"))
+    ).rejects.toMatchObject({ status: 409, code: "invalid_state" });
+
+    expect(findRequest(store.getState(), "req-9")).toEqual(paid);
+    expect(store.getState().walletUi.created).toEqual([payment]);
+    expect(calls.calls.map((call) => call.url)).toEqual([
+      "/api/wallet/requests/req-9/pay",
+      "/api/wallet/requests/req-9",
+      "/api/wallet/transfers/tx-lost",
+    ]);
+  });
+
+  it("re-reads a request the viewer asked for, without taking its payment as theirs", async () => {
+    const mine = paymentRequest({
+      id: "req-9",
+      requester: testViewer,
+      payer: marco,
+    });
+    stubApi({
+      "POST /api/wallet/requests/req-9/cancel": fail(
+        409,
+        "invalid_state",
+        "This request was already paid"
+      ),
+      "GET /api/wallet/requests/req-9": ok({
+        request: { ...mine, status: "paid", transferId: "tx-in" },
+      }),
+    });
+    const store = storeWith([], [mine]);
+
+    await expect(
+      store.dispatch(closeRequest(mine, "cancel"))
+    ).rejects.toMatchObject({ code: "invalid_state" });
+    expect(findRequest(store.getState(), "req-9")?.status).toBe("paid");
+    expect(store.getState().walletUi.created).toEqual([]);
+  });
+
+  it("still fails with the server's error when the re-read fails too", async () => {
+    stubApi({
+      "POST /api/wallet/requests/req-9/decline": fail(
+        409,
+        "invalid_state",
+        "This request was already paid"
+      ),
+      "GET /api/wallet/requests/req-9": "network",
+    });
+    const store = storeWith([owed]);
+
+    await expect(
+      store.dispatch(closeRequest(owed, "decline"))
+    ).rejects.toMatchObject({ message: "This request was already paid" });
+    expect(findRequest(store.getState(), "req-9")).toEqual(owed);
   });
 });

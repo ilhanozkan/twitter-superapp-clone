@@ -1,4 +1,4 @@
-import { useEffect, useId } from "react";
+import { useEffect, useId, useRef } from "react";
 
 import { fetchRecentPeople } from "../../slices/walletUiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
@@ -22,13 +22,20 @@ export default function RecipientStep({
   const viewer = useAppSelector((state) => state.session.viewer?.username);
   const recent = useAppSelector((state) => state.walletUi.recent.people);
   const recentId = useId();
+  const root = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     void dispatch(fetchRecentPeople());
   }, [dispatch]);
 
+  // A step that replaces another (Back from Amount) takes focus, like the
+  // dialog's first one; otherwise focus is left on <body> outside the sheet.
+  useEffect(() => {
+    root.current?.querySelector<HTMLElement>("[data-autofocus]")?.focus();
+  }, []);
+
   return (
-    <div className="flex flex-col gap-4">
+    <div ref={root} className="flex flex-col gap-4">
       <RecipientCombobox
         label={label}
         onSelect={onSelect}

@@ -1,10 +1,8 @@
-import { useCallback } from "react";
-import { useStore } from "react-redux";
+import { useCallback, useLayoutEffect, useRef } from "react";
 
 import { closeDialog, ModalDialogName } from "../../slices/uiSlice";
-import { AppStore, useAppDispatch, useAppSelector } from "../../store";
-
-const useAppStore = useStore.withTypes<AppStore>();
+import { useAppSelector } from "../../store";
+import { useAppStore } from "./useAppStore";
 
 /**
  * One of the global dialogs: whether it is open, its arguments, and a close
@@ -13,16 +11,25 @@ const useAppStore = useStore.withTypes<AppStore>();
  * close event arrives after the new one is open and must not close that.
  */
 export function useWalletDialog(name: ModalDialogName) {
-  const dispatch = useAppDispatch();
   const store = useAppStore();
   const open = useAppSelector((state) => state.ui.dialog === name);
   const args = useAppSelector((state) =>
     state.ui.dialog === name ? state.ui.dialogArgs : null
   );
 
+  // The store this renders with now. A navigation that brings page data
+  // starts a new store, which keeps the open dialog; a close that runs once
+  // a tip or top-up is confirmed (after an await) must close it there, not
+  // in the store of the click, or the sheet stays open to pay again.
+  const current = useRef(store);
+  useLayoutEffect(() => {
+    current.current = store;
+  }, [store]);
+
   const close = useCallback(() => {
-    if (store.getState().ui.dialog === name) dispatch(closeDialog());
-  }, [dispatch, store, name]);
+    const { getState, dispatch } = current.current;
+    if (getState().ui.dialog === name) dispatch(closeDialog());
+  }, [name]);
 
   return { open, args, close };
 }

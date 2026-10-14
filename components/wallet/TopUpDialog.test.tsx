@@ -190,6 +190,47 @@ describe("TopUpDialog", () => {
     expect(keys[2]).not.toBe(keys[0]);
   });
 
+  it("re-reads the limits when the server says the day's top-ups are used", async () => {
+    // Used up in another tab since this page read the wallet.
+    const current = wallet({ balance: 35_860, available: 35_860 });
+    const calls = stubApi({
+      "GET /api/wallet": ok({
+        wallet: current,
+        limits: limits({ topUpsLeftToday: 0 }),
+        serverNow: new Date().toISOString(),
+      }),
+      "POST /api/wallet/top-ups": fail(
+        422,
+        "limit_exceeded",
+        "You can add credits 3 times a day. Try again later."
+      ),
+    });
+    const { store } = renderTopUp();
+    const user = userEvent.setup();
+
+    expect(dialog().textContent).toContain("2 of 3 per 24 hours");
+    await user.click(
+      screen.getByRole("button", { name: "Add 50.00 demo credits" })
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You can add credits 3 times a day. Try again later."
+    );
+
+    await waitFor(() =>
+      expect(dialog().textContent).toContain("0 of 3 per 24 hours")
+    );
+    for (const option of amounts() as HTMLInputElement[]) {
+      expect(option.disabled).toBe(true);
+      expect(
+        document.getElementById(option.getAttribute("aria-describedby") ?? "")
+          ?.textContent
+      ).toBe("Daily limit reached");
+    }
+    expect(dialog().textContent).toContain("358.60 credits");
+    expect(store.getState().wallet.wallet).toEqual(current);
+    expect(calls.to("GET /api/wallet")).toHaveLength(1);
+  });
+
   it("reads the limits first when the page has none", async () => {
     const calls = api();
     renderTopUp(wallet(), null);

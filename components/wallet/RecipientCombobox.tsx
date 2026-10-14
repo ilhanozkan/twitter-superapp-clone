@@ -188,7 +188,9 @@ export default function RecipientCombobox({
             // Keep focus in the field: the pointer picks without moving it.
             onMouseDown={(event) => event.preventDefault()}
             onClick={() => choose(person)}
-            className="flex min-h-[44px] cursor-pointer items-center gap-3 px-3 py-2 hover:bg-fg/5 aria-selected:bg-primary/10"
+            // The tint alone is ~1.1:1: the outline is what shows which
+            // suggestion Enter picks (focus stays in the field).
+            className="flex min-h-[44px] cursor-pointer items-center gap-3 px-3 py-2 hover:bg-fg/5 aria-selected:bg-primary/10 aria-selected:outline aria-selected:outline-2 aria-selected:-outline-offset-2 aria-selected:outline-primary"
           >
             <Avatar user={person} size={32} />
             <span className="min-w-0 leading-5">

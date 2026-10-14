@@ -76,6 +76,15 @@ describe("RecipientCombobox", () => {
     const [first, second] = screen.getAllByRole("option");
     expect(input.getAttribute("aria-activedescendant")).toBe(first.id);
     expect(first.getAttribute("aria-selected")).toBe("true");
+    // Focus stays in the field, so the highlight is the focus indicator:
+    // a primary outline (3:1 or more in both themes), not only a tint.
+    expect(first.className.split(" ")).toEqual(
+      expect.arrayContaining([
+        "aria-selected:outline",
+        "aria-selected:outline-2",
+        "aria-selected:outline-primary",
+      ])
+    );
     expect(document.activeElement).toBe(input);
 
     await user.keyboard("{ArrowDown}");

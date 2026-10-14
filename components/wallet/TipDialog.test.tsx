@@ -6,12 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { IDEMPOTENCY_KEY_PATTERN } from "../../lib/superapp/idempotency";
 import { sessionState } from "../../slices/sessionSlice";
 import { openDialog } from "../../slices/uiSlice";
+import { useAppDispatch } from "../../store";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { ITweet } from "../../types/Tweet";
 import { IWallet } from "../../types/Wallet";
 import {
   fail,
   lena,
+  limits,
   ok,
   Reply,
   stubApi,
@@ -222,6 +224,70 @@ describe("TipDialog", () => {
         within(alert).getByRole("button", { name: "Add credits" })
       );
       expect(store.getState().ui.dialog).toBe("topUp");
+    });
+
+    it("returns focus to the Tip button once Add credits closes", async () => {
+      stubApi({
+        "GET /api/wallet": ok({
+          wallet: wallet(),
+          limits: limits({ topUpsLeftToday: 1 }),
+          serverNow: new Date().toISOString(),
+        }),
+        "POST /api/wallet/top-ups": ok(
+          {
+            transfer: transfer({ id: "tx-top", kind: "issue", from: null }),
+            wallet: wallet({ balance: 5_150, available: 5_150 }),
+          },
+          201
+        ),
+      });
+      // The Tweet's Tip button, which opens the sheet.
+      function TipButton() {
+        const dispatch = useAppDispatch();
+        return (
+          <button
+            type="button"
+            onClick={() => dispatch(openDialog("tip", { tweetId: "seed-t03" }))}
+          >
+            Tip. 2 tips
+          </button>
+        );
+      }
+      renderWithStore(
+        <>
+          <TipButton />
+          <WalletDialogs />
+        </>,
+        {
+          state: {
+            session: sessionState({
+              viewer: testViewer,
+              readOnly: false,
+              features: featuresWith("wallet"),
+            }),
+            wallet: walletState(wallet({ balance: 150, available: 150 })),
+            tweets: tweetsState(tweet()),
+          },
+        }
+      );
+      const user = userEvent.setup();
+
+      const opener = screen.getByRole("button", { name: "Tip. 2 tips" });
+      await user.click(opener);
+      await toReview(user);
+      // The Tip sheet closes as Add credits opens: its button is gone.
+      await user.click(
+        within(screen.getByRole("alert")).getByRole("button", {
+          name: "Add credits",
+        })
+      );
+      await user.click(
+        screen.getByRole("button", { name: "Add 50.00 demo credits" })
+      );
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog", { name: "Add credits" })).toBeNull()
+      );
+      await waitFor(() => expect(document.activeElement).toBe(opener));
     });
 
     it("re-reads a stale wallet when the server says the funds are short", async () => {

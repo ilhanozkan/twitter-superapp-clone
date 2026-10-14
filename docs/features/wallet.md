@@ -37,7 +37,7 @@ are bottom sheets on phones and centred dialogs above 500px.
   requested 4.50 credits · Coffee ☕ · 5h", with **Pay 4.50** and **Decline**.
   Pay opens the payment review; once answered, the card stays with its new
   status (Paid with a link to the receipt, or Declined) and keeps focus.
-  Hidden when nobody is waiting on you.
+  Hidden when nobody is waiting on you (after a Retry it says so instead).
 - **Activity | Requests:** two tabs with their own URLs.
   - Activity lists transfers by day (Today, Yesterday, Oct 6). Each row is a
     link to its receipt with the other party's avatar (or the SuperApp mark
@@ -110,6 +110,13 @@ days, and you can have 10 pending at a time.
 Sarah Chen") with the same checks, errors and retries as Send. **Decline**
 answers right away. Either can be repeated safely.
 
+A request answered elsewhere meanwhile (in a chat, in another tab, or by an
+attempt whose response was lost) is read again: its card shows how it ended
+(Paid with the receipt, Cancelled...) and takes focus, a payment of yours
+joins the activity, and the balance is read again. The pay sheet then
+closes with a toast such as "This request was already paid"; a decline
+shows that message on the card.
+
 ## Tipping a Tweet
 
 The action row under every Tweet has six actions: Reply, Retweet, Like,
@@ -139,12 +146,16 @@ The six actions fit a 360px phone.
    credits**.
 2. **Review:** "Tip 2.00 credits to Lena Hoffmann (@lenaframes)", the note,
    what you have and the balance after, with the confirm button focused
-   (WCAG 3.3.4). Back returns to the amount with your choice kept.
+   (WCAG 3.3.4). Back returns to the amount with your choice kept. Add
+   credits (when the balance is short) closes the sheet; focus returns to
+   the Tip button once Add credits closes.
 
 On success the sheet closes and focus goes back to the Tip button, which is
 now filled and counts your tip: the Tweet is replaced with the one the
 server returned. A toast says "You tipped @lenaframes 2.00 credits", with a
-Receipt link. The author gets a notification with the amount.
+Receipt link. The author gets a notification with the amount. A tip
+confirmed after you moved to another page still closes the sheet and
+updates the Tweet there.
 
 Errors, retries and the Idempotency-Key work as for Send: not enough
 credits (with Add credits), a frozen wallet, too many payments in a minute,
@@ -159,7 +170,9 @@ disabled with the reason under it:
 - **Over the 1,000.00 cap:** a top-up can't take your balance past 1,000.00.
 - **Daily limit reached:** at most 3 top-ups in any 24 hours.
 
-The dialog also shows your balance and how many top-ups are left.
+The dialog also shows your balance and how many top-ups are left. When the
+server says the day's top-ups are used up (in another tab, say), they are
+read again, so the amounts show why they are disabled.
 
 ## Receipts
 
@@ -181,6 +194,10 @@ opens Send for the same person with the amount and note filled in;
 | Requests tab     | "No requests" with Request credits                                                      | Server-rendered                                     | Inline alert with Retry                   | Cancel disabled, with the reason                                  |
 | Dialogs          | —                                                                                       | The button shows a spinner and waits for the server | Inline alert linked to the confirm button | Not available ("Payments are turned off on this read-only demo.") |
 | Tip action       | No count shown for 0 tips ("Tip. 0 tips" to screen readers)                             | Server-rendered with the Tweet                      | In the tip sheet's review                 | Disabled; "Send credits" is hidden from profiles and Tweet menus  |
+
+A requests alert stays while its Retry runs (the button busy), so focus
+stays on it; once the requests are back, focus moves to them ("Requests for
+you", or the first of your requests).
 
 A wallet a moderator froze shows a danger banner on `/wallet`: "A
 moderator froze this wallet. You can't send or receive credits right now.
