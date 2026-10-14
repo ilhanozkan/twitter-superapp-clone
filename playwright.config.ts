@@ -20,7 +20,10 @@ const DEFAULT_ENV = {
 
 function server(projectPort: number, env: Record<string, string>) {
   return {
-    command: `npx next start -p ${projectPort}`,
+    // Playwright's request agent reuses idle sockets indefinitely, but next
+    // start closes them after 5 s: a request sent at that moment fails with
+    // "socket hang up". Keep connections open longer than any idle gap.
+    command: `npx next start -p ${projectPort} --keepAliveTimeout 600000`,
     url: `${baseURL(projectPort)}/api/health`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,

@@ -60,7 +60,11 @@ export default function Dialog({
       ref={dialog}
       aria-label={title}
       data-variant={variant}
-      onClose={onClose}
+      // React passes a nested dialog's close event up the component tree
+      // (the DOM's doesn't bubble): only this dialog's own close counts.
+      onClose={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       // Escape: close through React now, during the keypress. The browser
       // hides the dialog at once but fires "close" only at its next frame,
       // and until then focus stays on the hidden content when there is no

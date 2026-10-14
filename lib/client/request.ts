@@ -6,7 +6,9 @@ export class ApiRequestError extends Error {
     readonly status: number,
     readonly code: string,
     message: string,
-    readonly requestId?: string
+    readonly requestId?: string,
+    /** Per-field validation messages from the error envelope, if any. */
+    readonly details?: { path: string; message: string }[]
   ) {
     super(message);
     this.name = "ApiRequestError";
@@ -68,7 +70,8 @@ async function send<T>(
       response.status,
       error?.code ?? "unknown_error",
       error?.message ?? "Something went wrong. Try again.",
-      error?.requestId
+      error?.requestId,
+      error?.details
     );
   }
   return { body: body as T, headers: response.headers };

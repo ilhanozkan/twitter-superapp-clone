@@ -93,4 +93,22 @@ describe("Dialog", () => {
     expect(screen.queryByLabelText("Tweet text")).toBeNull();
     expect(dialog.contains(document.activeElement)).toBe(false);
   });
+
+  it("ignores the close of a dialog nested inside it", () => {
+    const outerClose = vi.fn();
+    const innerClose = vi.fn();
+    renderWithStore(
+      <Dialog open onClose={outerClose} title="Compose Tweet">
+        <Dialog open onClose={innerClose} title="Attach a product">
+          <p>Products</p>
+        </Dialog>
+      </Dialog>
+    );
+    const inner = screen.getByRole("dialog", { name: "Attach a product" });
+    inner.dispatchEvent(new Event("close"));
+    inner.dispatchEvent(new Event("cancel"));
+
+    expect(innerClose).toHaveBeenCalledTimes(2);
+    expect(outerClose).not.toHaveBeenCalled();
+  });
 });

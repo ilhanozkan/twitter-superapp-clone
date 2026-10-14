@@ -56,6 +56,25 @@ describe("request", () => {
     });
   });
 
+  it("keeps the envelope's per-field details", async () => {
+    const details = [{ path: "productId", message: "Sold out" }];
+    fetchSequence(
+      ok(
+        {
+          error: {
+            code: "unavailable",
+            message: "Some items are unavailable",
+            requestId: "r2",
+            details,
+          },
+        },
+        422
+      )
+    );
+    const error = await request("/api/x").catch((reason) => reason);
+    expect(error).toMatchObject({ status: 422, code: "unavailable", details });
+  });
+
   it("returns the response headers with withHeaders", async () => {
     fetchSequence(ok({ a: 1 }, 201, { "Idempotent-Replayed": "true" }));
     const { body, headers } = await request<{ a: number }>("/api/x", {
