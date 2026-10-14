@@ -27,13 +27,14 @@ data and endpoints are described in the [channels API](../api/channels.md).
   Mentions, hashtags and links work as in Tweets.
 - **Join to send messages** replaces the composer until you join. Joining
   moves focus to the composer; leaving moves it back to Join.
-- **Channel info** opens the name, description and member count, then the
-  **Owner**, **Moderators** and **Members**. The owner gets **Make
+- **Channel info** opens the name, #handle, description and member count,
+  then the **Owner**, **Moderators** and **Members**. The owner gets **Make
   moderator** and **Remove moderator** next to each person.
-- **Deleting:** the "…" next to a message has **Delete message** when you
-  may: on your own messages, and on everyone's for owners and moderators. A
-  confirmation says what everyone will see instead: "Message deleted" (your
-  own) or "Message removed by a moderator".
+- **Deleting:** a **Delete message** button (a bin) sits next to each
+  message you may delete: your own, and everyone's for owners and
+  moderators. It is a button rather than a menu so it stays on screen at
+  any width. A confirmation says what everyone will see instead: "Message
+  deleted" (your own) or "Message removed by a moderator".
 - **No payments:** the composer has no credits menu, and the API refuses
   payments and requests in channels.
 
@@ -64,7 +65,7 @@ once every 5 s. Channels don't count towards the Messages badge.
 | Not a member           | "Join to send messages" and Join                                                                         |
 | A send or delete fails | Text: "Not sent · Retry". Delete: the confirmation stays open with the reason. Join and Leave: a toast   |
 | READ_ONLY              | Channels can be read. No Create, Join, Leave or delete; the composer is replaced by the read-only notice |
-| Channels off           | The Channels tab and Services tile are hidden; `/channels` pages are 404s                                |
+| Channels off           | The Channels tab and Services tile are hidden; `/channels` pages and every channel API are 404s          |
 
 ## Accessibility
 
@@ -77,8 +78,9 @@ once every 5 s. Channels don't count towards the Messages badge.
   #ankara_eats"); role buttons name the person ("Make moderator: Sarah
   Chen").
 - When the control you used goes away, focus moves to what replaced it:
-  the composer after joining, Join after leaving, the message list after a
-  deletion, and the person's new button after a role change.
+  the composer after joining in a channel, the card's link after joining
+  from a card, Join after leaving, the message list after a deletion, and
+  the person's new button after a role change.
 - The create form's errors are linked to their fields with
   `aria-describedby`, and focus moves to the first field to fix.
 
@@ -87,9 +89,9 @@ once every 5 s. Channels don't count towards the Messages badge.
 1. Open Messages → **Channels**, then **Discover**, and **Join**
    #ankara_eats.
 2. Open it and say something; then **Leave**: your message stays.
-3. In #superapp_builders you are a moderator: open the "…" on Marco's
-   off-topic message and choose **Delete message**. Everyone now sees
-   "Message removed by a moderator".
+3. In #superapp_builders you are a moderator: press **Delete message** next
+   to Marco's off-topic message and confirm. Everyone now sees "Message
+   removed by a moderator".
 4. **Create channel**, then open **Channel info**: you are its owner.
 5. As @superapp (`DEMO_USERNAME=superapp`), open #superapp_builders' info
    and make someone a moderator.
@@ -113,13 +115,14 @@ members.
 ## Tests
 
 - Components: `components/channels/*.test.ts(x)` (the join bar, the
-  moderator menu, the create dialog, the members drawer, the cards and the
+  Delete buttons, the create dialog, the members drawer, the cards and the
   slice).
 - Routes and pages: `test/routes/channels.test.ts`. Repositories:
   `lib/db/channels.contract.test.ts` (both stores, including concurrent
   creates and removals).
 - End to end: `e2e/channels.spec.ts` (Discover → join → post → leave, a
-  moderator's removal of `seed-msg-sab-04`, creating, focus mode, axe in
+  moderator's removal of `seed-msg-sab-04`, creating, focus mode, Delete
+  buttons, member counts and channel info kept on screen on phones, axe in
   both themes) and `e2e/channels.readonly.spec.ts`.
 
 How SuperApp features are built is in [docs/SUPERAPP.md](../SUPERAPP.md).

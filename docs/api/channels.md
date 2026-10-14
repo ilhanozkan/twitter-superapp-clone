@@ -5,7 +5,11 @@ Public group conversations. A channel is a conversation of the
 read it, members post in it, and its owner and moderators keep it tidy.
 Channels have no payments: those stay in direct messages.
 
-These endpoints belong to the `channels` feature. They follow the
+These endpoints belong to the `channels` feature, and so does a channel's
+conversation wherever the engine serves it: while channels are off
+(`DISABLED_FEATURES=channels`) `/api/conversations/channel-<handle>/messages`
+answers 404 "This feature is turned off" too (503 while unconfigured), so
+there is no way round the switch. They follow the
 [SuperApp conventions](../API.md#superapp-conventions): the acting user
 always comes from the server (bodies never name the owner, author or
 member; such fields are ignored), sends need an `Idempotency-Key`, and
@@ -136,7 +140,9 @@ response is the channel as the owner sees it.
 Posts a message, for members only. The body, the key and replays work like
 [a conversation's](messages.md#post-apiconversationsidmessages) (30 sends a
 minute per person, shared with direct messages). `storyId` isn't accepted
-here: story replies are direct messages.
+here, nor through `POST /api/conversations/channel-<handle>/messages`, which
+drops it so both routes make the same send: story replies are direct
+messages.
 
 | Status | `code`                   | When                                     |
 | ------ | ------------------------ | ---------------------------------------- |

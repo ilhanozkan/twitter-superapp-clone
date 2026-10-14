@@ -9,7 +9,7 @@ import { useAppSelector } from "../../store";
 import { featuresWith, renderWithStore } from "../../test/render";
 import { IChannel } from "../../types/Message";
 import ChannelList, { ChannelPane } from "./ChannelList";
-import { channel, viewer } from "./testFixtures";
+import { channel, fullText, viewer } from "./testFixtures";
 
 const api = vi.hoisted(() => ({ join: vi.fn() }));
 vi.mock("../../lib/client/channelsApi", () => ({ channelsApi: api }));
@@ -69,7 +69,14 @@ describe("ChannelList", () => {
     expect(within(list).getAllByRole("article")).toHaveLength(2);
 
     const mine = card("SuperApp builders");
-    expect(mine.textContent).toContain("#superapp_builders · 5 members");
+    // The count is its own part of the line, so on a phone it wraps below
+    // the handle instead of being cut off.
+    const line = within(mine).getByText(
+      fullText("#superapp_builders · 5 members")
+    );
+    expect(within(line).getByText(/5 members/).textContent).not.toContain(
+      "#superapp_builders"
+    );
     expect(within(mine).getByText("Moderator")).toBeTruthy();
     expect(within(mine).getByText("1 new message")).toBeTruthy();
     expect(
@@ -98,6 +105,10 @@ describe("ChannelList", () => {
     expect(api.join).toHaveBeenCalledWith("ankara_eats");
     await waitFor(() =>
       expect(within(card("Ankara eats")).getByText("Joined")).toBeTruthy()
+    );
+    // The button is gone: focus moves to the card's link, not the page.
+    expect(document.activeElement).toBe(
+      within(card("Ankara eats")).getByRole("link", { name: "Ankara eats" })
     );
     expect(card("Ankara eats").textContent).toContain("5 members");
     // It is one of yours now.

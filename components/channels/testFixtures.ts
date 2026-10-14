@@ -21,6 +21,16 @@ export const owner: IAuthor = {
 
 export const HANDLE = "ankara_eats";
 
+/**
+ * A getByText matcher for text split across child elements (getByText
+ * alone reads an element's own text nodes): the innermost element whose
+ * whole text is `text`.
+ */
+export const fullText =
+  (text: string) => (_content: string, element: Element | null) =>
+    element?.textContent === text &&
+    ![...element.children].some((child) => child.textContent === text);
+
 export function channel(
   role: ChannelRole | null,
   overrides: Partial<IChannel> = {}

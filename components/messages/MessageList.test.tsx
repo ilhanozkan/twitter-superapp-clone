@@ -342,6 +342,30 @@ describe("MessageList", () => {
     expect(announcer()).toBe("");
   });
 
+  it("offers a message's actions as labelled buttons beside it", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    renderWithStore(
+      <MessageList
+        {...props({
+          actionsFor: (m) =>
+            m.id === "m1"
+              ? [{ label: "Delete message", icon: <span />, onSelect }]
+              : [],
+        })}
+      />
+    );
+    const [remove, ...others] = within(log()).getAllByRole("button", {
+      name: "Delete message",
+    });
+    expect(others).toEqual([]);
+    expect(remove.closest("li")!.textContent).toContain("Coffee?");
+    // Acting straight away: no popup menu to place beside the bubble.
+    expect(remove.hasAttribute("aria-haspopup")).toBe(false);
+    await user.click(remove);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+  });
+
   it("doesn't announce the viewer's own messages", async () => {
     vi.useFakeTimers({ now: Date.parse(at("12:00")) });
     const { rerender } = renderWithStore(<MessageList {...props()} />);

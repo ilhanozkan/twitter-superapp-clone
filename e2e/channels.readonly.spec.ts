@@ -34,7 +34,7 @@ test("channels can be read, with no Join, Create or composer", async ({
     0
   );
   await expect(
-    chat.getByRole("button", { name: "Message options" })
+    chat.getByRole("button", { name: "Delete message" })
   ).toHaveCount(0);
   await page.waitForLoadState("networkidle");
   expect(problems).toEqual([]);

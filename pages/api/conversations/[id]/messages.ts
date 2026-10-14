@@ -5,6 +5,7 @@ import {
   sendMoneyResult,
 } from "../../../../lib/api/idempotency";
 import {
+  assertConversationOn,
   conversationKey,
   messageBody,
   messagesQuery,
@@ -12,6 +13,7 @@ import {
 import { parseBody, parseQuery } from "../../../../lib/api/validation";
 import { getCurrentUser, getCurrentUsername } from "../../../../lib/auth";
 import { getRepository } from "../../../../lib/db";
+import { isChannelConversationId } from "../../../../lib/superapp/messages";
 import {
   MessagePageResponse,
   MessageResponse,
@@ -25,6 +27,7 @@ export default createHandler(
     // oldest to newest. Polls pass the last page's `newestCursor` as `after`.
     async GET(req, res) {
       const id = conversationKey(req);
+      assertConversationOn(id);
       const query = parseQuery(req, messagesQuery);
       const page: MessagePageResponse =
         await getRepository().messages.listMessages(
@@ -41,9 +44,14 @@ export default createHandler(
     // an Idempotency-Key, so a retried send never posts twice.
     async POST(req, res) {
       const id = conversationKey(req);
+      assertConversationOn(id);
       const body = parseBody(req, messageBody);
       const tweetId = body.tweetId ?? null;
-      const storyId = body.storyId ?? null;
+      // Story replies are direct messages: a channel drops `storyId`, as
+      // its own route does, so both routes make the same send.
+      const storyId = isChannelConversationId(id)
+        ? null
+        : (body.storyId ?? null);
       const key = parseIdempotency(req, {
         scope: "messages.send",
         prefix: "msg",

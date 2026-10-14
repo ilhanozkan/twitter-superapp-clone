@@ -10,6 +10,7 @@ import {
   channel,
   channelMessage,
   channelPageState,
+  fullText,
   HANDLE,
   marco,
   page,
@@ -72,11 +73,11 @@ function renderView({
 }
 
 const log = () => screen.getByRole("log", { name: `Messages in #${HANDLE}` });
-const optionsFor = (text: string) =>
+const deleteFor = (text: string) =>
   within(log())
     .getByText(text)
     .closest("li")!
-    .querySelector<HTMLButtonElement>('button[aria-label="Message options"]');
+    .querySelector<HTMLButtonElement>('button[aria-label="Delete message"]');
 
 describe("ChannelView", () => {
   it("shows the channel, its size and every other person's name once per run", () => {
@@ -84,7 +85,7 @@ describe("ChannelView", () => {
     expect(
       screen.getByRole("heading", { level: 1, name: `#${HANDLE}` })
     ).toBeTruthy();
-    expect(screen.getByText("Ankara eats · 4 members")).toBeTruthy();
+    expect(screen.getByText(fullText("Ankara eats · 4 members"))).toBeTruthy();
 
     // Sarah's two messages are one run: her name shows once; yours none.
     expect(within(log()).getAllByText("Sarah Chen")).toHaveLength(1);
@@ -104,7 +105,7 @@ describe("ChannelView", () => {
         screen.getAllByRole("button", { name: `Join #${HANDLE}` })
       ).toHaveLength(2);
       expect(screen.queryByRole("button", { name: /^Leave/ })).toBeNull();
-      expect(optionsFor("Lunch at Ulus?")).toBeNull();
+      expect(deleteFor("Lunch at Ulus?")).toBeNull();
     });
 
     it("joins, then the composer takes the bar's place and focus", async () => {
@@ -125,7 +126,9 @@ describe("ChannelView", () => {
       });
       await waitFor(() => expect(document.activeElement).toBe(composer));
       expect(screen.queryByText("Join to send messages")).toBeNull();
-      expect(screen.getByText("Ankara eats · 5 members")).toBeTruthy();
+      expect(
+        screen.getByText(fullText("Ankara eats · 5 members"))
+      ).toBeTruthy();
     });
 
     it("keeps the bar and says why when joining fails", async () => {
@@ -176,8 +179,8 @@ describe("ChannelView", () => {
 
     it("lets members delete only their own messages", () => {
       renderView({ role: "member" });
-      expect(optionsFor("Lunch at Ulus?")).toBeNull();
-      expect(optionsFor("Me too")).toBeTruthy();
+      expect(deleteFor("Lunch at Ulus?")).toBeNull();
+      expect(deleteFor("Me too")).toBeTruthy();
       expect(
         screen.getByRole("button", { name: `Leave #${HANDLE}` })
       ).toBeTruthy();
@@ -211,12 +214,11 @@ describe("ChannelView", () => {
       api.removeMessage.mockResolvedValue(undefined);
 
       for (const text of ["Lunch at Ulus?", "In!", "Me too"]) {
-        expect(optionsFor(text), text).toBeTruthy();
+        expect(deleteFor(text), text).toBeTruthy();
       }
-      await user.click(optionsFor("In!")!);
-      await user.click(
-        screen.getByRole("menuitem", { name: "Delete message" })
-      );
+      // A button beside the message (no popup to place), straight to the prompt.
+      expect(deleteFor("In!")!.hasAttribute("aria-haspopup")).toBe(false);
+      await user.click(deleteFor("In!")!);
 
       const dialog = screen.getByRole("dialog", { name: "Delete message?" });
       expect(dialog.textContent).toContain(
@@ -229,7 +231,7 @@ describe("ChannelView", () => {
         await within(log()).findByText("Message removed by a moderator")
       ).toBeTruthy();
       expect(within(log()).queryByText("In!")).toBeNull();
-      // Its menu went with it: focus stays in the log.
+      // Its button went with it: focus stays in the log.
       await waitFor(() => expect(document.activeElement).toBe(log()));
     });
 
@@ -237,10 +239,7 @@ describe("ChannelView", () => {
       const user = userEvent.setup();
       renderView({ role: "moderator" });
       api.removeMessage.mockResolvedValue(undefined);
-      await user.click(optionsFor("Me too")!);
-      await user.click(
-        screen.getByRole("menuitem", { name: "Delete message" })
-      );
+      await user.click(deleteFor("Me too")!);
       const dialog = screen.getByRole("dialog", { name: "Delete message?" });
       expect(dialog.textContent).toContain("“Message deleted” in its place");
       await user.click(within(dialog).getByRole("button", { name: "Delete" }));
@@ -251,10 +250,7 @@ describe("ChannelView", () => {
       const user = userEvent.setup();
       renderView({ role: "owner" });
       api.removeMessage.mockRejectedValue(new Error("Something went wrong"));
-      await user.click(optionsFor("Lunch at Ulus?")!);
-      await user.click(
-        screen.getByRole("menuitem", { name: "Delete message" })
-      );
+      await user.click(deleteFor("Lunch at Ulus?")!);
       const dialog = screen.getByRole("dialog", { name: "Delete message?" });
       await user.click(within(dialog).getByRole("button", { name: "Delete" }));
       expect((await within(dialog).findByRole("alert")).textContent).toBe(
@@ -277,7 +273,7 @@ describe("ChannelView", () => {
         within(log()).getByText("Message removed by a moderator")
       ).toBeTruthy();
       expect(
-        within(log()).queryByRole("button", { name: "Message options" })
+        within(log()).queryByRole("button", { name: "Delete message" })
       ).toBeNull();
     });
   });
@@ -290,7 +286,7 @@ describe("ChannelView", () => {
     expect(screen.queryByRole("textbox")).toBeNull();
     expect(screen.queryByRole("button", { name: /^(Join|Leave)/ })).toBeNull();
     expect(
-      within(log()).queryByRole("button", { name: "Message options" })
+      within(log()).queryByRole("button", { name: "Delete message" })
     ).toBeNull();
   });
 

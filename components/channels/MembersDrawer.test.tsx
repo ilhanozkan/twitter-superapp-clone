@@ -45,7 +45,10 @@ const section = (title: string) =>
 describe("MembersDrawer", () => {
   it("lists the owner, moderators and members", async () => {
     renderDrawer(null);
-    const dialog = screen.getByRole("dialog", { name: "#ankara_eats" });
+    // Named like the button that opens it; the handle (which can't wrap
+    // as a title) is in the content.
+    const dialog = screen.getByRole("dialog", { name: "Channel info" });
+    expect(within(dialog).getByText("#ankara_eats")).toBeTruthy();
     expect(dialog.textContent).toContain("Favourite spots around Ankara.");
     expect(dialog.textContent).toContain("4 members");
 

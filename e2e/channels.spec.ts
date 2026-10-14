@@ -1,4 +1,10 @@
-import { APIRequestContext, expect, Page, test } from "@playwright/test";
+import {
+  APIRequestContext,
+  expect,
+  Locator,
+  Page,
+  test,
+} from "@playwright/test";
 
 import {
   expectNoHorizontalScroll,
@@ -24,6 +30,43 @@ test.beforeEach(async ({ request }) => {
 
 const log = (page: Page, handle: string) =>
   page.getByRole("log", { name: `Messages in #${handle}` });
+
+/** A message of the log, by part of its text. */
+const messageRow = (page: Page, handle: string, text: string) =>
+  log(page, handle).getByRole("listitem").filter({ hasText: text });
+
+/**
+ * Fully on screen once scrolled to, without the page scrolling sideways
+ * (which `overflow-x: hidden` would otherwise allow a script to do).
+ */
+async function expectFullyInView(target: Locator, label: string) {
+  await target.scrollIntoViewIfNeeded();
+  await expect(target, label).toBeInViewport({ ratio: 1 });
+  expect(await target.page().evaluate(() => window.scrollX), label).toBe(0);
+}
+
+/**
+ * The part of `line`'s text matching `pattern` is drawn inside the line's
+ * box: not cut off by an ellipsis or by a neighbour squeezing the line.
+ */
+async function expectTextShown(line: Locator, pattern: RegExp, label: string) {
+  const overflow = await line.evaluate((element, source) => {
+    const wanted = new RegExp(source);
+    const box = element.getBoundingClientRect();
+    const walker = document.createTreeWalker(element, NodeFilter.SHOW_TEXT);
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      const match = wanted.exec(node.textContent ?? "");
+      if (!match) continue;
+      const range = document.createRange();
+      range.setStart(node, match.index);
+      range.setEnd(node, match.index + match[0].length);
+      const text = range.getBoundingClientRect();
+      return Math.max(text.right - box.right, box.left - text.left);
+    }
+    return Number.POSITIVE_INFINITY;
+  }, pattern.source);
+  expect(overflow, label).toBeLessThanOrEqual(0.5);
+}
 
 /** The demo user's role in a channel (null: not a member). */
 async function roleIn(request: APIRequestContext, handle: string) {
@@ -92,6 +135,8 @@ test("Discover → join #ankara_eats → post → leave", async ({
 
   await card.getByRole("button", { name: `Join #${EATS}` }).click();
   await expect(card.getByText("Joined")).toBeVisible();
+  // The button went: focus moves to the card's link rather than the page.
+  await expect(card.getByRole("link", { name: "Ankara eats" })).toBeFocused();
   await expect(card).toContainText(`${before + 1} members`);
   expect(await roleIn(request, EATS)).toBe("member");
 
@@ -141,8 +186,7 @@ test("as a moderator, remove seed-msg-sab-04 in #superapp_builders", async ({
     .getByRole("listitem")
     .filter({ hasText: "who wants my old mechanical keyboard" });
   await expect(row).toContainText("Marco Rossi");
-  await row.getByRole("button", { name: "Message options" }).click();
-  await page.getByRole("menuitem", { name: "Delete message" }).click();
+  await row.getByRole("button", { name: "Delete message" }).click();
 
   const dialog = page.getByRole("dialog", { name: "Delete message?" });
   await expect(dialog).toContainText("Message removed by a moderator");
@@ -189,7 +233,8 @@ test("create a channel and own it", async ({ page, request }) => {
   await expect(page.getByRole("button", { name: /^Leave/ })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Channel info" }).click();
-  const info = page.getByRole("dialog", { name: `#${handle}` });
+  const info = page.getByRole("dialog", { name: "Channel info" });
+  await expect(info).toContainText(`#${handle}`);
   await expect(
     info.getByRole("heading", { name: "Owner" }).locator("..")
   ).toContainText("Ilhan Ozkan");
@@ -223,6 +268,98 @@ test.describe("layout", () => {
     await page.getByRole("link", { name: "Back to Channels" }).click();
     await expect(page).toHaveURL(/\/channels$/);
     await expect(tabs).toBeVisible();
+  });
+
+  test("Delete message stays on screen, beside short and long messages", async ({
+    page,
+  }) => {
+    expect(await roleIn(page.request, BUILDERS)).toBe("moderator");
+    for (const width of [360, 390, 768, 1280]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(channelPath(BUILDERS));
+      for (const [whose, text] of [
+        ["yours", "Noted for the roadmap"],
+        ["someone else's", "Welcome, builders"],
+      ]) {
+        const label = `${whose} at ${width}px`;
+        const remove = messageRow(page, BUILDERS, text).getByRole("button", {
+          name: "Delete message",
+        });
+        await expectFullyInView(remove, label);
+        const box = (await remove.boundingBox())!;
+        expect(Math.min(box.width, box.height), label).toBeGreaterThanOrEqual(
+          32
+        );
+      }
+    }
+    // It asks first.
+    await messageRow(page, BUILDERS, "Welcome, builders")
+      .getByRole("button", { name: "Delete message" })
+      .click();
+    const dialog = page.getByRole("dialog", { name: "Delete message?" });
+    await expect(dialog.getByRole("button", { name: "Delete" })).toBeFocused();
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(
+      messageRow(page, BUILDERS, "Welcome, builders").getByRole("button", {
+        name: "Delete message",
+      })
+    ).toBeFocused();
+  });
+
+  test("member counts stay in view on phones", async ({ page }) => {
+    for (const width of [360, 390]) {
+      await page.setViewportSize({ width, height: 844 });
+      await page.goto(channelPath(BUILDERS));
+      // A moderator's header also has Leave and Channel info.
+      await expectTextShown(
+        page.getByText(/^SuperApp builders · \d+ members?$/),
+        /\d+ members?/,
+        `header at ${width}px`
+      );
+
+      await page.goto("/channels?tab=discover");
+      // The card's line shares its width with the Moderator badge.
+      await expectTextShown(
+        page
+          .getByRole("region", { name: "Discover" })
+          .getByRole("article", { name: "SuperApp builders" })
+          .getByText(/^#superapp_builders · \d+ members?$/),
+        /\d+ members?/,
+        `card at ${width}px`
+      );
+    }
+  });
+
+  test("channel info fits a 30-character handle at 360", async ({
+    page,
+    request,
+  }) => {
+    const mine = await (await request.get("/api/channels?member=true")).json();
+    const owned = mine.items.filter(
+      (channel: { viewer: { role: string } }) => channel.viewer.role === "owner"
+    );
+    test.skip(
+      owned.length >= 3,
+      "The demo user owns 3 channels on this server"
+    );
+
+    // The longest handle there is, with no place to break it.
+    const handle = `wide_${Date.now().toString(36)}_`.padEnd(30, "x");
+    const created = await request.post("/api/channels", {
+      data: { handle, name: "Wide handle" },
+    });
+    expect(created.status()).toBe(201);
+
+    await page.setViewportSize({ width: 360, height: 800 });
+    await page.goto(channelPath(handle));
+    await page.getByRole("button", { name: "Channel info" }).click();
+    const info = page.getByRole("dialog", { name: "Channel info" });
+    await expect(info.getByText(`#${handle}`)).toBeVisible();
+    const overflow = await info.evaluate(
+      (dialog) => dialog.scrollWidth - dialog.clientWidth
+    );
+    expect(overflow).toBeLessThanOrEqual(0);
   });
 
   test("two panes at 1280: your channels beside the open one", async ({
@@ -270,14 +407,16 @@ test.describe("accessibility (axe)", () => {
         await expectNoSeriousViolations(page);
       }
 
-      // The moderator's menu and the members drawer.
+      // The moderator's Delete prompt and the members drawer.
       await page.goto(channelPath(BUILDERS));
       await log(page, BUILDERS)
-        .getByRole("button", { name: "Message options" })
+        .getByRole("button", { name: "Delete message" })
         .first()
         .click();
       await expect(
-        page.getByRole("menuitem", { name: "Delete message" })
+        page
+          .getByRole("dialog", { name: "Delete message?" })
+          .getByRole("button", { name: "Delete" })
       ).toBeFocused();
       await expectNoSeriousViolations(page);
       await page.keyboard.press("Escape");
@@ -285,7 +424,7 @@ test.describe("accessibility (axe)", () => {
       await page.getByRole("button", { name: "Channel info" }).click();
       await expect(
         page
-          .getByRole("dialog", { name: `#${BUILDERS}` })
+          .getByRole("dialog", { name: "Channel info" })
           .getByRole("heading", { name: "Members" })
       ).toBeVisible();
       await expectNoSeriousViolations(page);

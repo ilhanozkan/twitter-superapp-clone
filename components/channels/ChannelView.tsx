@@ -19,9 +19,8 @@ import { useAppDispatch, useAppSelector } from "../../store";
 import { IMessage } from "../../types/Message";
 import { Button } from "../common/Button";
 import Dialog from "../common/Dialog";
-import { MenuItem } from "../common/Menu";
 import ChatComposer from "../messages/ChatComposer";
-import MessageList from "../messages/MessageList";
+import MessageList, { MessageAction } from "../messages/MessageList";
 import { isMine } from "../messages/messageText";
 import { useMarkRead } from "../messages/useMarkRead";
 import Notice from "../superapp/Notice";
@@ -150,11 +149,11 @@ export default function ChannelView({ handle }: { handle: string }) {
   useMarkRead(readable, !readOnly && role !== null, markChannelRead);
 
   // Joining swaps the Join buttons for the composer, leaving does the
-  // reverse, and deleting takes the message's menu away: move focus to
-  // what took their place. It may already be on screen when asked for, or
-  // only after the next render (or once the confirm dialog has closed, as
-  // nothing outside a modal dialog can take focus), so it is tried now and
-  // after every render until it lands.
+  // reverse, and deleting takes the message's Delete button away: move
+  // focus to what took their place. It may already be on screen when asked
+  // for, or only after the next render (or once the confirm dialog has
+  // closed, as nothing outside a modal dialog can take focus), so it is
+  // tried now and after every render until it lands.
   const moveFocus = () => {
     const wanted = focusTarget.current;
     const root = section.current;
@@ -187,14 +186,12 @@ export default function ChannelView({ handle }: { handle: string }) {
   };
   const retry = (item: OutgoingMessage) => send(item.text, item.key);
 
-  const actionsFor = (message: IMessage): MenuItem[] => {
+  const actionsFor = (message: IMessage): MessageAction[] => {
     if (readOnly || message.body.type === "removed") return [];
     const by = removalBy(role, isMine(message.author, viewer.username));
     return by
       ? [
           {
-            // Not `danger`: the shared menu's red text on its focused
-            // background is under 4.5:1. The confirm dialog warns instead.
             label: "Delete message",
             icon: <HiOutlineTrash />,
             onSelect: () => setRemoval({ message, by }),

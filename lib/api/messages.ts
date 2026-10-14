@@ -7,9 +7,11 @@ import { FEATURE_LABELS } from "../superapp/features";
 import { LIMITS } from "../superapp/limits";
 import {
   CHANNEL_HANDLE_PATTERN,
+  isChannelConversationId,
   parseChannelHandle,
 } from "../superapp/messages";
 import { IChannel, IConversation } from "../../types/Message";
+import { FeatureId } from "../../types/Superapp";
 import { ApiError, notFound } from "./errors";
 import {
   cents,
@@ -60,21 +62,39 @@ export const chatMoneyBody = z.object({
 });
 
 /**
+ * A second feature's switch, checked inside a route (createHandler takes
+ * one): 404 while it is off, 503 while it is unconfigured, as createHandler
+ * answers for its own.
+ */
+function assertFeatureOn(feature: FeatureId) {
+  const status = getRepository().featureStatus(feature);
+  if (status === "off") throw notFound("This feature is turned off");
+  if (status === "unconfigured") {
+    throw new ApiError(
+      503,
+      "service_unavailable",
+      `${FEATURE_LABELS[feature]} needs SANITY_API_TOKEN on this deployment`
+    );
+  }
+}
+
+/**
  * Chat payments and requests move the wallet's credits, so they follow the
  * wallet's switch too, not only the messages one: while the wallet is off
  * (DISABLED_FEATURES=wallet) or unconfigured they answer the way
  * createHandler does for a feature (404, or 503).
  */
 export function assertWalletOn() {
-  const status = getRepository().featureStatus("wallet");
-  if (status === "off") throw notFound("This feature is turned off");
-  if (status === "unconfigured") {
-    throw new ApiError(
-      503,
-      "service_unavailable",
-      `${FEATURE_LABELS.wallet} needs SANITY_API_TOKEN on this deployment`
-    );
-  }
+  assertFeatureOn("wallet");
+}
+
+/**
+ * The engine serves a channel's conversation (`channel-<handle>`) under
+ * /api/conversations/:id too, so there it follows the channels switch as
+ * well: DISABLED_FEATURES=channels has to close every way in.
+ */
+export function assertConversationOn(id: string) {
+  if (isChannelConversationId(id)) assertFeatureOn("channels");
 }
 
 /** `?before=` (older) or `?after=` (newer) a cursor, and `limit` ≤ 50. */

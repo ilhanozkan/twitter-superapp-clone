@@ -19,6 +19,7 @@ const ROUTES = {
   messages: "pages/api/channels/[handle]/messages/index",
   message: "pages/api/channels/[handle]/messages/[messageId]",
   read: "pages/api/channels/[handle]/read",
+  conversationMessages: "pages/api/conversations/[id]/messages",
   payments: "pages/api/conversations/[id]/payments",
   requests: "pages/api/conversations/[id]/requests",
   me: "pages/api/me",
@@ -29,6 +30,8 @@ let api: Record<keyof typeof ROUTES, Handler>;
 
 const BUILDERS = "superapp_builders";
 const EATS = "ankara_eats";
+/** #superapp_builders's conversation, which /api/conversations/** serves too. */
+const BUILDERS_ID = "channel-superapp_builders";
 
 let keyCount = 0;
 const newKey = () => `channel-key-${String(++keyCount).padStart(6, "0")}`;
@@ -59,6 +62,16 @@ const post = (
   });
 const page = (handle: string, query: Record<string, string> = {}) =>
   call(api.messages, { query: { handle, ...query } });
+/** A keyed send through /api/conversations/:id/messages. */
+const conversationSend = (
+  id: string,
+  body: unknown,
+  key = newKey()
+): MockRequest => ({
+  method: "POST",
+  query: { id },
+  ...json(body, { "idempotency-key": key }),
+});
 const remove = (handle: string, messageId: string) =>
   call(api.message, { method: "DELETE", query: { handle, messageId } });
 const setRole = (handle: string, username: string, role: unknown) =>
@@ -373,6 +386,33 @@ describe("channel messages", () => {
     expect((await page(EATS)).body.items.at(-1).id).toBe(sent.body.message.id);
   });
 
+  it("drops storyId through /api/conversations/channel-<handle>/messages too, as the same send", async () => {
+    const key = newKey();
+    const sent = await call(
+      api.conversationMessages,
+      conversationSend(
+        BUILDERS_ID,
+        { text: "Via the conversation route", storyId: "seed-story01" },
+        key
+      )
+    );
+    expect(sent.statusCode).toBe(201);
+    expect(sent.body.message).toMatchObject({
+      conversationId: BUILDERS_ID,
+      body: { type: "text", text: "Via the conversation route", story: null },
+    });
+
+    // The channel route's send with that key is the same operation.
+    const again = await post(
+      BUILDERS,
+      { text: "Via the conversation route" },
+      key
+    );
+    expect(again.statusCode).toBe(201);
+    expect(again.headers["idempotent-replayed"]).toBe("true");
+    expect(again.body.message.id).toBe(sent.body.message.id);
+  });
+
   it("validates sends and pages, and 404s unknown channels", async () => {
     await join(EATS);
     expectInvalid(await post(EATS, { text: "" }), "text");
@@ -586,15 +626,64 @@ describe("feature gating", () => {
       ["GET members", api.members, { query: { handle: BUILDERS } }],
       ["GET messages", api.messages, { query: { handle: BUILDERS } }],
     ];
-    for (const [name, handler, request] of [...reads, ...writes()]) {
+    // The messages engine serves channel ids too: they follow this switch.
+    const viaConversations: [string, Handler, MockRequest][] = [
+      [
+        "GET conversation messages",
+        api.conversationMessages,
+        { query: { id: BUILDERS_ID } },
+      ],
+      [
+        "POST conversation messages",
+        api.conversationMessages,
+        conversationSend(BUILDERS_ID, {
+          text: "Posted while channels are off",
+        }),
+      ],
+    ];
+    const stored = () =>
+      [...state().messages.messages.values()].filter(
+        (message) => message.conversationId === BUILDERS_ID
+      ).length;
+    const before = stored();
+    for (const [name, handler, request] of [
+      ...reads,
+      ...writes(),
+      ...viaConversations,
+    ]) {
       const res = await call(handler, request);
       expectError(res, 404, "not_found", name);
       expect(res.body.error.message, name).toBe("This feature is turned off");
     }
+    expect(stored()).toBe(before);
     expect((await call(api.me)).body.features).toMatchObject({
       channels: false,
       messages: true,
     });
+    // Direct messages stay on.
+    const direct = await call(api.conversationMessages, {
+      query: { id: "dm-illlhanozkan-sarahcodes" },
+    });
+    expect(direct.statusCode).toBe(200);
+  });
+
+  it("answers 503 through /api/conversations while channels are unconfigured", async () => {
+    const { getRepository } = await import("../../lib/db");
+    const repo = getRepository();
+    const statusOf = repo.featureStatus.bind(repo);
+    vi.spyOn(repo, "featureStatus").mockImplementation((id) =>
+      id === "channels" ? "unconfigured" : statusOf(id)
+    );
+    for (const [name, request] of [
+      ["GET", { query: { id: BUILDERS_ID } }],
+      ["POST", conversationSend(BUILDERS_ID, { text: "Hi" })],
+    ] as [string, MockRequest][]) {
+      const res = await call(api.conversationMessages, request);
+      expectError(res, 503, "service_unavailable", name);
+      expect(res.body.error.message, name).toBe(
+        "Channels needs SANITY_API_TOKEN on this deployment"
+      );
+    }
   });
 
   it("answers 503 while the data source can't serve channels", async () => {

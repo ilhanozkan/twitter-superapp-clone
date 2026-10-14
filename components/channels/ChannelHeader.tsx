@@ -96,8 +96,13 @@ export default function ChannelHeader({
           >
             #{channel.handle}
           </h1>
-          <p className="truncate text-[13px] text-muted">
-            {channel.name} · {pluralize(channel.memberCount, "member")}
+          {/* A long name gives way to the count, which always shows. */}
+          <p className="flex text-[13px] text-muted">
+            <span className="min-w-0 truncate">{channel.name}</span>
+            <span className="shrink-0 whitespace-pre">
+              {" · "}
+              {pluralize(channel.memberCount, "member")}
+            </span>
           </p>
         </div>
         {!readOnly &&

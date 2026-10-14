@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { ReactNode, useId } from "react";
+import { ReactNode, useId, useRef } from "react";
 import { HiCheck } from "react-icons/hi2";
 
 import { pluralize } from "../../lib/format";
@@ -23,11 +23,19 @@ export function ChannelMark({ size = 48 }: { size?: number }) {
 }
 
 /** What a channel's card says about the viewer: Owner, Moderator, Joined, or a Join button. */
-function Membership({ channel }: { channel: IChannel }) {
+function Membership({
+  channel,
+  onJoined,
+}: {
+  channel: IChannel;
+  onJoined: () => void;
+}) {
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const { role } = channel.viewer;
   if (!role)
-    return readOnly ? null : <JoinButton channel={channel} size="sm" />;
+    return readOnly ? null : (
+      <JoinButton channel={channel} size="sm" onJoined={onJoined} />
+    );
   return (
     <span className="flex items-center gap-1 rounded-full border border-line px-3 py-1 text-[13px] font-bold">
       {role === "member" && <HiCheck aria-hidden="true" />}
@@ -42,6 +50,7 @@ function Membership({ channel }: { channel: IChannel }) {
 
 function ChannelCard({ channel }: { channel: IChannel }) {
   const titleId = useId();
+  const link = useRef<HTMLAnchorElement>(null);
   const { unread } = channel.viewer;
   return (
     <li className="border-b border-line">
@@ -54,14 +63,23 @@ function ChannelCard({ channel }: { channel: IChannel }) {
           <h2 id={titleId} className="text-[15px] font-bold">
             {/* The whole card opens the channel; the Join button sits above. */}
             <Link
+              ref={link}
               href={channelPath(channel.handle)}
               className="outline-offset-[-2px] [overflow-wrap:anywhere] after:absolute after:inset-0 hover:underline"
             >
               {channel.name}
             </Link>
           </h2>
-          <p className="truncate text-[15px] text-muted">
-            #{channel.handle} · {pluralize(channel.memberCount, "member")}
+          {/* Squeezed by the badge on a phone, the count wraps below the
+              handle rather than being cut off. */}
+          <p className="flex flex-wrap text-[15px] text-muted">
+            <span className="flex min-w-0">
+              <span className="truncate">#{channel.handle}</span>
+              <span className="shrink-0 whitespace-pre"> · </span>
+            </span>
+            <span className="whitespace-nowrap">
+              {pluralize(channel.memberCount, "member")}
+            </span>
           </p>
           {channel.description && (
             <p className="mt-1 text-[15px] [overflow-wrap:anywhere]">
@@ -70,7 +88,11 @@ function ChannelCard({ channel }: { channel: IChannel }) {
           )}
         </div>
         <div className="relative flex shrink-0 flex-col items-end gap-2">
-          <Membership channel={channel} />
+          {/* Joining swaps the button for "Joined": focus goes to the link. */}
+          <Membership
+            channel={channel}
+            onJoined={() => link.current?.focus()}
+          />
           {unread > 0 && (
             <span className="flex items-center gap-1.5 text-[13px] font-bold">
               <span

@@ -556,9 +556,17 @@ describe.each(subjects())("%s channels", (name, create) => {
           () => () => repo.channels.removeMessage("seed-msg-ae-02", "moderator")
         )
       );
+      // None fails (a lost revision race is retried), and exactly one removes.
+      expect(results.map((result) => result.status)).toEqual([
+        "fulfilled",
+        "fulfilled",
+        "fulfilled",
+      ]);
       expect(
-        results.map((result) => result.status === "fulfilled" && result.value)
-      ).toEqual(expect.arrayContaining([true, false, false]));
+        results
+          .map((result) => (result as PromiseFulfilledResult<boolean>).value)
+          .sort()
+      ).toEqual([false, false, true]);
     });
 
     it("only finds and removes channel messages", async () => {

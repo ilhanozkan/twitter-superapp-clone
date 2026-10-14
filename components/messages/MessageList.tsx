@@ -1,5 +1,5 @@
 import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { HiArrowDown, HiEllipsisHorizontal } from "react-icons/hi2";
+import { HiArrowDown } from "react-icons/hi2";
 
 import { errorMessage } from "../../lib/client/api";
 import { compareOldestFirst } from "../../lib/superapp/messages";
@@ -8,7 +8,6 @@ import { IMessage } from "../../types/Message";
 import { IAuthor } from "../../types/User";
 import { PaymentRequestStatus } from "../../types/Wallet";
 import Avatar from "../common/Avatar";
-import Menu, { MenuItem } from "../common/Menu";
 import LocalTime from "../superapp/LocalTime";
 import { useHydrated } from "../superapp/useHydrated";
 import { groupByDay } from "./dayGroups";
@@ -16,6 +15,14 @@ import MessageBubble, { TextBubble } from "./MessageBubble";
 import { isMine, requestChangeText } from "./messageText";
 import { useBatchedAnnouncements } from "./useBatchedAnnouncements";
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
+
+/** Something the viewer can do to a message (a channel's Delete). */
+export interface MessageAction {
+  /** The button's accessible name and tooltip, e.g. "Delete message". */
+  label: string;
+  icon: ReactNode;
+  onSelect: () => void;
+}
 
 interface MessageListProps {
   /**
@@ -42,8 +49,12 @@ interface MessageListProps {
   onRetry: (item: OutgoingMessage) => void;
   /** Group chats: each run of messages by someone else starts with their name. */
   showAuthors?: boolean;
-  /** What the viewer can do to a message (a channel's Delete), in a "…" menu. */
-  actionsFor?: (message: IMessage) => MenuItem[];
+  /**
+   * What the viewer can do to a message, as icon buttons beside it. Not a
+   * popup menu: one placed beside a bubble at the edge of a phone's screen
+   * would open partly off it.
+   */
+  actionsFor?: (message: IMessage) => MessageAction[];
 }
 
 type Row =
@@ -367,7 +378,7 @@ function MessageRow({
   seen: boolean;
   /** Show the author above (the first of their run in a group chat). */
   named: boolean;
-  actions: MenuItem[];
+  actions: MessageAction[];
 }) {
   const mine = isMine(message.author, viewer);
   const bubble = <MessageBubble message={message} viewer={viewer} />;
@@ -395,15 +406,18 @@ function MessageRow({
           className={`flex max-w-full items-center gap-1 ${mine ? "flex-row-reverse" : ""}`}
         >
           <div className="min-w-0">{bubble}</div>
-          <Menu
-            label="Message options"
-            strategy="fixed"
-            placement="above"
-            align={mine ? "right" : "left"}
-            items={actions}
-            trigger={<HiEllipsisHorizontal aria-hidden="true" />}
-            triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-muted transition-colors hover:bg-primary/10 hover:text-primary"
-          />
+          {actions.map((action) => (
+            <button
+              key={action.label}
+              type="button"
+              aria-label={action.label}
+              title={action.label}
+              onClick={action.onSelect}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-muted transition-colors hover:bg-primary/10 hover:text-primary"
+            >
+              <span aria-hidden="true">{action.icon}</span>
+            </button>
+          ))}
         </div>
       ) : (
         bubble

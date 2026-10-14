@@ -76,7 +76,7 @@ interface MembersDrawerProps {
 }
 
 /**
- * The channel's info: its name and description, then its owner,
+ * The channel's info: its name, #handle and description, then its owner,
  * moderators and members. The owner can make members moderators (and
  * back). Read when opened.
  */
@@ -113,12 +113,15 @@ export default function MembersDrawer({
   const listed = items.length;
 
   return (
-    <Dialog open={open} onClose={onClose} title={`#${handle}`} variant="sheet">
+    // Titled like the button that opens it: a handle has no place to wrap,
+    // so it goes in the content, which can break it anywhere.
+    <Dialog open={open} onClose={onClose} title="Channel info" variant="sheet">
       <div className="flex flex-col gap-4 text-[15px]">
         <div>
           <p className="text-[20px] font-extrabold leading-6 [overflow-wrap:anywhere]">
             {channel.name}
           </p>
+          <p className="text-muted [overflow-wrap:anywhere]">#{handle}</p>
           {channel.description && (
             <p className="mt-1 [overflow-wrap:anywhere]">
               {channel.description}
