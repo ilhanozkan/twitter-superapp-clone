@@ -99,15 +99,44 @@ const cartSlice = createSlice({
       }
       if (state.lines.length === 0) state.business = null;
     },
+    /** A whole line goes, whatever its quantity (checkout's Remove on a sold-out item). */
+    lineRemoved(state, action: PayloadAction<string>) {
+      state.lines = state.lines.filter(
+        (item) => item.productId !== action.payload
+      );
+      if (state.lines.length === 0) state.business = null;
+    },
     cartCleared(state) {
       state.business = null;
       state.lines = [];
     },
+    /**
+     * The cart becomes these lines ("Order again" refills it from an
+     * order), within the cart's limits. The UI asks first when it holds
+     * another business's items.
+     */
+    cartReplaced(state, action: PayloadAction<StoredCart>) {
+      const lines = action.payload.lines
+        .filter((line) => line.quantity > 0)
+        .slice(0, CART_MAX_LINES)
+        .map((line) => ({
+          ...line,
+          quantity: Math.min(line.quantity, CART_MAX_QUANTITY),
+        }));
+      state.business = lines.length > 0 ? action.payload.business : null;
+      state.lines = lines;
+    },
   },
 });
 
-export const { cartRestored, itemAdded, itemRemoved, cartCleared } =
-  cartSlice.actions;
+export const {
+  cartRestored,
+  itemAdded,
+  itemRemoved,
+  lineRemoved,
+  cartCleared,
+  cartReplaced,
+} = cartSlice.actions;
 
 type WithCart = { cart: CartState };
 
@@ -191,7 +220,13 @@ function writeStoredCart({ business, lines }: StoredCart) {
 
 // Every change the viewer makes is saved; restoring only reads.
 startAppListening({
-  matcher: isAnyOf(itemAdded, itemRemoved, cartCleared),
+  matcher: isAnyOf(
+    itemAdded,
+    itemRemoved,
+    lineRemoved,
+    cartCleared,
+    cartReplaced
+  ),
   effect: (_action, api) => {
     if (typeof window !== "undefined") writeStoredCart(api.getState().cart);
   },

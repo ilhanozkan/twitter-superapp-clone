@@ -23,6 +23,7 @@ const PAGES: [string, string][] = [
   ["/food", "Food"],
   ["/kizilaykahve/menu", "Kızılay Kahve"],
   ["/business", "Business"],
+  ["/business?tab=menu", "Business"],
   ["/business?tab=settings", "Business"],
 ];
 
@@ -304,7 +305,8 @@ test.describe("the Business page", () => {
       .filter({ has: page.getByRole("heading", { name: "SuperApp mug" }) });
 
     try {
-      await page.goto("/business");
+      // Orders is the Business page's default tab once orders are on.
+      await page.goto("/business?tab=menu");
       const toggle = page.getByRole("switch", { name: "SuperApp mug" });
       await expect(toggle).toHaveAttribute("aria-checked", "true");
       const off = saved();
@@ -318,7 +320,7 @@ test.describe("the Business page", () => {
         mugOnMenu.getByText("Sold out", { exact: true }).first()
       ).toBeVisible();
 
-      await page.goto("/business");
+      await page.goto("/business?tab=menu");
       const on = saved();
       await toggle.click();
       expect((await on).status()).toBe(200);
@@ -505,6 +507,7 @@ test.describe("accessibility (axe)", () => {
     "/kizilaykahve/menu?product=seed-p-kk-latte",
     "/kizilaykahve/status/seed-t22",
     "/business",
+    "/business?tab=menu",
     "/business?tab=settings",
   ];
 
@@ -557,6 +560,7 @@ test.describe("responsive layout", () => {
         "/kizilaykahve/menu?product=seed-p-kk-latte",
         "/kizilaykahve/status/seed-t22",
         "/business",
+        "/business?tab=menu",
         "/business?tab=settings",
         "/services",
       ]) {

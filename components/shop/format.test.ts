@@ -8,7 +8,7 @@ import {
   feeText,
   shortStatus,
 } from "./format";
-import { businessPath, menuPath } from "./paths";
+import { businessPath, businessTab, menuPath } from "./paths";
 import { card, status } from "./testing";
 
 describe("shop wording", () => {
@@ -63,5 +63,30 @@ describe("shop paths", () => {
         defaultBusiness: "superapp",
       })
     ).toBe("/business?business=kizilaykahve&tab=settings");
+    // Orders is the default tab; Menu says so.
+    expect(
+      businessPath({
+        business: "superapp",
+        tab: "orders",
+        defaultBusiness: "superapp",
+      })
+    ).toBe("/business");
+    expect(
+      businessPath({
+        business: "superapp",
+        tab: "menu",
+        defaultBusiness: "superapp",
+      })
+    ).toBe("/business?tab=menu");
+  });
+
+  it("opens /business on Orders, or on Menu while orders are off", () => {
+    expect(businessTab(undefined, true)).toBe("orders");
+    expect(businessTab("orders", true)).toBe("orders");
+    expect(businessTab("menu", true)).toBe("menu");
+    expect(businessTab("settings", false)).toBe("settings");
+    expect(businessTab(undefined, false)).toBe("menu");
+    expect(businessTab("orders", false)).toBe("menu");
+    expect(businessTab(["menu", "settings"], true)).toBe("orders");
   });
 });

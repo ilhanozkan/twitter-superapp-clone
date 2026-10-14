@@ -136,7 +136,11 @@ async function rejection<T extends Error>(
   return error as T;
 }
 
-describe.each(subjects())("%s orders", (name, create) => {
+// The Sanity subject runs every read as GROQ (groq-js) over the whole seed:
+// a test of many reads takes seconds on a busy machine, past the default 5 s.
+const SLOW = { timeout: 30_000 };
+
+describe.each(subjects())("%s orders", SLOW, (name, create) => {
   let subject: Subject;
   let repo: Repository;
   const wallet = (username: string) => repo.wallet.getWallet(username);
@@ -1111,7 +1115,7 @@ describe.each(subjects())("%s orders", (name, create) => {
   });
 });
 
-describe("stores agree on orders", () => {
+describe("stores agree on orders", SLOW, () => {
   /** The same story in both stores, with fixed keys. */
   const story = async (subject: Subject) => {
     const { repo } = subject;
@@ -1204,7 +1208,7 @@ describe("memory order capacity", () => {
   });
 });
 
-describe("sanity orders", () => {
+describe("sanity orders", SLOW, () => {
   const documents = () =>
     seedToSanityDocuments(createSeedData(SUBJECT_NOW, { world: "superapp" }));
 

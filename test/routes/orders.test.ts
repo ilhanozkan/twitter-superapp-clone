@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MemoryState } from "../../lib/db/memory";
+import { startOfLocalDay } from "../../lib/superapp/orders";
 import { IOrder } from "../../types/Order";
 import { call, freshApi, json, MockRequest, MockResponse } from "../api";
 
@@ -556,13 +557,26 @@ describe("POST /api/businesses/:username/demo-orders", () => {
 
 describe("GET /api/businesses/:username/summary", () => {
   it("summarizes today's orders and the business's wallet for its managers", async () => {
+    // seed-o03 was placed 40 minutes ago: in the last hour whatever the
+    // time of day (it is yesterday's for the first 40 minutes of a day).
+    const lastHour = new Date(Date.now() - 3_600_000).toISOString();
+    expect(
+      (
+        await call(api.summary, {
+          query: { username: "superapp", since: lastHour },
+        })
+      ).body.summary.orders
+    ).toBeGreaterThanOrEqual(1);
+
     const before = (
       await call(api.summary, { query: { username: "superapp" } })
     ).body;
-    expect(before.summary.orders).toBeGreaterThanOrEqual(1);
     expect(before.wallet.username).toBe("superapp");
     expect(isRecent(before.serverNow)).toBe(true);
-    expect(Date.parse(before.since)).toBeLessThanOrEqual(Date.now());
+    // "Today" starts at midnight in the business's time zone.
+    expect(before.since).toBe(
+      startOfLocalDay(new Date(before.serverNow), "Europe/Istanbul")
+    );
 
     actAs("sarahcodes");
     await placed({

@@ -6,10 +6,12 @@ import cartReducer, {
   CART_MAX_QUANTITY,
   CART_STORAGE_KEY,
   cartCleared,
+  cartReplaced,
   cartRestored,
   CartState,
   itemAdded,
   itemRemoved,
+  lineRemoved,
   readStoredCart,
   selectCartCount,
   selectCartSubtotal,
@@ -103,6 +105,54 @@ describe("cart reducer", () => {
     expect(cartReducer(state, itemRemoved("nope"))).toEqual(empty);
   });
 
+  it("drops a whole line at once (checkout's Remove)", () => {
+    let state = reduce(
+      itemAdded({ business: kahve, product: latte }),
+      itemAdded({ business: kahve, product: latte }),
+      itemAdded({ business: kahve, product: simit })
+    );
+    state = cartReducer(state, lineRemoved(latte.id));
+    expect(state.lines.map((line) => line.productId)).toEqual([simit.id]);
+    expect(cartReducer(state, lineRemoved(simit.id))).toEqual(empty);
+  });
+
+  it("is replaced by an order's lines (Order again), within its limits", () => {
+    const state = cartReducer(
+      reduce(itemAdded({ business: lab, product: lahmacun })),
+      cartReplaced({
+        business: kahve,
+        lines: [
+          {
+            productId: latte.id,
+            name: latte.name,
+            unitPrice: 500,
+            quantity: 2,
+          },
+          {
+            productId: simit.id,
+            name: simit.name,
+            unitPrice: 250,
+            quantity: 99,
+          },
+          { productId: "gone", name: "Gone", unitPrice: 100, quantity: 0 },
+        ],
+      })
+    );
+    expect(state.business).toEqual(kahve);
+    expect(state.lines).toEqual([
+      { productId: latte.id, name: latte.name, unitPrice: 500, quantity: 2 },
+      {
+        productId: simit.id,
+        name: simit.name,
+        unitPrice: 250,
+        quantity: CART_MAX_QUANTITY,
+      },
+    ]);
+    expect(
+      cartReducer(state, cartReplaced({ business: kahve, lines: [] }))
+    ).toEqual(empty);
+  });
+
   it("clears and restores", () => {
     const state = reduce(itemAdded({ business: kahve, product: latte }));
     expect(cartReducer(state, cartCleared())).toEqual(empty);
@@ -138,6 +188,23 @@ describe("cart persistence", () => {
     });
 
     store.dispatch(itemRemoved(latte.id));
+    expect(window.localStorage.getItem(CART_STORAGE_KEY)).toBeNull();
+
+    store.dispatch(
+      cartReplaced({
+        business: lab,
+        lines: [
+          {
+            productId: lahmacun.id,
+            name: lahmacun.name,
+            unitPrice: 400,
+            quantity: 2,
+          },
+        ],
+      })
+    );
+    expect(readStoredCart()?.business).toEqual(lab);
+    store.dispatch(lineRemoved(lahmacun.id));
     expect(window.localStorage.getItem(CART_STORAGE_KEY)).toBeNull();
   });
 
