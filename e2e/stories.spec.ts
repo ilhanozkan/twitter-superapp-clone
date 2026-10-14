@@ -254,7 +254,10 @@ test("a story reply lands in a direct message", async ({ page, request }) => {
   await viewer(page).getByRole("button", { name: "Send" }).click();
   await viewer(page).getByRole("link", { name: "View in Messages" }).click();
   await expect(page).toHaveURL(/\/messages\/[A-Za-z0-9_-]+$/);
-  await expect(page.getByText(text)).toBeVisible();
+  // From 1024px the chat list beside the log previews the same text.
+  await expect(
+    page.getByRole("log", { name: "Messages with Sarah Chen" }).getByText(text)
+  ).toBeVisible();
 });
 
 test("no reply field while Messages is off", async ({ page, request }) => {
