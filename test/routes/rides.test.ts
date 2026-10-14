@@ -648,3 +648,96 @@ describe("feature gating", () => {
     }
   });
 });
+
+describe("pages", () => {
+  // The rides pages' getServerSideProps, on the same store as the API.
+  type Loaded = { props?: any; notFound?: boolean };
+  const load = async (
+    page: "index" | "[id]",
+    ctx: { query?: Record<string, string>; params?: Record<string, string> }
+  ): Promise<Loaded> => {
+    const { getServerSideProps } =
+      page === "index"
+        ? await import("../../pages/rides/index")
+        : await import("../../pages/rides/[id]");
+    return (await getServerSideProps({
+      query: {},
+      params: {},
+      ...ctx,
+    } as never)) as Loaded;
+  };
+
+  it("/rides opens the booking form on a priced route with the rider's recent rides", async () => {
+    const { props } = await load("index", {});
+    expect(props.mode).toBe("rider");
+    expect(props.route).toEqual({ from: "kizilay", to: "atakule" });
+    expect(
+      props.quote.quotes.map((quote: { fare: number }) => quote.fare)
+    ).toEqual([FARES.economy, FARES.comfort, FARES.xl]);
+    expect(props.recent.items.map((ride: IRide) => ride.id)).toContain(
+      "seed-ride01"
+    );
+    expect(props.initialState.session.features.rides).toBe(true);
+  });
+
+  it("/rides?to= preselects the destination (Ride here) and ignores unknown places", async () => {
+    expect(
+      (await load("index", { query: { to: "kizilay" } })).props.route
+    ).toEqual({
+      from: "tunali",
+      to: "kizilay",
+    });
+    expect(
+      (await load("index", { query: { from: "bahcelievler", to: "atakule" } }))
+        .props.route
+    ).toEqual({ from: "bahcelievler", to: "atakule" });
+    expect(
+      (await load("index", { query: { to: "nowhere" } })).props.route
+    ).toEqual({
+      from: "kizilay",
+      to: "atakule",
+    });
+  });
+
+  it("/rides shows a driver their trips instead of the booking form", async () => {
+    actAs("ahmet_drives");
+    const { props } = await load("index", {});
+    expect(props.mode).toBe("driver");
+    expect(props.driver.vehicle.plate).toBe("06 AK 1234");
+    expect(props.trips.items.map((ride: IRide) => ride.id)).toContain(
+      "seed-ride01"
+    );
+    expect(props.quote).toBeUndefined();
+  });
+
+  it("/rides/:id opens for the rider and the driver, and is a 404 for anyone else", async () => {
+    const rider = await load("[id]", { params: { id: "seed-ride01" } });
+    expect(rider.props.id).toBe("seed-ride01");
+    const { rides } = rider.props.initialState;
+    expect(rides.byId["seed-ride01"].status).toBe("completed");
+    expect(Date.parse(rides.serverNow)).not.toBeNaN();
+
+    actAs("ahmet_drives");
+    expect(
+      (await load("[id]", { params: { id: "seed-ride01" } })).props.id
+    ).toBe("seed-ride01");
+    actAs("sarahcodes");
+    expect(await load("[id]", { params: { id: "seed-ride01" } })).toEqual({
+      notFound: true,
+    });
+    actAs("illlhanozkan");
+    for (const id of ["ride-nope", "bad id!", ""]) {
+      expect(await load("[id]", { params: { id } }), id).toEqual({
+        notFound: true,
+      });
+    }
+  });
+
+  it("are 404s while Rides is off", async () => {
+    vi.stubEnv("DISABLED_FEATURES", "rides");
+    expect(await load("index", {})).toEqual({ notFound: true });
+    expect(await load("[id]", { params: { id: "seed-ride01" } })).toEqual({
+      notFound: true,
+    });
+  });
+});

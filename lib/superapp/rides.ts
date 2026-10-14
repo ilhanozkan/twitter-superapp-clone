@@ -21,7 +21,7 @@ import type { SendInput } from "../db/wallet/types";
 import { distanceKm as roadDistanceKm } from "./geo";
 import { PendingTransfer } from "./ledger";
 import { LIMITS } from "./limits";
-import { getPlace } from "./places";
+import { getPlace, isPlaceId } from "./places";
 import { canTipRide } from "./policy/rides";
 import { deriveStages, legProgress, StageSpec } from "./timeline";
 
@@ -384,7 +384,9 @@ export function planRideRefund(ride: StoredRide, now: Date): PendingTransfer {
 /** A cancellation's ledger fingerprint: cancelling is idempotent by state and takes no key. */
 export const RIDE_CANCEL_FINGERPRINT = "rides.cancel";
 
-const firstName = (fullname: string) => fullname.trim().split(/\s+/)[0] ?? "";
+/** "Ahmet" from "Ahmet Kaya": how ride copy names people ("Message Ahmet"). */
+export const firstName = (fullname: string) =>
+  fullname.trim().split(/\s+/)[0] ?? "";
 
 function stageSpecs(ride: StoredRide): StageSpec<RideStatus>[] {
   return [
@@ -459,6 +461,37 @@ export function toRide(ride: StoredRide, now: Date): IRide {
     progress,
     canCancel: status === "finding" || status === "arriving",
   };
+}
+
+/**
+ * The same ride derived at another moment, e.g. on the client's ticking
+ * server clock between polls: the stored schedule is all the API sends, so
+ * status, stages and the car's progress follow from it exactly as on the
+ * server.
+ */
+export function rideAt(ride: IRide, now: Date): IRide {
+  return toRide(
+    {
+      id: ride.id,
+      code: ride.code,
+      rider: ride.rider,
+      driver: ride.driver,
+      from: ride.from.id,
+      to: ride.to.id,
+      type: ride.type,
+      fare: ride.fare,
+      distanceKm: ride.distanceKm,
+      requestedAt: ride.requestedAt,
+      driverAssignedAt: ride.driverAssignedAt,
+      pickupAt: ride.pickupAt,
+      dropoffAt: ride.dropoffAt,
+      cancelledAt: ride.cancelledAt,
+      paymentTransferId: ride.paymentTransferId,
+      refundTransferId: ride.refundTransferId,
+      requestHash: null,
+    },
+    now
+  );
 }
 
 /** The live activity line of a ride in progress ("Ahmet is on the way · arrives 14:29"). */
@@ -536,4 +569,35 @@ export function rideMapLabel(
   distanceKm: number
 ): string {
   return `Map from ${from.name} to ${to.name}, ${distanceKm.toFixed(1)} km`;
+}
+
+/** The tip chips after a ride: 1, 2 and 5 credits. */
+export const RIDE_TIP_PRESETS: readonly Cents[] = [100, 200, 500];
+
+// Where the booking form starts: the city centre to Atakule, unless the
+// link says otherwise ("Ride here" sends ?to=, "Book again" both).
+const PICKUPS: PlaceId[] = ["kizilay", "tunali"];
+const DESTINATIONS: PlaceId[] = ["atakule", "kizilay"];
+
+const firstOther = (places: PlaceId[], avoid: PlaceId) =>
+  places.find((place) => place !== avoid) as PlaceId;
+
+/**
+ * The booking form's pickup and destination from `?from=&to=` (unknown
+ * places are ignored). They are always two different places: a requested
+ * destination wins, and the pickup gives way.
+ */
+export function bookingRoute(query: { from?: unknown; to?: unknown }): {
+  from: PlaceId;
+  to: PlaceId;
+} {
+  const from = isPlaceId(query.from) ? query.from : null;
+  const to = isPlaceId(query.to) ? query.to : null;
+  if (!to && from) return { from, to: firstOther(DESTINATIONS, from) };
+  const destination = to ?? DESTINATIONS[0];
+  return {
+    from:
+      from && from !== destination ? from : firstOther(PICKUPS, destination),
+    to: destination,
+  };
 }

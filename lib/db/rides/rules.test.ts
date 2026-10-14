@@ -15,6 +15,7 @@ import {
   canViewRide,
 } from "../../superapp/policy/rides";
 import {
+  bookingRoute,
   eligibleDrivers,
   isActiveRide,
   MIN_CANCEL_WINDOW_MS,
@@ -27,6 +28,7 @@ import {
   RIDE_RATES,
   RIDE_TYPES,
   rideActivity,
+  rideAt,
   rideCode,
   rideFare,
   rideMapLabel,
@@ -566,5 +568,70 @@ describe("rideMapLabel", () => {
     expect(rideMapLabel(getPlace("kizilay"), getPlace("esenboga"), 34)).toBe(
       "Map from Kızılay to Esenboğa Airport, 34.0 km"
     );
+  });
+});
+
+describe("rideAt", () => {
+  const stored: StoredRide = { ...book().ride, driver: { ...ahmet } };
+
+  it("re-derives the API's ride at another moment exactly as the server would", () => {
+    const sent = toRide(stored, T0);
+    for (const ms of [0, 5 * SECOND, 40 * SECOND, 4 * MINUTE, 30 * MINUTE]) {
+      expect(rideAt(sent, at(ms))).toEqual(toRide(stored, at(ms)));
+    }
+  });
+
+  it("keeps a cancellation, whatever the clock", () => {
+    const cancelled = { ...stored, cancelledAt: at(10 * SECOND).toISOString() };
+    const sent = toRide(cancelled, at(20 * SECOND));
+    expect(rideAt(sent, at(30 * MINUTE))).toMatchObject({
+      status: "cancelled",
+      canCancel: false,
+      nextChangeAt: null,
+      progress: { leg: null },
+    });
+  });
+});
+
+describe("bookingRoute", () => {
+  it("starts from the city centre to Atakule", () => {
+    expect(bookingRoute({})).toEqual({ from: "kizilay", to: "atakule" });
+  });
+
+  it("takes ?to= (Ride here) and moves the pickup out of its way", () => {
+    expect(bookingRoute({ to: "esenboga" })).toEqual({
+      from: "kizilay",
+      to: "esenboga",
+    });
+    expect(bookingRoute({ to: "kizilay" })).toEqual({
+      from: "tunali",
+      to: "kizilay",
+    });
+  });
+
+  it("takes both for Book again, and a lone ?from= too", () => {
+    expect(bookingRoute({ from: "bahcelievler", to: "atakule" })).toEqual({
+      from: "bahcelievler",
+      to: "atakule",
+    });
+    expect(bookingRoute({ from: "atakule" })).toEqual({
+      from: "atakule",
+      to: "kizilay",
+    });
+    expect(bookingRoute({ from: "ulus" })).toEqual({
+      from: "ulus",
+      to: "atakule",
+    });
+  });
+
+  it("ignores unknown places, lists and a pickup equal to the destination", () => {
+    expect(bookingRoute({ to: "mars", from: ["kizilay"] })).toEqual({
+      from: "kizilay",
+      to: "atakule",
+    });
+    expect(bookingRoute({ from: "odtu", to: "odtu" })).toEqual({
+      from: "kizilay",
+      to: "odtu",
+    });
   });
 });
