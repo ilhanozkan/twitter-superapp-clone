@@ -269,7 +269,9 @@ function MoneyFlow({
               setValue((amount / CENTS_PER_CREDIT).toFixed(2));
               setCents(amount);
             }}
-            className="min-h-11 rounded-full border border-line px-4 text-[15px] font-bold tabular-nums transition-colors hover:bg-fg/5 aria-pressed:border-primary aria-pressed:bg-primary/10 aria-pressed:text-primary"
+            // Filled when picked: primary text on a primary tint is 4.45:1
+            // in the light theme, white on the fill is 5.1:1 in both.
+            className="min-h-11 rounded-full border border-line px-4 text-[15px] font-bold tabular-nums transition-colors hover:bg-fg/5 aria-pressed:border-primary-fill aria-pressed:bg-primary-fill aria-pressed:text-white aria-pressed:hover:bg-primary-fill-hover"
           >
             {(amount / CENTS_PER_CREDIT).toFixed(2)}
           </button>

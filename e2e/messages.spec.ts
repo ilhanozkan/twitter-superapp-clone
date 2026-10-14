@@ -4,6 +4,7 @@ import {
   expectNoHorizontalScroll,
   expectNoSeriousViolations,
   features,
+  idempotencyKey,
   setTheme,
   topUp,
   unique,
@@ -102,6 +103,17 @@ test("the badge counts Sarah's request; paying it in chat shows Paid and spends 
     nav.getByRole("link", { name: "Messages", exact: true })
   ).toBeVisible();
 
+  // On a phone the money controls are at least 44px tall (§17).
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const control of [
+    chat.getByRole("button", { name: "Pay 4.50" }),
+    chat.getByRole("button", { name: "Decline request" }),
+    page.getByRole("button", { name: "Send credits" }),
+  ]) {
+    await expect(control).toBeVisible();
+    expect((await control.boundingBox())!.height).toBeGreaterThanOrEqual(44);
+  }
+
   await chat.getByRole("button", { name: "Pay 4.50" }).click();
   const sheet = page.getByRole("dialog", { name: "Pay request" });
   const confirm = sheet.getByRole("button", {
@@ -112,6 +124,13 @@ test("the badge counts Sarah's request; paying it in chat shows Paid and spends 
   await expect(sheet).toBeHidden();
 
   await expect(chat.getByText("Paid", { exact: true })).toBeVisible();
+  // Pay is gone; focus lands on the request, not the top of the page.
+  await expect(
+    chat
+      .getByRole("listitem")
+      .filter({ hasText: "Sarah Chen requested 4.50 credits" })
+      .locator('[tabindex="-1"]')
+  ).toBeFocused();
   await expect(chat.getByRole("button", { name: "Pay 4.50" })).toHaveCount(0);
   expect(await available(request)).toBe(before - 450);
 
@@ -317,6 +336,87 @@ test("someone else's conversation is a 404", async ({ page, request }) => {
   expect((await request.get(`/api/conversations/${id}`)).status()).toBe(404);
 });
 
+test.describe("reading and retrying", () => {
+  test("Load older keeps your place in the conversation", async ({
+    page,
+    request,
+  }) => {
+    // More than a page (30): the newest 30 are #6 to #35.
+    const tag = unique("Older");
+    for (let i = 1; i <= 35; i++) {
+      const response = await request.post(
+        `/api/conversations/${MARCO}/messages`,
+        {
+          headers: { "Idempotency-Key": idempotencyKey() },
+          data: { text: `${tag} #${i}` },
+        }
+      );
+      expect(response.status()).toBe(201);
+    }
+    await page.setViewportSize({ width: 390, height: 800 });
+    await page.goto(conversationPath(MARCO));
+    const chat = log(page, "Marco Rossi");
+    const row = (n: number) =>
+      chat.getByRole("listitem").filter({ hasText: `${tag} #${n}` });
+    await expect(row(35)).toBeVisible();
+
+    // Up to the top, where the oldest loaded message is in view.
+    await chat.evaluate((element) => {
+      element.scrollTop = -element.scrollHeight;
+    });
+    await expect(row(6)).toBeInViewport();
+    const before = (await row(6).boundingBox())!.y;
+
+    await chat.getByRole("button", { name: "Load older messages" }).click();
+    await expect(row(5)).toHaveCount(1);
+    expect(Math.abs((await row(6).boundingBox())!.y - before)).toBeLessThan(2);
+  });
+
+  test("a message's time shows while the conversation has keyboard focus", async ({
+    page,
+  }) => {
+    await page.goto(conversationPath(SARAH));
+    const chat = log(page, "Sarah Chen");
+    // A text without links: nothing inside it to focus.
+    const time = chat
+      .getByRole("listitem")
+      .filter({ hasText: "Friday coffee at Kızılay Kahve?" })
+      .locator("span:has(> time)");
+    expect((await time.boundingBox())!.width).toBeLessThanOrEqual(1);
+
+    for (let tab = 0; tab < 60; tab++) {
+      if (await chat.evaluate((element) => element === document.activeElement))
+        break;
+      await page.keyboard.press("Tab");
+    }
+    await expect(chat).toBeFocused();
+    expect((await time.boundingBox())!.width).toBeGreaterThan(1);
+  });
+
+  test("Retry keeps focus in the conversation", async ({ page }) => {
+    await page.goto(conversationPath(MARCO));
+    let fail = true;
+    await page.route(`**/api/conversations/${MARCO}/messages`, (route) =>
+      fail && route.request().method() === "POST"
+        ? route.abort()
+        : route.continue()
+    );
+    const text = unique("Will fail first");
+    await page.getByRole("textbox", { name: "Message Marco Rossi" }).fill(text);
+    await page.keyboard.press("Enter");
+
+    const chat = log(page, "Marco Rossi");
+    const retry = chat.getByRole("button", { name: "Retry" });
+    await expect(retry).toBeVisible();
+    fail = false;
+    await retry.focus();
+    await page.keyboard.press("Enter");
+    await expect(chat.getByText("Not sent")).toHaveCount(0);
+    await expect(chat.getByText("Sending…")).toHaveCount(0);
+    await expect(chat).toBeFocused();
+  });
+});
+
 test.describe("layout", () => {
   test("two panes at 1280: the list beside the conversation", async ({
     page,
@@ -406,10 +506,25 @@ test.describe("accessibility (axe)", () => {
         await expectNoSeriousViolations(page);
       }
 
+      // Over the limit, the count under the field turns red.
+      const composer = page.getByRole("textbox", {
+        name: "Message Marco Rossi",
+      });
+      await composer.fill("x".repeat(1_003));
+      await expect(
+        page.locator("p", { hasText: "3 characters over the limit" })
+      ).toBeVisible();
+      await expectNoSeriousViolations(page);
+      await composer.fill("");
+
       if ((await features(request)).wallet) {
         await page.getByRole("button", { name: "Send credits" }).click();
         const sheet = page.getByRole("dialog", { name: "Send credits" });
-        await sheet.getByRole("button", { name: "5.00" }).click();
+        const five = sheet.getByRole("button", { name: "5.00" });
+        await five.click();
+        await expect(five).toHaveAttribute("aria-pressed", "true");
+        await page.mouse.move(0, 0);
+        await expectNoSeriousViolations(page);
         await sheet.getByRole("button", { name: "Review" }).click();
         await expect(
           sheet.getByRole("button", { name: /^Send 5.00 credits/ })

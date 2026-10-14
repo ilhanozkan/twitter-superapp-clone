@@ -5,7 +5,9 @@ import {
   describePayment,
   describeRequest,
   previewText,
+  requestChangeText,
 } from "./messageText";
+import { PaymentRequestStatus } from "../../types/Wallet";
 import { at, message, paymentRequest, sarah, viewer } from "./testFixtures";
 
 const me = viewer.username;
@@ -91,5 +93,37 @@ describe("announcementText", () => {
     expect(announcementText(["Sarah Chen", "Marco Rossi", "Sarah Chen"])).toBe(
       "3 new messages"
     );
+  });
+});
+
+describe("requestChangeText", () => {
+  const marco = { username: "devmarco", fullname: "Marco Rossi", image: null };
+  const mine = (status: PaymentRequestStatus) =>
+    paymentRequest({ requester: viewer, payer: marco, amount: 300, status });
+  const theirs = (status: PaymentRequestStatus) => paymentRequest({ status });
+
+  it("says what the other member or the clock did", () => {
+    expect(requestChangeText(mine("paid"), me)).toBe(
+      "Marco Rossi paid your 3.00 credits request"
+    );
+    expect(requestChangeText(mine("declined"), me)).toBe(
+      "Marco Rossi declined your 3.00 credits request"
+    );
+    expect(requestChangeText(mine("expired"), me)).toBe(
+      "Your 3.00 credits request to Marco Rossi expired"
+    );
+    expect(requestChangeText(theirs("cancelled"), me)).toBe(
+      "Sarah Chen cancelled their 4.50 credits request"
+    );
+    expect(requestChangeText(theirs("expired"), me)).toBe(
+      "Sarah Chen’s 4.50 credits request expired"
+    );
+  });
+
+  it("stays quiet about what the viewer did, and about pending", () => {
+    expect(requestChangeText(mine("cancelled"), me)).toBeNull();
+    expect(requestChangeText(theirs("paid"), me)).toBeNull();
+    expect(requestChangeText(theirs("declined"), me)).toBeNull();
+    expect(requestChangeText(mine("pending"), me)).toBeNull();
   });
 });

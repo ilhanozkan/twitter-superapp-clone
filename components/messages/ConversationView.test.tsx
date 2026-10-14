@@ -268,14 +268,44 @@ describe("read state", () => {
     });
     expect(api.markRead).toHaveBeenCalledTimes(1);
 
+    // The 4 s poll reports unread again: the next mark waits for 5 s.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(CONVERSATION_POLL_MS);
     });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(500);
+    });
     expect(api.markRead).toHaveBeenCalledTimes(1);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(1_000);
+      await vi.advanceTimersByTimeAsync(499);
+    });
+    expect(api.markRead).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1);
     });
     expect(api.markRead).toHaveBeenCalledTimes(2);
+  });
+
+  it("isn't marked while the tab is hidden, only once it shows", async () => {
+    vi.useFakeTimers();
+    visibility = "hidden";
+    const unread = thread([hello]);
+    unread.conversation.unread = 1;
+    api.getConversation.mockResolvedValue({
+      conversation: conversation({ unread: 1 }),
+    });
+    renderView({ existing: unread });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(6_000);
+    });
+    expect(api.markRead).not.toHaveBeenCalled();
+
+    act(() => setVisibility("visible"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(api.markRead).toHaveBeenCalledTimes(1);
+    expect(api.markRead).toHaveBeenCalledWith(CONVERSATION_ID);
   });
 
   it("is not marked in READ_ONLY, where the composer is replaced", async () => {

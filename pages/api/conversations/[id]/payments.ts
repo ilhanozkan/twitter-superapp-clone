@@ -4,7 +4,11 @@ import {
   parseIdempotency,
   sendMoneyResult,
 } from "../../../../lib/api/idempotency";
-import { chatMoneyBody, conversationKey } from "../../../../lib/api/messages";
+import {
+  assertWalletOn,
+  chatMoneyBody,
+  conversationKey,
+} from "../../../../lib/api/messages";
 import { parseBody } from "../../../../lib/api/validation";
 import { transferLocation } from "../../../../lib/api/wallet";
 import { getCurrentUser } from "../../../../lib/auth";
@@ -17,8 +21,10 @@ export default createHandler(
   {
     // POST /api/conversations/:id/payments { amount, note? } with an
     // Idempotency-Key: pays the other member, and posts the payment as a
-    // message in the same write. Direct conversations only.
+    // message in the same write. Direct conversations only, while the
+    // wallet is on.
     async POST(req, res) {
+      assertWalletOn();
       const id = conversationKey(req);
       const body = parseBody(req, chatMoneyBody);
       const key = parseIdempotency(req, {

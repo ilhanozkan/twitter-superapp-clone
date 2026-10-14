@@ -2,8 +2,11 @@ import type { NextApiRequest } from "next";
 import { z } from "zod";
 
 import { MAX_PAGE_SIZE } from "../constants";
+import { getRepository } from "../db";
+import { FEATURE_LABELS } from "../superapp/features";
 import { LIMITS } from "../superapp/limits";
 import { IConversation } from "../../types/Message";
+import { ApiError, notFound } from "./errors";
 import {
   cents,
   cursorParam,
@@ -51,6 +54,24 @@ export const chatMoneyBody = z.object({
   amount: cents(LIMITS.payment.min, LIMITS.payment.max),
   note: note(LIMITS.noteMax),
 });
+
+/**
+ * Chat payments and requests move the wallet's credits, so they follow the
+ * wallet's switch too, not only the messages one: while the wallet is off
+ * (DISABLED_FEATURES=wallet) or unconfigured they answer the way
+ * createHandler does for a feature (404, or 503).
+ */
+export function assertWalletOn() {
+  const status = getRepository().featureStatus("wallet");
+  if (status === "off") throw notFound("This feature is turned off");
+  if (status === "unconfigured") {
+    throw new ApiError(
+      503,
+      "service_unavailable",
+      `${FEATURE_LABELS.wallet} needs SANITY_API_TOKEN on this deployment`
+    );
+  }
+}
 
 /** `?before=` (older) or `?after=` (newer) a cursor, and `limit` ≤ 50. */
 export const messagesQuery = z

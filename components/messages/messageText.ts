@@ -71,6 +71,36 @@ export function previewText(message: IMessage | null, viewer: string): string {
   }
 }
 
+/**
+ * What someone else (or time) did to a request, from the viewer's side:
+ * "Marco Rossi paid your 3.00 credits request". Null for what the viewer
+ * did themselves (they already know) and for a pending request.
+ */
+export function requestChangeText(
+  request: IPaymentRequest,
+  viewer: string
+): string | null {
+  const amount = formatCredits(request.amount);
+  const asked = isMine(request.requester, viewer);
+  const { payer, requester } = request;
+  switch (request.status) {
+    case "paid":
+      return asked ? `${payer.fullname} paid your ${amount} request` : null;
+    case "declined":
+      return asked ? `${payer.fullname} declined your ${amount} request` : null;
+    case "cancelled":
+      return asked
+        ? null
+        : `${requester.fullname} cancelled their ${amount} request`;
+    case "expired":
+      return asked
+        ? `Your ${amount} request to ${payer.fullname} expired`
+        : `${requester.fullname}’s ${amount} request expired`;
+    case "pending":
+      return null;
+  }
+}
+
 /** "1 new message from Sarah Chen", "3 new messages" (several people). */
 export function announcementText(authors: string[]): string {
   const count = authors.length;

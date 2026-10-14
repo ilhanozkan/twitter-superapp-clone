@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 import { act, cleanup, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { ComponentProps } from "react";
+import { ComponentProps, useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { OutgoingMessage } from "../../slices/messagesSlice";
 import { renderWithStore } from "../../test/render";
 import MessageList from "./MessageList";
-import { at, message, sarah, viewer } from "./testFixtures";
+import { at, message, paymentRequest, sarah, viewer } from "./testFixtures";
 
 afterEach(() => {
   cleanup();
@@ -101,6 +101,11 @@ describe("MessageList", () => {
     expect(screen.getByRole("alert").textContent).toBe("Not sent");
     await user.click(screen.getByRole("button", { name: "Retry" }));
     expect(onRetry).toHaveBeenCalledWith(failed);
+
+    // Sending again replaces Retry: focus stays in the log, not on the page.
+    rerender(<MessageList {...props({ outbox: [sending], onRetry })} />);
+    expect(screen.queryByRole("button", { name: "Retry" })).toBeNull();
+    expect(document.activeElement).toBe(log());
   });
 
   it("loads older messages from the top", async () => {
@@ -113,6 +118,42 @@ describe("MessageList", () => {
       screen.getByRole("button", { name: "Load older messages" })
     );
     expect(onLoadOlder).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the reader's place when older messages go in above", async () => {
+    const user = userEvent.setup();
+    const older = message("m0", sarah, "2026-10-08T17:00:00.000Z", "Earlier");
+    // jsdom has no layout. Chrome's scroll anchoring holds the top of the
+    // log still as the page goes in, which reads as a jump in scrollTop.
+    let scrollTop = -700;
+    function Thread() {
+      const [messages, setMessages] = useState([first, second]);
+      return (
+        <MessageList
+          {...props({
+            messages,
+            hasOlder: true,
+            onLoadOlder: async () => {
+              setMessages([older, first, second]);
+              scrollTop = -2_200;
+            },
+          })}
+        />
+      );
+    }
+    renderWithStore(<Thread />);
+    Object.defineProperty(log(), "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+      set: (value: number) => (scrollTop = value),
+    });
+
+    await user.click(
+      screen.getByRole("button", { name: "Load older messages" })
+    );
+    expect(screen.getByText("Earlier")).toBeTruthy();
+    // The same distance from the newest message as before.
+    expect(scrollTop).toBe(-700);
   });
 
   it("says when older messages can't be loaded", async () => {
@@ -207,6 +248,98 @@ describe("MessageList", () => {
       await vi.advanceTimersByTimeAsync(1);
     });
     expect(announcer()).toMatch(/^2 new messages from Sarah Chen/);
+  });
+
+  it("announces a message that committed after a newer one", async () => {
+    vi.useFakeTimers({ now: Date.parse(at("12:00")) });
+    const late = message("m1b", sarah, at("08:00"), "Dated earlier");
+    const { rerender } = renderWithStore(<MessageList {...props()} />);
+    rerender(<MessageList {...props({ messages: [first, late, second] })} />);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(announcer()).toMatch(/^1 new message from Sarah Chen/);
+  });
+
+  it("announces what the other member did to a request, batched with arrivals", async () => {
+    vi.useFakeTimers({ now: Date.parse(at("12:00")) });
+    const marco = {
+      username: "devmarco",
+      fullname: "Marco Rossi",
+      image: null,
+    };
+    const asked = (status: "pending" | "paid") =>
+      message("m3", viewer, at("10:00"), {
+        type: "request",
+        request: paymentRequest({
+          id: "req-1",
+          requester: viewer,
+          payer: marco,
+          amount: 300,
+          status,
+        }),
+      });
+    const theirs = (status: "pending" | "cancelled" | "expired") =>
+      message("m4", sarah, at("11:00"), {
+        type: "request",
+        request: paymentRequest({ id: "req-2", status }),
+      });
+    const flush = () =>
+      act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000);
+      });
+    const { rerender } = renderWithStore(
+      <MessageList
+        {...props({
+          other: marco,
+          messages: [first, asked("pending"), theirs("pending")],
+        })}
+      />
+    );
+
+    rerender(
+      <MessageList
+        {...props({
+          other: marco,
+          messages: [first, asked("paid"), theirs("pending")],
+        })}
+      />
+    );
+    await flush();
+    expect(announcer()).toMatch(/^Marco Rossi paid your 3.00 credits request/);
+
+    const reply = message("m5", sarah, at("11:30"), "Never mind");
+    rerender(
+      <MessageList
+        {...props({
+          other: marco,
+          messages: [first, asked("paid"), theirs("cancelled"), reply],
+        })}
+      />
+    );
+    await flush();
+    expect(announcer()).toMatch(
+      /^1 new message from Sarah Chen\. Sarah Chen cancelled their 4.50 credits request/
+    );
+  });
+
+  it("doesn't announce what the viewer did to a request", async () => {
+    vi.useFakeTimers({ now: Date.parse(at("12:00")) });
+    const request = (status: "pending" | "paid" | "declined") =>
+      message("m3", sarah, at("10:00"), {
+        type: "request",
+        request: paymentRequest({ status }),
+      });
+    const { rerender } = renderWithStore(
+      <MessageList {...props({ messages: [first, request("pending")] })} />
+    );
+    rerender(
+      <MessageList {...props({ messages: [first, request("paid")] })} />
+    );
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10_000);
+    });
+    expect(announcer()).toBe("");
   });
 
   it("doesn't announce the viewer's own messages", async () => {

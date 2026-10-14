@@ -6,12 +6,14 @@ import { compareOldestFirst } from "../../lib/superapp/messages";
 import { OutgoingMessage } from "../../slices/messagesSlice";
 import { IMessage } from "../../types/Message";
 import { IAuthor } from "../../types/User";
+import { PaymentRequestStatus } from "../../types/Wallet";
 import LocalTime from "../superapp/LocalTime";
 import { useHydrated } from "../superapp/useHydrated";
 import { groupByDay } from "./dayGroups";
 import MessageBubble, { TextBubble } from "./MessageBubble";
-import { isMine } from "./messageText";
+import { isMine, requestChangeText } from "./messageText";
 import { useBatchedAnnouncements } from "./useBatchedAnnouncements";
+import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
 
 interface MessageListProps {
   other: IAuthor;
@@ -40,13 +42,36 @@ const AT_END_PX = 48;
 const namesAuthor = (message: IMessage) =>
   message.body.type === "payment" || message.body.type === "request";
 
+/** What a render showed, to tell what is new in the next one. */
+interface Shown {
+  ids: Set<string>;
+  oldest?: IMessage;
+  /** Status of each request shown, by request id. */
+  requests: Map<string, PaymentRequestStatus>;
+}
+
+function shown(messages: IMessage[]): Shown {
+  const requests = new Map<string, PaymentRequestStatus>();
+  for (const { body } of messages) {
+    if (body.type === "request")
+      requests.set(body.request.id, body.request.status);
+  }
+  return {
+    ids: new Set(messages.map((m) => m.id)),
+    oldest: messages[0],
+    requests,
+  };
+}
+
 /**
  * A conversation's messages as a chat log (`role="log"`), grouped by day,
  * mine on the right. It opens at the newest message: the scroller is
- * `flex-col-reverse`, so the browser starts it at the end and "Load older"
- * adds above without moving what is on screen. Messages that arrive while
- * the reader is scrolled up show a "New messages" pill instead of moving
- * the view, and are announced politely in batches (at most one every 5 s).
+ * `flex-col-reverse`, so the browser starts it at the end, and "Load older"
+ * puts the reader's offset from the end back after adding above. Messages
+ * that arrive while the reader is scrolled up show a "New messages" pill
+ * instead of moving the view. Arrivals, and requests the other member
+ * answers (or that expire), are announced politely in batches (at most one
+ * every 5 s).
  */
 export default function MessageList({
   other,
@@ -68,8 +93,11 @@ export default function MessageList({
   }>({ loading: false, error: null });
   const focusLog = useRef(false);
   const { text: announcement, announce } = useBatchedAnnouncements();
-  const seen = useRef<{ ids: Set<string>; newest?: IMessage } | null>(null);
+  const seen = useRef<Shown | null>(null);
   const outboxSize = useRef(outbox.length);
+  // Where the reader was when they asked for older messages (kept up to
+  // date while it loads), and the oldest message shown then.
+  const place = useRef<{ top: number; oldest?: string } | null>(null);
 
   // In a column-reverse scroller the end is scrollTop 0 (standard, negative
   // upwards), so "at the end" is a small distance from 0 either way.
@@ -81,23 +109,46 @@ export default function MessageList({
 
   // What is new since the last render: other people's messages are
   // announced (and shown with the pill when scrolled up); the viewer's own
-  // (a confirmed payment, say) bring the view to the end.
+  // (a confirmed payment, say) bring the view to the end. Older pages are
+  // not new; a message that committed late, dated among those shown, is.
+  // A request someone else answered (or that expired) is announced too.
   useEffect(() => {
     const before = seen.current;
-    const newest = messages.at(-1);
-    seen.current = { ids: new Set(messages.map((m) => m.id)), newest };
+    seen.current = shown(messages);
     if (!before) return;
 
     const fresh = messages.filter(
       (message) =>
         !before.ids.has(message.id) &&
-        (!before.newest || compareOldestFirst(before.newest, message) < 0)
+        (!before.oldest || compareOldestFirst(before.oldest, message) < 0)
     );
     const incoming = fresh.filter((m) => !isMine(m.author, viewer));
-    announce(incoming.map((message) => message.author.fullname));
+    const changes = messages.flatMap(({ body }) => {
+      if (body.type !== "request") return [];
+      const was = before.requests.get(body.request.id);
+      if (!was || was === body.request.status) return [];
+      return requestChangeText(body.request, viewer) ?? [];
+    });
+    announce(
+      incoming.map((message) => message.author.fullname),
+      changes
+    );
     if (fresh.length > incoming.length) scrollToEnd();
     else if (incoming.length > 0 && !atEnd()) setPill(true);
   }, [messages, viewer, announce, scrollToEnd]);
+
+  // Chrome's scroll anchoring holds the top of the list (the Load older
+  // button) still while the older page goes in above, which would push
+  // what the reader was looking at down by the page's height. In a
+  // column-reverse scroller the same scrollTop is the same distance from
+  // the newest message, so putting it back keeps their place.
+  useIsomorphicLayoutEffect(() => {
+    const element = scroller.current;
+    if (!place.current || !element) return;
+    if (messages[0]?.id === place.current.oldest) return;
+    element.scrollTop = place.current.top;
+    place.current = null;
+  }, [messages]);
 
   // A text the viewer just sent goes to the end, wherever they were.
   useEffect(() => {
@@ -106,22 +157,36 @@ export default function MessageList({
   }, [outbox.length, scrollToEnd]);
 
   // "Load older" goes away at the first message: keep focus in the log.
+  // (An empty last page added nothing, so there is no place to keep.)
   useEffect(() => {
     if (!hasOlder && focusLog.current) scroller.current?.focus();
     focusLog.current = false;
+    if (!hasOlder) place.current = null;
   }, [hasOlder]);
 
   const loadOlder = async () => {
     if (older.loading) return;
     setOlder({ loading: true, error: null });
+    place.current = {
+      top: scroller.current?.scrollTop ?? 0,
+      oldest: messages[0]?.id,
+    };
     try {
       focusLog.current = true;
       await onLoadOlder();
       setOlder({ loading: false, error: null });
     } catch (reason) {
       focusLog.current = false;
+      place.current = null;
       setOlder({ loading: false, error: errorMessage(reason) });
     }
+  };
+
+  // Retry swaps "Not sent · Retry" for "Sending…": keep focus in the log
+  // rather than losing it with the button.
+  const retry = (item: OutgoingMessage) => {
+    onRetry(item);
+    scroller.current?.focus();
   };
 
   const rows: Row[] = [
@@ -164,8 +229,12 @@ export default function MessageList({
         tabIndex={0}
         onScroll={() => {
           if (atEnd()) setPill(false);
+          if (place.current && scroller.current)
+            place.current.top = scroller.current.scrollTop;
         }}
-        className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-contain outline-offset-[-2px]"
+        // While the log itself has keyboard focus every time shows, since
+        // a text without links has nothing inside to focus.
+        className="group/log flex min-h-0 flex-1 flex-col-reverse overflow-y-auto overscroll-contain outline-offset-[-2px]"
       >
         <div className="pb-4">
           {hasOlder && (
@@ -213,11 +282,7 @@ export default function MessageList({
                       seen={seenLast && row.message === lastMine}
                     />
                   ) : (
-                    <OutgoingRow
-                      key={row.id}
-                      item={row.item}
-                      onRetry={onRetry}
-                    />
+                    <OutgoingRow key={row.id} item={row.item} onRetry={retry} />
                   )
                 )}
               </ol>
@@ -265,7 +330,7 @@ function MessageRow({
         </span>
       )}
       <MessageBubble message={message} viewer={viewer} />
-      <span className="sr-only text-[13px] text-muted group-focus-within:not-sr-only group-hover:not-sr-only">
+      <span className="sr-only text-[13px] text-muted group-focus-within:not-sr-only group-hover:not-sr-only group-focus-visible/log:not-sr-only">
         <LocalTime iso={message.createdAt} />
       </span>
       {seen && <span className="text-[13px] text-muted">Seen</span>}

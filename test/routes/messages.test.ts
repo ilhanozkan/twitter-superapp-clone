@@ -64,6 +64,9 @@ async function balance(): Promise<number> {
   return (await call(api.wallet)).body.wallet.balance;
 }
 
+/** The demo user's balance in the store, for when the wallet's routes are off. */
+const storedBalance = () => state().wallet.balances.get("illlhanozkan") ?? 0;
+
 function expectError(
   res: MockResponse,
   status: number,
@@ -717,6 +720,64 @@ describe("feature gating", () => {
     }
     expect((await call(api.me)).body.features.messages).toBe(false);
     expect((await call(api.activity)).body.unreadConversations).toBe(0);
+  });
+
+  it("refuses chat payments and requests while the wallet is off, moving nothing", async () => {
+    vi.stubEnv("DISABLED_FEATURES", "wallet");
+    const wallet = state().wallet;
+    const before = {
+      balances: new Map(wallet.balances),
+      transfers: wallet.transfers.size,
+      requests: wallet.requests.size,
+      messages: (await page(MARCO)).body.items.length,
+    };
+
+    for (const [name, handler] of [
+      ["POST payments", api.payments],
+      ["POST requests", api.requests],
+    ] as [string, Handler][]) {
+      const res = await call(handler, keyed(MARCO, { amount: 100 }));
+      expectError(res, 404, "not_found", name);
+      expect(res.body.error.message, name).toBe("This feature is turned off");
+    }
+
+    expect(wallet.balances).toEqual(before.balances);
+    expect(wallet.transfers.size).toBe(before.transfers);
+    expect(wallet.requests.size).toBe(before.requests);
+    expect((await page(MARCO)).body.items).toHaveLength(before.messages);
+    // Messages itself stays on: text still sends.
+    expect((await say(MARCO, "Still here")).statusCode).toBe(201);
+    expect((await call(api.me)).body.features).toMatchObject({
+      messages: true,
+      wallet: false,
+    });
+    expectError(await call(api.wallet), 404, "not_found");
+  });
+
+  it("answers 503 to chat money while the wallet is unconfigured", async () => {
+    const { getRepository } = await import("../../lib/db");
+    const repo = getRepository();
+    const statusOf = repo.featureStatus.bind(repo);
+    vi.spyOn(repo, "featureStatus").mockImplementation((id) =>
+      id === "wallet" ? "unconfigured" : statusOf(id)
+    );
+    const before = {
+      balance: storedBalance(),
+      requests: state().wallet.requests.size,
+    };
+
+    for (const [name, handler] of [
+      ["POST payments", api.payments],
+      ["POST requests", api.requests],
+    ] as [string, Handler][]) {
+      const res = await call(handler, keyed(MARCO, { amount: 100 }));
+      expectError(res, 503, "service_unavailable", name);
+      expect(res.body.error.message, name).toBe(
+        "Wallet needs SANITY_API_TOKEN on this deployment"
+      );
+    }
+    expect(storedBalance()).toBe(before.balance);
+    expect(state().wallet.requests.size).toBe(before.requests);
   });
 
   it("answers 503 while the data source can't serve messages", async () => {

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { RiHandCoinLine } from "react-icons/ri";
 
 import { errorMessage } from "../../lib/client/api";
@@ -12,6 +12,9 @@ import { Button } from "../common/Button";
 import Dialog from "../common/Dialog";
 import PaymentConfirm from "../superapp/PaymentConfirm";
 import { describeRequest, isMine, REQUEST_STATUS_LABELS } from "./messageText";
+
+/** Money controls are at least 44px tall on phones (§17); small elsewhere. */
+const PHONE_TARGET = "max-xs:min-h-11";
 
 const receiptPath = (transferId: string) =>
   `/wallet/transactions/${encodeURIComponent(transferId)}`;
@@ -51,6 +54,7 @@ export default function RequestBubble({
   const [error, setError] = useState<string | null>(null);
   const bubble = useRef<HTMLDivElement>(null);
   const paid = useRef<string | null>(null);
+  const settleAfterSheet = useRef(false);
 
   const requester = isMine(request.requester, viewer);
   const canAnswer = walletOn && !readOnly && request.status === "pending";
@@ -58,6 +62,15 @@ export default function RequestBubble({
 
   // The buttons go away once answered: keep focus on the bubble.
   const settle = () => bubble.current?.focus();
+
+  // After paying, only once the sheet has closed: until then the modal
+  // makes the bubble inert, and closing it tries to return focus to Pay,
+  // which is gone by then. The Dialog's own effect (a child's) runs first.
+  useEffect(() => {
+    if (paying || !settleAfterSheet.current) return;
+    settleAfterSheet.current = false;
+    bubble.current?.focus();
+  }, [paying]);
 
   const answer = async (kind: "decline" | "cancel") => {
     if (busy) return;
@@ -109,6 +122,7 @@ export default function RequestBubble({
             <Button
               variant="outline"
               size="sm"
+              className={PHONE_TARGET}
               aria-busy={busy === "cancel"}
               disabled={busy !== null}
               onClick={() => answer("cancel")}
@@ -125,6 +139,7 @@ export default function RequestBubble({
             <>
               <Button
                 size="sm"
+                className={PHONE_TARGET}
                 aria-haspopup="dialog"
                 disabled={busy !== null}
                 onClick={() => setPaying(true)}
@@ -134,6 +149,7 @@ export default function RequestBubble({
               <Button
                 variant="outline"
                 size="sm"
+                className={PHONE_TARGET}
                 aria-busy={busy === "decline"}
                 disabled={busy !== null}
                 onClick={() => answer("decline")}
@@ -174,8 +190,8 @@ export default function RequestBubble({
             paid.current = transfer.id;
           }}
           onDone={() => {
+            settleAfterSheet.current = true;
             setPaying(false);
-            settle();
             dispatch(
               showToast({
                 message: `You paid ${request.requester.fullname} ${formatCredits(request.amount)}`,

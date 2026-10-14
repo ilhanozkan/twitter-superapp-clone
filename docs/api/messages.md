@@ -107,6 +107,12 @@ A page of messages, **oldest to newest**, ordered by `(createdAt, id)`:
   This is how clients poll: while nothing is new, the page is empty and
   `newestCursor` stays the cursor you sent.
 
+A message's `createdAt` is set just before its write, so on Sanity a slow
+write can land after a newer message was already read, behind the cursor.
+The app therefore polls without a cursor (the newest page, merged by id)
+until the newest message it shows is 30 s old, and while a request in it is
+pending; other clients should do the same.
+
 Sending both `before` and `after`, a cursor the server didn't make, or a
 `limit` outside 1–50 is a 400. `serverNow` is the server's clock.
 
@@ -159,12 +165,13 @@ key replays the original response and moves nothing.
 | 400    | `validation_error`       | Bad `amount`, `note` or key                                        |
 | 402    | `insufficient_funds`     | Your available credits don't cover it                              |
 | 403    | `wallet_frozen`          | Your wallet or the recipient's is frozen                           |
-| 404    | `not_found`              | Not your conversation                                              |
+| 404    | `not_found`              | Not your conversation, or the wallet is off                        |
 | 409    | `invalid_state`          | "Payments are only available in direct messages" (channels)        |
 | 409    | `conflict`               | Busy (concurrent writes on Sanity); retry with the same key        |
 | 422    | `idempotency_key_reused` | The key was used for a different payment                           |
 | 422    | `limit_exceeded`         | The demo store is full                                             |
 | 429    | `rate_limited`           | More than 12 money operations in a minute (shared with the wallet) |
+| 503    | `service_unavailable`    | The wallet needs `SANITY_API_TOKEN` on this deployment             |
 
 ### `POST /api/conversations/:id/requests`
 
@@ -176,6 +183,12 @@ the new status on both members' next read. `Location` is the request.
 
 The errors are the payment's, without 402, plus 422 `limit_exceeded` when
 you already have 10 pending requests.
+
+Payments and requests move the wallet's credits, so they also need the
+`wallet` feature: while it is off (`DISABLED_FEATURES=wallet`) both answer
+404 "This feature is turned off", and 503 while it is unconfigured, like the
+wallet's own routes. Nothing moves and nothing is posted. Text messages and
+reading are unaffected; existing payment and request messages still show.
 
 ### `PUT /api/conversations/:id/read`
 

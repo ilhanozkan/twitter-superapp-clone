@@ -185,10 +185,12 @@ describe("Send via Direct Message", () => {
     expect((await within(dialog).findByRole("alert")).textContent).toBe(
       "User not found"
     );
-    // Back to choosing someone else.
+    // Back to choosing someone else, in the search that replaced the button.
     await user.click(
       within(dialog).getByRole("button", { name: "Remove Sarah Chen" })
     );
-    expect(within(dialog).getByRole("combobox", { name: "To" })).toBeTruthy();
+    expect(document.activeElement).toBe(
+      within(dialog).getByRole("combobox", { name: "To" })
+    );
   });
 });

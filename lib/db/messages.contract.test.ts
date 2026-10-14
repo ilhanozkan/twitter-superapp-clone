@@ -955,6 +955,19 @@ describe.each(subjects())("%s messages", (name, create) => {
       expect(transactions()).toBe(log);
       expect(await page(ALICE_BOB)).toHaveLength(10);
       expect(await repo.wallet.getRequest(input.operationId)).toBeNull();
+      // No bubble either, even one the page would skip for want of its
+      // request: it would still count as unread.
+      expect(
+        (await repo.messages.getConversation(ALICE_BOB, bob.username))!.unread
+      ).toBe(10);
+      expect(
+        (await repo.messages.getConversation(ALICE_BOB, alice.username))!.unread
+      ).toBe(0);
+      if (subject.state) {
+        expect(
+          subject.state.messages.messages.has(chatMessageId(input.operationId))
+        ).toBe(false);
+      }
     });
   });
 

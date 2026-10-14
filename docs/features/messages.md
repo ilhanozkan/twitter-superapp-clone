@@ -61,6 +61,12 @@ Failures back off to at most 60 s, and after two in a row a status line says
 "Can't load new messages. Retrying…". A conversation is marked read while it
 is open and visible, at most once every 5 s, which clears the badge.
 
+A conversation's poll usually asks only for what came after the last
+message it has. While a request in it is pending, and until its newest
+message is 30 s old, it reads the newest page instead: a request's status
+changes without a new message, and on Sanity a message whose write was slow
+can land just behind one that was already shown.
+
 ## States
 
 | State                       | What you see                                                                                                                                                                                                   |
@@ -71,15 +77,23 @@ is open and visible, at most once every 5 s, which clears the badge.
 | A send fails                | Text: "Not sent · Retry" under the bubble. Payments and requests: the review stays open with the reason                                                                                                        |
 | READ_ONLY                   | Conversations can be read. The composer is replaced by "Messaging is turned off on this read-only demo.", requests have no buttons, the Tweet menu has no "Send via Direct Message" and nothing is marked read |
 | Messages off                | `/messages` says so; conversation pages are 404s; the profile button and Tweet menu items are hidden                                                                                                           |
-| Wallet off                  | No "+" menu, no Send credits, no receipt links and no request buttons                                                                                                                                          |
+| Wallet off                  | No "+" menu, no Send credits, no receipt links and no request buttons; the API refuses chat payments and requests (404)                                                                                        |
 
 ## Accessibility
 
-- The message list is a `role="log"`. New messages from the other person
-  are announced politely, at most once every 5 s ("2 new messages from
-  Sarah Chen"). Polling never moves focus.
+- The message list is a `role="log"`. New messages from the other person,
+  and what happens to a request without you (paid, declined or cancelled by
+  the other person, or expired), are announced politely, at most once every
+  5 s ("2 new messages from Sarah Chen. Marco Rossi paid your 3.00 credits
+  request"). Polling never moves focus.
+- When the control you used goes away, focus moves next to it: to the
+  request after paying, declining or cancelling; to the message list after
+  Retry; to the search after removing the person in "Send Tweet".
 - Amounts are always text. Each message's time is in the text for screen
-  readers and shows on hover and focus.
+  readers and shows on hover, on focus inside the message, and for every
+  message while the list itself has keyboard focus.
+- On phones, Pay, Decline, Cancel and the header's Send credits are at
+  least 44px tall.
 - Payments and requests have a review step whose focused button repeats the
   amount and the person (WCAG 3.3.4).
 - The person search in New message is an ARIA 1.2 combobox: arrow keys

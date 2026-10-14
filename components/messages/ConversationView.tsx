@@ -78,7 +78,7 @@ function ConversationHeader({
             aria-haspopup="dialog"
             title="Send credits"
             onClick={onSendCredits}
-            className="-mr-2 rounded-full p-2 text-xl text-primary transition-colors hover:bg-primary/10"
+            className="-mr-2 flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-xl text-primary transition-colors hover:bg-primary/10"
           >
             <RiCoinLine aria-hidden="true" />
           </button>

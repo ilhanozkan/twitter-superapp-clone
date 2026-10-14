@@ -32,7 +32,28 @@ const { default: MessageBubble } = await import("./MessageBubble");
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.restoreAllMocks();
 });
+
+/** The request bubble (focusable from script) showing `status`. */
+const bubbleOf = (status: string) =>
+  screen.getByText(status, { exact: true }).closest('[tabindex="-1"]');
+
+/**
+ * Like a browser, unlike jsdom: while a modal dialog is open, everything
+ * outside it is inert and can't take focus.
+ */
+function inertOutsideModals() {
+  const focus = HTMLElement.prototype.focus;
+  vi.spyOn(HTMLElement.prototype, "focus").mockImplementation(function (
+    this: HTMLElement,
+    options?: FocusOptions
+  ) {
+    const modal = document.querySelector("dialog[open]");
+    if (modal && !modal.contains(this)) return;
+    focus.call(this, options);
+  });
+}
 
 const wallet = {
   username: viewer.username,
@@ -246,7 +267,7 @@ describe("request bubbles", () => {
     expect(walletApi.declineRequest).toHaveBeenCalledWith("seed-req01");
     await screen.findByText("Declined");
     expect(screen.queryByRole("button", { name: /^Pay/ })).toBeNull();
-    expect(document.activeElement?.textContent).toContain("Declined");
+    expect(document.activeElement).toBe(bubbleOf("Declined"));
   });
 
   it("shows why an answer failed", async () => {
@@ -263,6 +284,7 @@ describe("request bubbles", () => {
 
   it("pays after the review, with a key, and updates the wallet", async () => {
     const user = userEvent.setup();
+    inertOutsideModals();
     walletApi.payRequest.mockResolvedValue({
       request: paymentRequest({ status: "paid", transferId: "tx-paid" }),
       transfer: { id: "tx-paid" },
@@ -288,5 +310,8 @@ describe("request bubbles", () => {
       message: "You paid Sarah Chen 4.50 credits",
       action: { label: "Receipt", href: "/wallet/transactions/tx-paid" },
     });
+    // Pay is gone: focus lands on the bubble once the sheet has closed.
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(document.activeElement).toBe(bubbleOf("Paid"));
   });
 });

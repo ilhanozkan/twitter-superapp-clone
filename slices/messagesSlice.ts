@@ -15,6 +15,13 @@ import { balanceChanged } from "./walletSlice";
 export const THREAD_PAGE_SIZE = 30;
 /** The most a poll reads at once (the API's maximum). */
 const POLL_PAGE_SIZE = 50;
+/**
+ * How long after its `createdAt` a message may still commit: Sanity dates a
+ * message before its write lands, so a slow write can appear after a newer
+ * one was already read. Until the newest message shown is this old, polls
+ * read the newest page instead of only what comes after the cursor.
+ */
+export const SETTLE_MS = 30_000;
 
 export interface ThreadState {
   conversation: IConversation;
@@ -289,11 +296,23 @@ export const fetchInbox = (): Thunk<void> => async (dispatch) => {
   }
 };
 
+/** Whether a message dated before the newest one shown may still commit. */
+function settling(thread: ThreadState): boolean {
+  const newest = thread.messages.at(-1);
+  return (
+    !!newest &&
+    Date.parse(newest.createdAt) > Date.parse(thread.serverNow) - SETTLE_MS
+  );
+}
+
 /**
  * What changed in an open conversation: the conversation (the other
- * member's read marker, unread) and new messages. Request bubbles change
- * status without a new message, so while one is pending the poll reads the
- * newest page (statuses included) rather than only what is new.
+ * member's read marker, unread) and new messages. It reads only what comes
+ * after the cursor, except that it reads the newest page (merged by id):
+ * - while a request is pending, since its bubble changes status without a
+ *   new message;
+ * - while the newest message is under SETTLE_MS old, since a message dated
+ *   before it may still commit and would sort before the cursor.
  */
 export const pollThread =
   (conversationId: string): Thunk<void> =>
@@ -301,7 +320,9 @@ export const pollThread =
     const thread = getState().messages.threads[conversationId];
     if (!thread) return;
     const latest =
-      !thread.newestCursor || thread.messages.some(isPendingRequest);
+      !thread.newestCursor ||
+      settling(thread) ||
+      thread.messages.some(isPendingRequest);
     const [{ conversation }, page] = await Promise.all([
       messagesApi.getConversation(conversationId),
       messagesApi.listMessages(

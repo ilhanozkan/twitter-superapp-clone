@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { messagesState } from "../../slices/messagesSlice";
 import { sessionState } from "../../slices/sessionSlice";
@@ -21,11 +21,26 @@ import {
 const api = vi.hoisted(() => ({ listConversations: vi.fn() }));
 vi.mock("../../lib/client/messagesApi", () => ({ messagesApi: api }));
 
-const { default: Inbox } = await import("./Inbox");
+const { default: Inbox, INBOX_POLL_MS } = await import("./Inbox");
+
+let visibility: DocumentVisibilityState = "visible";
+function setVisibility(value: DocumentVisibilityState) {
+  visibility = value;
+  document.dispatchEvent(new Event("visibilitychange"));
+}
+
+beforeEach(() => {
+  visibility = "visible";
+  Object.defineProperty(document, "visibilityState", {
+    configurable: true,
+    get: () => visibility,
+  });
+});
 
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  vi.useRealTimers();
 });
 
 const marco = { username: "devmarco", fullname: "Marco Rossi", image: null };
@@ -50,10 +65,11 @@ function renderInbox(
   {
     selectedId = null,
     features = featuresWith("messages"),
-  }: { selectedId?: string | null; features?: IFeatures } = {}
+    poll = false,
+  }: { selectedId?: string | null; features?: IFeatures; poll?: boolean } = {}
 ) {
   return renderWithStore(
-    <Inbox as="page" poll={false} selectedId={selectedId} />,
+    <Inbox as="page" poll={poll} selectedId={selectedId} />,
     {
       state: {
         session: sessionState({ viewer, readOnly: false, features }),
@@ -125,5 +141,51 @@ describe("Inbox", () => {
     expect(
       screen.getByRole("link", { name: "Channels" }).getAttribute("href")
     ).toBe("/channels");
+  });
+});
+
+describe("Inbox polling", () => {
+  const advance = (ms: number) =>
+    act(async () => {
+      await vi.advanceTimersByTimeAsync(ms);
+    });
+
+  it("refreshes every 15 s while visible, pauses while hidden and catches up on return", async () => {
+    vi.useFakeTimers();
+    const marcoFirst = [conversations[1], conversations[0]];
+    api.listConversations.mockResolvedValue({ items: marcoFirst });
+    renderInbox(conversations, { poll: true });
+
+    await advance(INBOX_POLL_MS - 1);
+    expect(api.listConversations).not.toHaveBeenCalled();
+    await advance(1);
+    expect(api.listConversations).toHaveBeenCalledTimes(1);
+    expect(rows()[0].textContent).toContain("Marco Rossi");
+
+    act(() => setVisibility("hidden"));
+    await advance(INBOX_POLL_MS * 4);
+    expect(api.listConversations).toHaveBeenCalledTimes(1);
+
+    act(() => setVisibility("visible"));
+    await advance(0);
+    expect(api.listConversations).toHaveBeenCalledTimes(2);
+  });
+
+  it("stays quiet when a refresh fails with rows on screen, and backs off", async () => {
+    vi.useFakeTimers();
+    api.listConversations.mockRejectedValue(new Error("offline"));
+    renderInbox(conversations, { poll: true });
+
+    await advance(INBOX_POLL_MS);
+    expect(api.listConversations).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(rows()).toHaveLength(2);
+
+    // The next try waits twice as long.
+    await advance(INBOX_POLL_MS * 2 - 1);
+    expect(api.listConversations).toHaveBeenCalledTimes(1);
+    await advance(1);
+    expect(api.listConversations).toHaveBeenCalledTimes(2);
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

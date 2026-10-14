@@ -1,5 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
+import { compareOldestFirst } from "../../lib/superapp/messages";
 import reducer, {
   conversationOpened,
   conversationRead,
@@ -9,12 +10,16 @@ import reducer, {
   MessagesState,
   messagesState,
   olderLoaded,
+  pollThread,
   requestUpdated,
+  SETTLE_MS,
   textFailed,
   textQueued,
   textSent,
   threadPolled,
 } from "../../slices/messagesSlice";
+import { makeStore } from "../../store";
+import { IMessage } from "../../types/Message";
 import {
   at,
   CONVERSATION_ID,
@@ -29,6 +34,12 @@ import {
 
 // The messages slice lives in slices/; its tests sit here, inside the
 // lane's component folder.
+
+const api = vi.hoisted(() => ({
+  getConversation: vi.fn(),
+  listMessages: vi.fn(),
+}));
+vi.mock("../../lib/client/messagesApi", () => ({ messagesApi: api }));
 
 const m1 = message("m1", sarah, at("09:00"), "one");
 const m2 = message("m2", viewer, at("10:00"), "two");
@@ -252,5 +263,86 @@ describe("requests and read state", () => {
     state = reducer(state, conversationRead(CONVERSATION_ID));
     expect(state.threads[CONVERSATION_ID].conversation.unread).toBe(0);
     expect(state.inbox.items[0].unread).toBe(0);
+  });
+});
+
+describe("pollThread", () => {
+  /** 2026-10-09 at 12:00:ss UTC. */
+  const second = (ss: number) =>
+    new Date(Date.parse(at("12:00")) + ss * 1_000).toISOString();
+
+  /**
+   * The server as the client sees it: messages in (createdAt, id) order
+   * once committed, whatever order they were dated in, and cursors that
+   * point at a message (`cursor-<id>`).
+   */
+  function fakeServer(committed: IMessage[], now: string) {
+    const server = { committed, now };
+    api.getConversation.mockImplementation(async () => ({
+      conversation: conversation(),
+    }));
+    api.listMessages.mockImplementation(
+      async (_id: string, query: { after?: string; limit: number }) => {
+        const sorted = [...server.committed].sort(compareOldestFirst);
+        const cursor = query.after
+          ? sorted.find((m) => `cursor-${m.id}` === query.after)!
+          : null;
+        const items = cursor
+          ? sorted
+              .filter((m) => compareOldestFirst(cursor, m) < 0)
+              .slice(0, query.limit)
+          : sorted.slice(-query.limit);
+        return page(items, {
+          newestCursor: items.length
+            ? `cursor-${items.at(-1)!.id}`
+            : (query.after ?? null),
+          serverNow: server.now,
+        });
+      }
+    );
+    return server;
+  }
+
+  it("keeps reading the newest page until the newest message settles, so a late commit still shows", async () => {
+    const m0 = message("m0", sarah, at("11:00"), "earlier");
+    // Alice's message is dated first but commits after Bob's.
+    const late = message("a", viewer, second(0), "dated first");
+    const early = message("b", sarah, second(1), "committed first");
+    const server = fakeServer([m0, early], second(2));
+    const store = makeStore({
+      messages: withThread([m0]),
+    });
+    const poll = () => store.dispatch(pollThread(CONVERSATION_ID));
+    const shown = () =>
+      store
+        .getState()
+        .messages.threads[CONVERSATION_ID].messages.map((m) => m.id);
+
+    // m0 is hours old: only what is new.
+    await poll();
+    expect(api.listMessages).toHaveBeenLastCalledWith(CONVERSATION_ID, {
+      after: "cursor-m0",
+      limit: 50,
+    });
+    expect(shown()).toEqual(["m0", "b"]);
+
+    server.committed.push(late);
+    server.now = second(6);
+    await poll();
+    // "b" is seconds old: the newest page, which has the late message.
+    expect(api.listMessages).toHaveBeenLastCalledWith(CONVERSATION_ID, {
+      limit: 50,
+    });
+    expect(shown()).toEqual(["m0", "a", "b"]);
+
+    // Once the newest message is SETTLE_MS old, back to the cursor.
+    server.now = new Date(Date.parse(second(1)) + SETTLE_MS).toISOString();
+    await poll();
+    await poll();
+    expect(api.listMessages).toHaveBeenLastCalledWith(CONVERSATION_ID, {
+      after: "cursor-b",
+      limit: 50,
+    });
+    expect(shown()).toEqual(["m0", "a", "b"]);
   });
 });

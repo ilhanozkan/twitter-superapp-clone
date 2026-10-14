@@ -51,6 +51,8 @@ function ShareTweet({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const field = useRef<HTMLTextAreaElement>(null);
+  const picker = useRef<HTMLDivElement>(null);
+  const removed = useRef(false);
   const commentId = useId();
   const errorId = useId();
   const text = comment.trim();
@@ -64,6 +66,11 @@ function ShareTweet({
 
   useEffect(() => {
     if (recipient) field.current?.focus();
+    // Removing the person puts the search back where the button was: focus
+    // it, or focus would fall to the page with the button.
+    else if (removed.current)
+      picker.current?.querySelector<HTMLElement>('[role="combobox"]')?.focus();
+    removed.current = false;
   }, [recipient]);
 
   const send = async (event: FormEvent) => {
@@ -113,7 +120,10 @@ function ShareTweet({
             <button
               type="button"
               aria-label={`Remove ${recipient.fullname}`}
-              onClick={() => setRecipient(null)}
+              onClick={() => {
+                removed.current = true;
+                setRecipient(null);
+              }}
               className="rounded-full p-1.5 text-lg transition-colors hover:bg-fg/10"
             >
               <HiXMark aria-hidden="true" />
@@ -121,12 +131,14 @@ function ShareTweet({
           </div>
         </div>
       ) : (
-        <UserCombobox
-          label="To"
-          suggestions={recent}
-          exclude={viewer.username}
-          onSelect={setRecipient}
-        />
+        <div ref={picker}>
+          <UserCombobox
+            label="To"
+            suggestions={recent}
+            exclude={viewer.username}
+            onSelect={setRecipient}
+          />
+        </div>
       )}
 
       {tweet && (

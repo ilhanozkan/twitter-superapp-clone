@@ -4,7 +4,11 @@ import {
   parseIdempotency,
   sendMoneyResult,
 } from "../../../../lib/api/idempotency";
-import { chatMoneyBody, conversationKey } from "../../../../lib/api/messages";
+import {
+  assertWalletOn,
+  chatMoneyBody,
+  conversationKey,
+} from "../../../../lib/api/messages";
 import { parseBody } from "../../../../lib/api/validation";
 import { requestLocation } from "../../../../lib/api/wallet";
 import { getCurrentUser } from "../../../../lib/auth";
@@ -18,8 +22,10 @@ export default createHandler(
     // POST /api/conversations/:id/requests { amount, note? } with an
     // Idempotency-Key: asks the other member to pay the current user, and
     // posts the request as a message in the same write. It is paid,
-    // declined or cancelled through /api/wallet/requests/:id.
+    // declined or cancelled through /api/wallet/requests/:id, so it needs
+    // the wallet on.
     async POST(req, res) {
+      assertWalletOn();
       const id = conversationKey(req);
       const body = parseBody(req, chatMoneyBody);
       const key = parseIdempotency(req, {
