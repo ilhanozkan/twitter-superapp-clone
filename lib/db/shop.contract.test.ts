@@ -290,7 +290,12 @@ describe.each(subjects())("%s shop", (_name, create) => {
       ).toEqual(["seed-p-sa-stickers", "seed-p-sa-mug", "seed-p-sa-hoodie"]);
       expect(
         ids(await repo.shop.listAttachableProducts(DEMO_USERNAME))
-      ).toEqual(["seed-p-sa-stickers", "seed-p-sa-mug"]);
+      ).toEqual([
+        "seed-p-sa-stickers",
+        "seed-p-sa-mug",
+        "seed-p-kk-latte",
+        "seed-p-kk-simit",
+      ]);
       const summaries = await repo.shop.listBusinessSummaries();
       expect(
         summaries.find((s) => s.username === "superapp")!.highlights
@@ -418,7 +423,7 @@ describe.each(subjects())("%s shop", (_name, create) => {
       ).toBe(false);
       expect(
         ids(await repo.shop.listAttachableProducts(DEMO_USERNAME))
-      ).toEqual(["seed-p-sa-stickers"]);
+      ).toEqual(["seed-p-sa-stickers", "seed-p-kk-latte", "seed-p-kk-simit"]);
 
       const back = await repo.shop.setProductAvailability(
         "seed-p-sa-mug",
@@ -510,10 +515,16 @@ describe.each(subjects())("%s shop", (_name, create) => {
 
   describe("attachable products", () => {
     it("lists the available products of the businesses a user runs", async () => {
-      // The demo user manages @superapp; the hoodie is sold out.
+      // The demo user manages @superapp (the hoodie is sold out), then has
+      // ordered from Kızılay Kahve (seed-o01, delivered).
       expect(
         ids(await repo.shop.listAttachableProducts(DEMO_USERNAME.toUpperCase()))
-      ).toEqual(["seed-p-sa-stickers", "seed-p-sa-mug"]);
+      ).toEqual([
+        "seed-p-sa-stickers",
+        "seed-p-sa-mug",
+        "seed-p-kk-latte",
+        "seed-p-kk-simit",
+      ]);
       expect(
         ids(await repo.shop.listAttachableProducts("KizilayKahve"))
       ).toEqual([
@@ -523,7 +534,11 @@ describe.each(subjects())("%s shop", (_name, create) => {
         "seed-p-kk-simit",
         "seed-p-kk-cheesecake",
       ]);
-      expect(await repo.shop.listAttachableProducts("sarahcodes")).toEqual([]);
+      // Sarah runs nothing but bought stickers (seed-o02).
+      expect(ids(await repo.shop.listAttachableProducts("sarahcodes"))).toEqual(
+        ["seed-p-sa-stickers"]
+      );
+      expect(await repo.shop.listAttachableProducts("lenaframes")).toEqual([]);
     });
   });
 

@@ -317,13 +317,15 @@ describe("GET /api/products/attachable", () => {
     const res = await call(api.attachable);
     expect(res.statusCode).toBe(200);
     expect(res.headers["cache-control"]).toBe("private, no-store");
-    // @superapp's sold-out hoodie isn't suggested.
+    // @superapp's sold-out hoodie isn't suggested; seed-o01's items are.
     expect(ids(res.body.items)).toEqual([
       "seed-p-sa-stickers",
       "seed-p-sa-mug",
+      "seed-p-kk-latte",
+      "seed-p-kk-simit",
     ]);
 
-    actAs("sarahcodes");
+    actAs("lenaframes");
     expect((await call(api.attachable)).body.items).toEqual([]);
   });
 });

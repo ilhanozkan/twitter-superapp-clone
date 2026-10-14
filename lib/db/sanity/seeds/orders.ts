@@ -1,8 +1,13 @@
 import { SeedData } from "../../seed";
+import { orderDocument } from "../orders";
 import { SanitySeedDocument } from "./documents";
 
-// Stub: the orders lane exports its seed documents here.
+// Orders are private documents ("private." ids), written exactly as the app
+// writes them; their payments are in the wallet export with every transfer.
 
-export const ordersSanityDocuments: (
-  seed: SeedData
-) => SanitySeedDocument[] = () => [];
+export function ordersSanityDocuments(seed: SeedData): SanitySeedDocument[] {
+  return (seed.superapp?.orders?.orders ?? []).map((order) => ({
+    ...orderDocument(order),
+    _createdAt: order.placedAt,
+  }));
+}

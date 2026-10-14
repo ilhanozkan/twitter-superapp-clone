@@ -9,14 +9,17 @@ import {
   productsOf,
   toMenu,
   toProductCard,
+  withPurchasedProducts,
 } from "../../superapp/shop";
 import { IBusiness } from "../../../types/Business";
 import { IProduct } from "../../../types/Shop";
 import { NotFoundError } from "../errors";
 import { ShopRepository } from "../shop/types";
 import { SanityDeps } from "./deps";
+import { readPurchasedProductIds } from "./orders";
 import {
   ALL_PRODUCTS_QUERY,
+  ATTACHABLE_QUERY,
   PRODUCTS_BY_ID_QUERY,
   PRODUCTS_OF_QUERY,
 } from "./shopQueries";
@@ -131,13 +134,25 @@ export function createSanityShop(deps: SanityDeps): ShopRepository {
     },
 
     async listAttachableProducts(username) {
-      const all = await businesses();
+      // What you ordered before is only suggested while ordering is on.
+      const [all, purchased] = await Promise.all([
+        businesses(),
+        deps.self().features.orders
+          ? readPurchasedProductIds(deps, username)
+          : [],
+      ]);
       const managed = managedBusinesses(all, username);
-      if (managed.length === 0) return [];
-      const rows = await deps.read<ProductRow[] | null>(PRODUCTS_OF_QUERY, {
+      if (managed.length === 0 && purchased.length === 0) return [];
+      const rows = await deps.read<ProductRow[] | null>(ATTACHABLE_QUERY, {
         businesses: managed.map(lower),
+        ids: purchased,
       });
-      return managedProducts(username, all, join(rows, all));
+      const entries = join(rows, all);
+      return withPurchasedProducts(
+        managedProducts(username, all, entries),
+        purchased,
+        entries
+      );
     },
 
     async setProductAvailability(id, available) {

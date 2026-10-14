@@ -8,11 +8,13 @@ import {
   productsOf,
   toMenu,
   toProductCard,
+  withPurchasedProducts,
 } from "../../superapp/shop";
 import { IBusiness } from "../../../types/Business";
 import { IProduct } from "../../../types/Shop";
 import { NotFoundError } from "../errors";
 import type { MemoryState } from "../memory";
+import { purchasedProductIds } from "../orders/views";
 import { ShopSeed } from "../seeds/shop";
 import { ShopRepository } from "../shop/types";
 import { MemoryDeps } from "./deps";
@@ -108,8 +110,17 @@ export function createMemoryShop(deps: MemoryDeps): ShopRepository {
     },
 
     async listAttachableProducts(username) {
-      const { businesses, entries } = catalog();
-      return managedProducts(username, businesses, entries);
+      const at = now();
+      const { businesses, entries } = memoryCatalog(state, at);
+      // What you ordered before is only suggested while ordering is on.
+      const purchased = deps.self().features.orders
+        ? purchasedProductIds(state.orders.orders.values(), username, at)
+        : [];
+      return withPurchasedProducts(
+        managedProducts(username, businesses, entries),
+        purchased,
+        entries
+      );
     },
 
     async setProductAvailability(id, available) {
