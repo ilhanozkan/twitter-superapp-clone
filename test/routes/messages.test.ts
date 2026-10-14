@@ -1,3 +1,4 @@
+import type { GetServerSidePropsContext } from "next";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { MemoryState } from "../../lib/db/memory";
@@ -733,5 +734,118 @@ describe("feature gating", () => {
         "Messages needs SANITY_API_TOKEN on this deployment"
       );
     }
+  });
+});
+
+describe("messages pages", () => {
+  /** getServerSideProps of a messages page, with its query, params and response. */
+  async function serverSide(
+    page: "index" | "[id]",
+    { query = {}, params = {} }: { query?: object; params?: object } = {}
+  ) {
+    const res = { statusCode: 200 };
+    const ctx = { query, params, res } as unknown as GetServerSidePropsContext;
+    const { getServerSideProps } = await import(
+      page === "index"
+        ? "../../pages/messages/index"
+        : "../../pages/messages/[id]"
+    );
+    const result = (await getServerSideProps(ctx)) as Record<string, any>;
+    return { result, status: res.statusCode };
+  }
+
+  const conversationIds = () => [...state().messages.conversations.keys()];
+
+  it("serves the inbox", async () => {
+    const { result, status } = await serverSide("index");
+    expect(status).toBe(200);
+    expect(result.props).toMatchObject({ feature: "on", draft: null });
+    const inbox = result.props.initialState.messages.inbox;
+    expect(inbox.loaded).toBe(true);
+    expect(inbox.items.find((c: IConversation) => c.id === SARAH).unread).toBe(
+      1
+    );
+  });
+
+  it("redirects ?to= to an existing conversation (307), any casing", async () => {
+    for (const to of ["devmarco", "DevMarco"]) {
+      const { result } = await serverSide("index", { query: { to } });
+      expect(result.redirect, to).toEqual({
+        destination: `/messages/${MARCO}`,
+        permanent: false,
+      });
+    }
+  });
+
+  it("shows a draft for someone new and writes nothing", async () => {
+    const before = conversationIds();
+    const { result, status } = await serverSide("index", {
+      query: { to: "nightowl_dev" },
+    });
+    expect(status).toBe(200);
+    expect(result.props.draft).toEqual({
+      other: {
+        username: "nightowl_dev",
+        fullname: "Priya Nair",
+        image: expect.any(String),
+      },
+      conversationId: NIGHTOWL,
+      serverNow: expect.any(String),
+    });
+    expect(conversationIds()).toEqual(before);
+    expect(
+      (await call(api.conversation, { query: { id: NIGHTOWL } })).statusCode
+    ).toBe(404);
+  });
+
+  it("shows a not-found state for yourself and for unknown people", async () => {
+    for (const [to, problem] of [
+      ["IlllhanOzkan", "self"],
+      ["ghost_user", "unknown"],
+      ["not a username", "unknown"],
+    ]) {
+      const { result, status } = await serverSide("index", { query: { to } });
+      expect(status, to).toBe(404);
+      expect(result.props.draft, to).toEqual({ problem });
+    }
+  });
+
+  it("says Messages is off instead of a 404, since the nav links here", async () => {
+    vi.stubEnv("DISABLED_FEATURES", "messages");
+    const { result, status } = await serverSide("index", {
+      query: { to: "devmarco" },
+    });
+    expect(status).toBe(200);
+    expect(result.props).toMatchObject({ feature: "off", draft: null });
+  });
+
+  it("serves a conversation to its members without marking it read", async () => {
+    const { result } = await serverSide("[id]", { params: { id: SARAH } });
+    expect(result.props).toMatchObject({
+      conversationId: SARAH,
+      other: { username: "sarahcodes" },
+    });
+    const thread = result.props.initialState.messages.threads[SARAH];
+    expect(thread.conversation.unread).toBe(1);
+    expect(thread.messages.at(-1).body.request.id).toBe("seed-req01");
+    // GET never writes: still unread.
+    expect((await call(api.activity)).body.unreadConversations).toBe(1);
+  });
+
+  it("is a 404 for anyone else and for bad ids", async () => {
+    actAs("sarahcodes");
+    expect(
+      (await serverSide("[id]", { params: { id: MARCO } })).result
+    ).toEqual({ notFound: true });
+    expect(
+      (await serverSide("[id]", { params: { id: "drafts.x" } })).result
+    ).toEqual({ notFound: true });
+  });
+
+  it("is a 404 while Messages is off", async () => {
+    vi.stubEnv("DISABLED_FEATURES", "messages");
+    expect(
+      (await serverSide("[id]", { params: { id: SARAH } })).result
+    ).toEqual({ notFound: true });
   });
 });

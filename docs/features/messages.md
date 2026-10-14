@@ -1,15 +1,106 @@
 # Messages
 
 Direct conversations between two people, with payments, payment requests
-and shared Tweets inside them. The data and the
-[messages API](../api/messages.md) are in place: conversations, paging,
-read markers, payments and requests that are written together with their
-message, a business's automatic greeting, the demo conversations, and the
-Messages badge (conversations with unread messages). The inbox and
-conversation pages come with the rest of the `messages` PR, which describes
-them here: where the feature lives in the app, its empty, loading, error and
-read-only states, and how to try it. Until then `/messages` shows its
-placeholder.
+and shared Tweets inside them. Credits are the wallet's demo credits, which
+have no cash value. The data and endpoints are described in the
+[messages API](../api/messages.md).
+
+## Where it lives
+
+- **Inbox, `/messages`.** Messages in the sidebar and the phone tab bar; its
+  badge counts conversations with unread messages. Each row shows the
+  person, a preview ("You: Anytime! 🙌", "💸 Requested 4.50 credits", "Sent
+  you 15.00 credits") and the time. Unread rows are bold with a dot.
+  "New message" finds someone to write to. From 1024px the list (390px) sits
+  beside the conversation, which reads "Select a message" until one is
+  chosen; phones show one at a time.
+- **Conversation, `/messages/<id>`.** Only its two members can open it;
+  anyone else gets a 404. On phones it is in focus mode: no tab bar, the
+  composer pinned at the bottom and a Back button to the inbox.
+- **`/messages?to=<username>`.** The conversation with that person. If it
+  exists, the server redirects to it (307). Otherwise it shows a draft that
+  the first message, payment or request creates. Opening the page never
+  writes anything. Yourself or an unknown username shows a not-found page
+  (404).
+
+`/messages?to=<username>` is the link every entry point uses: the Message
+button on profiles, "Message @user" in a Tweet's "…" menu, and the New
+message dialog. Orders, rides, receipts and story replies link to it as
+those features ship.
+
+## In a conversation
+
+- **Messages:** text (mentions, hashtags and links work as in Tweets),
+  shared Tweets as a card that links to the Tweet, story replies with the
+  story's preview (or "Story no longer available"), payments ("You sent
+  15.00 credits", with View receipt) and payment requests.
+- **Requests** show their status (Pending, Paid, Declined, Cancelled,
+  Expired), read from the request itself, so the next poll updates both
+  people. The payer gets **Pay 4.50**, which opens a review with the amount,
+  the note and the balance after, and **Decline**. The requester gets
+  **Cancel** while the request is pending.
+- **Composer:** Enter sends and Shift+Enter adds a line; on touch screens
+  Enter adds a line and the Send button sends. Up to 1,000 characters.
+- **Credits:** the "+" menu (Send credits, Request credits) and the coin
+  button in the header open a sheet: the amount (quick picks 2, 5, 10, 20)
+  and an optional note, then a review. Nothing moves until the server
+  confirms; the payment or request card then appears in the chat.
+- **Optimistic text:** only text shows before the server answers, as
+  "Sending…", then "Not sent · Retry" if it fails. Retry sends it again with
+  the same Idempotency-Key, so it is never posted twice.
+- **Reading:** day separators ("Today", "Yesterday", "Oct 6"), "Seen" under
+  your last message once the other person has read it, "Load older messages"
+  at the top (your place is kept), and a "New messages" pill when something
+  arrives while you are scrolled up.
+
+## Updates
+
+There is no background work: the page polls. An open conversation polls
+every 4 s and the inbox every 15 s, both only while the tab is visible.
+Failures back off to at most 60 s, and after two in a row a status line says
+"Can't load new messages. Retrying…". A conversation is marked read while it
+is open and visible, at most once every 5 s, which clears the badge.
+
+## States
+
+| State                       | What you see                                                                                                                                                                                                   |
+| --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Empty inbox                 | "Welcome to your inbox!" and New message                                                                                                                                                                       |
+| Empty conversation or draft | "Say hi to Sarah Chen 👋"                                                                                                                                                                                      |
+| The inbox can't be read     | An alert with Retry; the conversation beside it still shows                                                                                                                                                    |
+| A send fails                | Text: "Not sent · Retry" under the bubble. Payments and requests: the review stays open with the reason                                                                                                        |
+| READ_ONLY                   | Conversations can be read. The composer is replaced by "Messaging is turned off on this read-only demo.", requests have no buttons, the Tweet menu has no "Send via Direct Message" and nothing is marked read |
+| Messages off                | `/messages` says so; conversation pages are 404s; the profile button and Tweet menu items are hidden                                                                                                           |
+| Wallet off                  | No "+" menu, no Send credits, no receipt links and no request buttons                                                                                                                                          |
+
+## Accessibility
+
+- The message list is a `role="log"`. New messages from the other person
+  are announced politely, at most once every 5 s ("2 new messages from
+  Sarah Chen"). Polling never moves focus.
+- Amounts are always text. Each message's time is in the text for screen
+  readers and shows on hover and focus.
+- Payments and requests have a review step whose focused button repeats the
+  amount and the person (WCAG 3.3.4).
+- The person search in New message is an ARIA 1.2 combobox: arrow keys
+  move through people, Enter picks one, Escape closes the list (a second
+  Escape closes the dialog), and the number of results is announced.
+- The composer's hint ("Enter sends, Shift+Enter adds a new line") is linked
+  with `aria-describedby`.
+
+## Try it
+
+1. Open Messages: the badge says 1. Sarah asked for 4.50 credits for
+   "Coffee ☕". Choose **Pay 4.50** and confirm: the card turns Paid and your
+   wallet shows −4.50.
+2. In Marco's conversation, choose **+ → Send credits** and send 2.00: a
+   payment card appears.
+3. On a Tweet, open **… → Send via Direct Message**, pick someone and add a
+   comment: the Tweet shows as a card in that conversation.
+4. Open `/messages?to=nightowl_dev`: a draft. Say hi, and the conversation
+   exists from then on.
+5. As Sarah (`DEMO_USERNAME=sarahcodes`), open the conversation with the
+   demo user and cancel her request.
 
 ## Demo data
 
@@ -27,7 +118,18 @@ The demo user starts with four conversations:
 ## Limits
 
 Messages are up to 1,000 characters (30 a minute per person). Payments and
-requests in chat follow the wallet's limits. The in-memory demo store keeps
-the newest 20,000 text messages; payments and requests are never dropped.
+requests in chat follow the wallet's limits (0.50 to 200.00 credits, notes
+up to 100 characters). The in-memory demo store keeps the newest 20,000
+text messages; payments and requests are never dropped.
+
+## Tests
+
+- Components: `components/messages/*.test.ts(x)`, including the store
+  slice (`messagesSlice.test.ts`).
+- Pages and routes: `test/routes/messages.test.ts`. Repositories:
+  `lib/db/messages.contract.test.ts`.
+- End to end: `e2e/messages.spec.ts` (the demo user),
+  `e2e/messages.sarah.spec.ts` (the requester's side of `seed-req01`) and
+  `e2e/messages.readonly.spec.ts`.
 
 How SuperApp features are built is in [docs/SUPERAPP.md](../SUPERAPP.md).

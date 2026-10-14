@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import {
   chatMessageId,
+  compareOldestFirst,
   directConversationId,
   greetingMessageId,
   isDirectConversationId,
@@ -209,5 +210,22 @@ describe("paging", () => {
       after: null,
       limit: 50,
     });
+  });
+});
+
+describe("compareOldestFirst", () => {
+  it("orders by time, then by id, as the server pages", () => {
+    const at = (minute: number) => `2026-10-08T12:0${minute}:00.000Z`;
+    const items = [
+      { id: "b", createdAt: at(2) },
+      { id: "c", createdAt: at(1) },
+      { id: "a", createdAt: at(2) },
+    ];
+    expect([...items].sort(compareOldestFirst).map((item) => item.id)).toEqual([
+      "c",
+      "a",
+      "b",
+    ]);
+    expect(compareOldestFirst(items[0], items[0])).toBe(0);
   });
 });

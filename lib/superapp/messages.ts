@@ -56,3 +56,17 @@ export function laterOf(current: string | null, next: string): string {
     ? current
     : next;
 }
+
+/**
+ * Chat order, oldest first: by `createdAt`, ties by id, the order the
+ * server pages in (the reverse of `compareNewestFirst`). Isomorphic, so the
+ * client can merge polls and optimistic sends into a page.
+ */
+export function compareOldestFirst(
+  a: { createdAt: string; id: string },
+  b: { createdAt: string; id: string }
+): number {
+  const byDate = Date.parse(a.createdAt) - Date.parse(b.createdAt);
+  if (byDate !== 0) return byDate;
+  return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
+}
