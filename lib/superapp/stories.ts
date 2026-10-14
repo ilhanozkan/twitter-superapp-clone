@@ -98,7 +98,8 @@ export function compareStories(
  * Groups visible stories by author for the tray on Home: the viewer's own
  * ("Your story") first, then accounts with stories the viewer hasn't seen,
  * then the rest; within each, the most recent poster first. Each item lists
- * its stories oldest first and where to start playing (the first unseen).
+ * its stories oldest first, which of them the viewer hasn't seen, and where
+ * to start playing (the first unseen).
  */
 export function buildTray(
   stories: IStory[],
@@ -112,13 +113,16 @@ export function buildTray(
 
   const items = [...byAuthor.values()].map((own): IStoryTrayItem => {
     const latest = own[own.length - 1];
-    const firstUnseen = own.find((story) => !story.viewer.seen) ?? null;
+    const unseenIds = own
+      .filter((story) => !story.viewer.seen)
+      .map((story) => story.id);
     return {
       author: { ...latest.author },
       storyIds: own.map((story) => story.id),
       latestAt: latest.createdAt,
-      hasUnseen: firstUnseen !== null,
-      firstUnseenId: firstUnseen?.id ?? null,
+      hasUnseen: unseenIds.length > 0,
+      firstUnseenId: unseenIds[0] ?? null,
+      unseenIds,
     };
   });
 

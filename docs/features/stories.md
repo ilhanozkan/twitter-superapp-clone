@@ -24,7 +24,9 @@ features are built is in [docs/SUPERAPP.md](../SUPERAPP.md).
   accounts.
 - **Your story** is two controls: your avatar plays your stories, and the
   "+" button ("Add to your story") opens the composer. With nothing posted,
-  the item is a single "Add to your story" button.
+  the item is a single "Add to your story" button. It is the same button as
+  the avatar, so after your first post or the delete of your last story,
+  when the tray reloads, focus stays on it.
 - **Names:** every item is a button named like "Mert Demir's stories, 2
   new". The ring is a gradient while there is something new and turns grey
   as soon as you have watched everything, without waiting for the server.
@@ -78,10 +80,17 @@ to the tray item that opened it.
 Watching a story greys its ring at once. The viewer reports what you
 watched to `POST /api/stories/views` in batches of at most 50 ids, every 3
 seconds and once more when it closes. Stories the server already counts as
-seen are not sent again, and a batch lost to a network error goes with the
-next one. On a `READ_ONLY` deployment the server refuses writes, so the
-watched ids are kept in `sessionStorage` (`stories:seen:v1`) instead: the
-rings stay grey in that tab after a reload, and nothing is sent.
+seen are not sent again, and a batch lost to a network error, a 429 or a
+5xx goes with the next one. On a `READ_ONLY` deployment the server refuses
+writes, so the watched ids are kept in `sessionStorage` (`stories:seen:v1`)
+instead: the rings stay grey in that tab after a reload, and nothing is
+sent. On Sanity without a token the server can't store views (503
+`service_unavailable`): after that answer nothing more is sent, and the
+rings stay grey until the page reloads.
+
+The tray counts what is new from the server's list of unseen stories, minus
+those watched since the page loaded, so watching a later story first (from
+a link) leaves the earlier one counted as new.
 
 ## The composer
 
@@ -114,8 +123,11 @@ rings stay grey in that tab after a reload, and nothing is sent.
 - At most 10 stories showing per account (422 `limit_exceeded`), and at
   most 10 new stories an hour per user (the `stories` budget, off in e2e).
 - Text up to 200 characters, alt text up to 420, captions up to 100.
-- The demo's seeded stories disappear 24 hours after the server starts;
-  restarting brings them back.
+- The demo's seeded stories disappear 24 hours after they are seeded. On
+  the memory store that is when the server starts, and restarting brings
+  them back. On Sanity it is when `npm run seed:sanity` exported them, so a
+  restart doesn't: delete the seeded story documents and import again (see
+  [Moderation and storage](../api/stories.md#moderation-and-storage)).
 
 ## Try it
 
@@ -136,12 +148,15 @@ On the default memory store (`npm run dev`):
 
 ## Tests
 
-- `components/stories/*.test.tsx`: the tray (order, names, rings, reload,
-  READ_ONLY), the viewer (keys, Pause, auto-advance timing and every pause
-  condition with fake timers, reduced motion, batched seen state, focus
-  restore, replies, viewers, delete) and the composer (preview, counter,
-  alt text, errors, tabs). `seenState.test.ts` covers batching (≤ 50 ids),
-  retries and sessionStorage.
+- `components/stories/*.test.tsx`: the tray (order, names and new counts,
+  rings, reload, focus across your first post and last delete, READ_ONLY),
+  the viewer (keys and tap zones, Pause, auto-advance timing and every
+  pause condition with fake timers: hover, press-and-hold, the reply field,
+  the "…" menu, the viewers list, a hidden tab; long presses, moving while
+  an account loads, reduced motion, batched seen state, focus restore,
+  replies, viewers, delete) and the composer (preview, counter, swatch
+  contrast, alt text, errors, tabs). `seenState.test.ts` covers batching
+  (≤ 50 ids), retries, a server that can't store views, and sessionStorage.
 - `test/routes/stories.test.ts`: the API and the `/stories/<username>` page.
 - `e2e/stories.spec.ts` and `e2e/stories.readonly.spec.ts`: the tray, the
   viewer and the composer in a browser, axe in both themes, the 360px tray,

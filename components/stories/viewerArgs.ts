@@ -34,15 +34,12 @@ export function parseViewerArgs(
 }
 
 /**
- * The stories of a tray item this viewer hasn't watched: from the server's
- * first unseen one on (those before it are seen, oldest first), minus those
- * watched on this device since the tray loaded.
+ * The stories of a tray item this viewer hasn't watched: those the server
+ * counts as unseen, minus those watched on this device since the tray loaded.
  */
 export function unseenIds(
   item: IStoryTrayItem,
   seen: Record<string, true>
 ): string[] {
-  if (!item.hasUnseen || !item.firstUnseenId) return [];
-  const first = Math.max(item.storyIds.indexOf(item.firstUnseenId), 0);
-  return item.storyIds.slice(first).filter((id) => !seen[id]);
+  return item.unseenIds.filter((id) => !seen[id]);
 }

@@ -27,6 +27,12 @@ export interface IStoryTrayItem {
   latestAt: string;
   hasUnseen: boolean;
   firstUnseenId: string | null;
+  /**
+   * The stories the viewer hasn't seen, oldest first (added by the stories
+   * lane): a later story can be seen before an earlier one, e.g. through a
+   * link, so they aren't always the ones from `firstUnseenId` on.
+   */
+  unseenIds: string[];
 }
 
 // Response bodies of /api/stories/** (docs/api/stories.md).

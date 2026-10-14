@@ -55,18 +55,24 @@ describe("viewer arguments", () => {
     expect(parseViewerArgs({ authors: "" })).toBeNull();
   });
 
-  it("count unseen stories from the server's first unseen, minus those watched here", () => {
+  it("count the stories the server counts as unseen, minus those watched here", () => {
     const item = {
       author: { username: "a", fullname: "A", image: null },
       storyIds: ["s1", "s2", "s3"],
       latestAt: ago(0),
       hasUnseen: true,
       firstUnseenId: "s2",
+      unseenIds: ["s2", "s3"],
     };
     expect(unseenIds(item, {})).toEqual(["s2", "s3"]);
     expect(unseenIds(item, { s3: true })).toEqual(["s2"]);
     expect(
-      unseenIds({ ...item, hasUnseen: false, firstUnseenId: null }, {})
+      unseenIds(
+        { ...item, hasUnseen: false, firstUnseenId: null, unseenIds: [] },
+        {}
+      )
     ).toEqual([]);
+    // s3 was seen before s2 (through a link): only s2 is new.
+    expect(unseenIds({ ...item, unseenIds: ["s2"] }, {})).toEqual(["s2"]);
   });
 });

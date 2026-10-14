@@ -49,13 +49,16 @@ export function story(
 }
 
 export function trayItem(author: IAuthor, stories: IStory[]): IStoryTrayItem {
-  const firstUnseen = stories.find((item) => !item.viewer.seen) ?? null;
+  const unseenIds = stories
+    .filter((item) => !item.viewer.seen)
+    .map((item) => item.id);
   return {
     author,
     storyIds: stories.map((item) => item.id),
     latestAt: stories[stories.length - 1].createdAt,
-    hasUnseen: firstUnseen !== null,
-    firstUnseenId: firstUnseen?.id ?? null,
+    hasUnseen: unseenIds.length > 0,
+    firstUnseenId: unseenIds[0] ?? null,
+    unseenIds,
   };
 }
 
@@ -68,7 +71,9 @@ export interface Call {
 
 /**
  * Answers the stories (and messages) endpoints from `stories`, keyed by
- * author, and records every request.
+ * author, and records every request. `viewsError` makes
+ * POST /api/stories/views answer that error; `listDelay` holds each
+ * account's stories back that many ms (fake timers move it on).
  */
 export function stubStoriesApi(
   byAuthor: Record<string, IStory[]>,
@@ -76,6 +81,8 @@ export function stubStoriesApi(
     viewers = [] as IAuthor[],
     tray = [] as IStoryTrayItem[],
     failViews = false,
+    viewsError = null as { status: number; code: string } | null,
+    listDelay = 0,
   } = {}
 ) {
   const calls: Call[] = [];
@@ -91,6 +98,8 @@ export function stubStoriesApi(
 
     if (url.pathname === "/api/stories" && method === "GET") {
       const author = url.searchParams.get("author") ?? "";
+      if (listDelay)
+        await new Promise((resolve) => setTimeout(resolve, listDelay));
       return Response.json({ items: byAuthor[author] ?? [] });
     }
     if (url.pathname === "/api/stories/tray") {
@@ -98,6 +107,12 @@ export function stubStoriesApi(
     }
     if (url.pathname === "/api/stories/views") {
       if (failViews) throw new TypeError("Failed to fetch");
+      if (viewsError) {
+        return Response.json(
+          { error: { code: viewsError.code, message: "Refused" } },
+          { status: viewsError.status }
+        );
+      }
       return new Response(null, { status: 204 });
     }
     if (url.pathname.endsWith("/viewers")) {

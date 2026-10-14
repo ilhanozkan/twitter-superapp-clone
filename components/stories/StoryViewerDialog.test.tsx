@@ -263,6 +263,66 @@ describe("StoryViewerDialog", () => {
     expect(position()).toMatch(/^Story 2 of 2/);
   });
 
+  it("pauses while a finger holds the story, and a long press doesn't move on", async () => {
+    installPointerEvent();
+    api();
+    openViewer();
+    await settle();
+    const zone = screen.getByRole("button", { name: "Next story" });
+
+    fireEvent.pointerDown(zone, { pointerType: "touch" });
+    await settle(10_000);
+    expect(position()).toMatch(/^Story 1 of 2/);
+    fireEvent.pointerUp(zone, { pointerType: "touch" });
+    fireEvent.click(zone);
+    expect(position()).toMatch(/^Story 1 of 2/);
+
+    // It plays on from where the hold began.
+    await settle(4_999);
+    expect(position()).toMatch(/^Story 1 of 2/);
+    await settle(1);
+    expect(position()).toMatch(/^Story 2 of 2/);
+  });
+
+  it("moves on or back with a quick tap on the tap zones", async () => {
+    installPointerEvent();
+    api();
+    openViewer();
+    await settle();
+    const tap = async (name: string) => {
+      const zone = screen.getByRole("button", { name });
+      fireEvent.pointerDown(zone, { pointerType: "touch" });
+      await settle(200);
+      fireEvent.pointerUp(zone, { pointerType: "touch" });
+      fireEvent.click(zone);
+    };
+
+    await tap("Next story");
+    expect(position()).toMatch(/^Story 2 of 2/);
+    await tap("Previous story");
+    expect(position()).toMatch(/^Story 1 of 2/);
+  });
+
+  it("pauses while the … menu has focus, so Delete acts on the story shown", async () => {
+    stubStoriesApi({
+      illlhanozkan: [stories.mine, story("s2", me, text("Second"))],
+    });
+    openViewer({ authors: [me.username] });
+    await settle();
+
+    act(() => {
+      screen.getByRole("button", { name: "Story options" }).focus();
+    });
+    await settle(10_000);
+    expect(position()).toMatch(/^Story 1 of 2 by Ilhan Ozkan/);
+
+    act(() => {
+      screen.getByRole("button", { name: "Pause" }).focus();
+    });
+    await settle(5_000);
+    expect(position()).toMatch(/^Story 2 of 2 by Ilhan Ozkan/);
+  });
+
   it("pauses while the tab is hidden", async () => {
     api();
     openViewer();
@@ -374,6 +434,48 @@ describe("StoryViewerDialog", () => {
     expect((field as HTMLInputElement).value).toBe("");
   });
 
+  it("keeps focus on Send while a reply goes out, and stays paused until focus leaves", async () => {
+    const { calls } = api();
+    openViewer({ features: ["stories", "messages"] });
+    await settle();
+
+    const field = screen.getByLabelText("Reply to Mert Demir");
+    act(() => {
+      field.focus();
+    });
+    fireEvent.change(field, { target: { value: "I'm in!" } });
+    const send = screen.getByRole("button", { name: "Send" });
+    act(() => {
+      send.focus();
+    });
+    fireEvent.click(send);
+
+    // A disabled button would drop focus to the page in browsers.
+    expect(send.textContent).toBe("Sending…");
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    expect(send.getAttribute("aria-disabled")).toBe("true");
+    expect(document.activeElement).toBe(send);
+
+    await settle();
+    expect(screen.getByRole("link", { name: "View in Messages" })).toBeTruthy();
+    expect((send as HTMLButtonElement).disabled).toBe(false);
+    expect(document.activeElement).toBe(send);
+    // Nothing left to send: pressing it again sends nothing.
+    fireEvent.click(send);
+    await settle();
+    expect(
+      calls.filter((call) => call.path.endsWith("/messages"))
+    ).toHaveLength(1);
+
+    await settle(10_000);
+    expect(position()).toMatch(/^Story 1 of 2/);
+    act(() => {
+      screen.getByRole("button", { name: "Pause" }).focus();
+    });
+    await settle(5_000);
+    expect(position()).toMatch(/^Story 2 of 2/);
+  });
+
   it("offers no reply while Messages is off, in READ_ONLY, or on your own story", async () => {
     api();
     openViewer();
@@ -446,6 +548,34 @@ describe("StoryViewerDialog", () => {
     expect(store.getState().ui.toasts.map((toast) => toast.message)).toEqual([
       "Your story was deleted",
     ]);
+  });
+
+  it("waits for an account's stories before → or Next moves on", async () => {
+    api({ listDelay: 400 });
+    openViewer();
+    await settle(50);
+    press("ArrowRight");
+    fireEvent.click(screen.getByRole("button", { name: "Next story" }));
+
+    await settle(400);
+    expect(position()).toBe("Story 1 of 2 by Mert Demir, posted 2 hours ago");
+  });
+
+  it("doesn't close or go back while the account on screen is loading", async () => {
+    api({ listDelay: 400 });
+    const { store } = openViewer({ authors: [mert.username] });
+    await settle(50);
+    press("ArrowRight");
+    expect(store.getState().ui.dialog).toBe("storyViewer");
+    await settle(400);
+    expect(position()).toMatch(/^Story 1 of 2 by Mert Demir/);
+    cleanup();
+
+    openViewer({ from: lena.username });
+    await settle(50);
+    press("ArrowLeft");
+    await settle(400);
+    expect(position()).toMatch(/^Story 1 of 1 by Lena Hoffmann/);
   });
 
   it("says when an account has nothing left to show", async () => {

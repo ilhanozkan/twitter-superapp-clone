@@ -142,6 +142,24 @@ describe("StoriesTray", () => {
     });
   });
 
+  it("counts only the stories not seen yet, even when a later one was seen first", () => {
+    // A link to Mert's second story played it without the first.
+    items[1] = trayItem(mert, [
+      story("m1", mert, text("One")),
+      story("m2", mert, text("Two"), { seen: true }),
+    ]);
+    const { store } = renderTray();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Mert Demir's stories, 1 new" })
+    );
+    expect(parseViewerArgs(store.getState().ui.dialogArgs)?.story).toBe("m1");
+
+    act(() => {
+      store.dispatch(storySeen("m1"));
+    });
+    expect(names()[2]).toBe("Mert Demir's stories");
+  });
+
   it("turns a ring grey once its stories are watched, without moving it", () => {
     const { store } = renderTray();
     act(() => {
@@ -183,6 +201,36 @@ describe("StoriesTray", () => {
       expect(names()).toEqual(["Your story", "Add to your story"])
     );
     expect(calls.map((call) => call.path)).toEqual(["/api/stories/tray"]);
+  });
+
+  it("keeps focus on your item when your first story is posted and your last deleted", async () => {
+    const mine = [trayItem(me, [story("s1", me, text("First"))])];
+    const api = stubStoriesApi({}, { tray: mine });
+    const { store } = renderTray([]);
+
+    // The composer closed and focus went back to the button that opened it.
+    const add = screen.getByRole("button", { name: "Add to your story" });
+    add.focus();
+    act(() => {
+      store.dispatch(trayChanged());
+    });
+    await vi.waitFor(() =>
+      expect(names()).toEqual(["Your story", "Add to your story"])
+    );
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Your story" })
+    );
+
+    // The viewer closed after deleting it and focus went back to Your story.
+    stubStoriesApi({}, { tray: [] });
+    act(() => {
+      store.dispatch(trayChanged());
+    });
+    await vi.waitFor(() => expect(names()).toEqual(["Add to your story"]));
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Add to your story" })
+    );
+    expect(api.calls.map((call) => call.path)).toEqual(["/api/stories/tray"]);
   });
 
   describe("READ_ONLY", () => {

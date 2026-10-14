@@ -98,6 +98,7 @@ describe("GET /api/stories/tray", () => {
     expect(res.body.items[2]).toMatchObject({
       storyIds: ["seed-story03", "seed-story04"],
       firstUnseenId: "seed-story03",
+      unseenIds: ["seed-story03", "seed-story04"],
     });
   });
 
@@ -468,7 +469,7 @@ describe("POST /api/stories/views", () => {
         (item: { author: { username: string } }) =>
           item.author.username === "foodie_ankara"
       )
-    ).toMatchObject({ hasUnseen: false, firstUnseenId: null });
+    ).toMatchObject({ hasUnseen: false, firstUnseenId: null, unseenIds: [] });
 
     actAs("foodie_ankara");
     const viewers = await call(api.viewers, { query: { id: "seed-story03" } });

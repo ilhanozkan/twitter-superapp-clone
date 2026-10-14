@@ -91,7 +91,14 @@ export default function StoryReply({
           aria-describedby={error || tooLong ? errorId : undefined}
           className="min-h-11 min-w-0 flex-1 rounded-full border border-line bg-transparent px-4 text-[15px] placeholder:text-muted focus:border-primary focus:outline-none"
         />
-        <Button type="submit" disabled={!trimmed || tooLong || sending}>
+        <Button
+          type="submit"
+          // Not `disabled`: the button pressed to send would drop focus to
+          // the page (and out of the viewer) while it sends. `submit`
+          // ignores it while there's nothing to send or it's on its way.
+          aria-disabled={!trimmed || tooLong || sending}
+          className="aria-disabled:cursor-not-allowed aria-disabled:opacity-50"
+        >
           {sending ? "Sending…" : "Send"}
         </Button>
       </div>

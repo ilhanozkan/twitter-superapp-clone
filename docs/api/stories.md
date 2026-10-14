@@ -79,13 +79,17 @@ One per account with stories showing:
   "storyIds": ["seed-story03", "seed-story04"],
   "latestAt": "2026-10-14T10:00:00.000Z",
   "hasUnseen": true,
-  "firstUnseenId": "seed-story03"
+  "firstUnseenId": "seed-story03",
+  "unseenIds": ["seed-story03", "seed-story04"]
 }
 ```
 
-`storyIds` are oldest first, the order they play in; `firstUnseenId` is where
-the viewer should start (`null` when every story was seen), and `latestAt`
-is when the newest was posted.
+`storyIds` are oldest first, the order they play in; `unseenIds` are those
+the current user hasn't seen (the tray's "2 new"), also oldest first.
+`firstUnseenId` is the first of them, where the viewer should start (`null`
+when every story was seen), and `latestAt` is when the newest was posted. A
+later story can be seen before an earlier one (a link can open any story),
+so the unseen ones aren't always the last ones.
 
 ## Reading
 
@@ -180,7 +184,10 @@ twice is recorded once, with the first time. Unknown, expired and blocked
 ids are ignored. `ids` must be a list of 1–50 story ids (400 otherwise).
 
 On a `READ_ONLY` deployment this is a 403 like every write; the viewer keeps
-what you have seen in the browser instead.
+what you have seen in the browser instead. On Sanity without a token it is a
+503 `service_unavailable`: the viewer stops reporting for the rest of the
+page's life (rings still grey until a reload) rather than retry what can't
+succeed. It does retry a batch lost to a network error, a 429 or another 5xx.
 
 ### Replies
 
@@ -202,5 +209,20 @@ moderator can only block or unblock a story: blocking hides it everywhere at
 once. The memory store keeps at most 2,000 stories (expired ones are dropped
 first, then the oldest) and 20,000 views (oldest first).
 
-The demo's seeded stories all disappear 24 hours after the server starts,
-whatever their age; restarting the server brings them back.
+The demo's seeded stories all disappear 24 hours after they are seeded,
+whatever their age. On the memory store that is when the server starts, and
+restarting it brings them back. On Sanity it is when `npm run seed:sanity`
+exported them (their `expiresAt` is stored), so restarting changes nothing
+and importing again with `--missing` skips them. To bring them back, delete
+the seeded story documents, then export and import again:
+
+```bash
+# from the repository root
+cd sanity && npx sanity documents delete seed-story01 seed-story02 \
+  seed-story03 seed-story04 seed-story05 seed-story06 seed-story07 && cd ..
+npm run seed:sanity
+cd sanity && npx sanity dataset import seed/demo.ndjson production --missing
+```
+
+`--replace` instead of `--missing` works too, but it resets every seeded
+document, wallets included (see [sanity/README.md](../../sanity/README.md)).

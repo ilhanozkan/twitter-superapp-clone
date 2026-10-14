@@ -318,6 +318,37 @@ test("the viewer fits a phone with Previous and Next as tap zones", async ({
   await expectNoHorizontalScroll(page, "viewer at 390px");
 });
 
+test("the viewer leaves room for Previous and Next from 500px", async ({
+  page,
+}) => {
+  // Narrow and tall: the canvas width is bounded by the width, not height.
+  for (const [width, height] of [
+    [500, 1000],
+    [520, 1000],
+    [768, 1024],
+  ]) {
+    await page.setViewportSize({ width, height });
+    await page.goto("/stories/lenaframes");
+    await expect(viewer(page)).toBeVisible();
+    await viewer(page).getByRole("button", { name: "Pause" }).click();
+    const size = `${width}x${height}`;
+    const overflow = await viewer(page).evaluate(
+      (element) => element.scrollWidth - element.clientWidth
+    );
+    expect(overflow, `viewer overflow at ${size}`).toBeLessThanOrEqual(0);
+    for (const name of ["Previous story", "Next story"]) {
+      const box = await viewer(page)
+        .getByRole("button", { name })
+        .boundingBox();
+      expect(box, `${name} at ${size}`).not.toBeNull();
+      expect(box!.x, `${name} at ${size}`).toBeGreaterThanOrEqual(0);
+      expect(box!.x + box!.width, `${name} at ${size}`).toBeLessThanOrEqual(
+        width
+      );
+    }
+  }
+});
+
 for (const theme of ["light", "dark"] as const) {
   test(`Home, the viewer and the composer have no serious axe violations (${theme})`, async ({
     page,

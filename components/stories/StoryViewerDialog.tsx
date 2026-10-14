@@ -55,11 +55,13 @@ type Target = { id: string } | "start" | "end";
 /** A press on the tap zones longer than this pauses instead of moving on. */
 const HOLD_MS = 300;
 
-// The canvas is as wide as fits: at most 420px, and short enough that the
-// header, progress, reply field and dialog chrome fit in the viewport.
+// The canvas is as wide as fits: at most 420px, short enough that the
+// header, progress, reply field and dialog chrome fit in the viewport, and
+// narrow enough to leave room for what sits beside it (--story-side: the
+// Previous and Next buttons from 500px).
 const STAGE_STYLE = {
   "--story-w":
-    "min(420px, calc((100dvh - 15rem) * 9 / 16), calc(100vw - 2rem))",
+    "min(420px, calc((100dvh - 15rem) * 9 / 16), calc(100vw - 2rem - var(--story-side, 0px)))",
 } as CSSProperties;
 
 function resolveIndex(
@@ -203,7 +205,12 @@ function StoryViewer({
     else setCursor({ account, target });
   };
 
+  // Until an account's stories arrive there is nowhere to move within it:
+  // a quick → would skip the whole account, or close the viewer on the last.
+  const loading = account.status === "loading";
+
   const next = () => {
+    if (loading) return;
     if (stories && index >= 0 && index < stories.length - 1) {
       goTo(cursor.account, { id: stories[index + 1].id });
     } else {
@@ -212,6 +219,7 @@ function StoryViewer({
   };
 
   const previous = () => {
+    if (loading) return;
     if (stories && index > 0)
       goTo(cursor.account, { id: stories[index - 1].id });
     else if (cursor.account > 0) goTo(cursor.account - 1, "end");
@@ -367,7 +375,8 @@ function StoryViewer({
   return (
     <div
       style={STAGE_STYLE}
-      className="mx-auto flex w-fit max-w-full flex-col items-center gap-3"
+      // Two 40px buttons and two 12px gaps.
+      className="mx-auto flex w-fit max-w-full flex-col items-center gap-3 xs:[--story-side:6.5rem]"
     >
       <div className="flex w-[var(--story-w)] flex-col gap-3">
         <StoryProgress

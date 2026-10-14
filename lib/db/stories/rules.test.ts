@@ -180,6 +180,7 @@ describe("the tray", () => {
       latestAt: at(500),
       hasUnseen: false,
       firstUnseenId: null,
+      unseenIds: [],
     });
     // Oldest first, starting at the first one not seen yet.
     expect(tray[2]).toEqual({
@@ -188,6 +189,24 @@ describe("the tray", () => {
       latestAt: at(120),
       hasUnseen: true,
       firstUnseenId: "mert-2",
+      unseenIds: ["mert-2"],
+    });
+  });
+
+  it("lists only the unseen stories when a later one was seen first", () => {
+    const [mert] = buildTray(
+      [
+        story("mert-1", "foodie_ankara", at(300)),
+        story("mert-2", "foodie_ankara", at(120), true),
+        story("mert-3", "foodie_ankara", at(60)),
+      ],
+      "me"
+    );
+    expect(mert).toMatchObject({
+      storyIds: ["mert-1", "mert-2", "mert-3"],
+      hasUnseen: true,
+      firstUnseenId: "mert-1",
+      unseenIds: ["mert-1", "mert-3"],
     });
   });
 

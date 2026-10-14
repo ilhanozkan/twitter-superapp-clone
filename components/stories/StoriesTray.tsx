@@ -145,22 +145,38 @@ export default function StoriesTray({ items }: { items: IStoryTrayItem[] }) {
         onScroll={update}
         className="flex snap-x snap-mandatory scroll-px-3 gap-1 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
-        {own && (
+        {(own || !readOnly) && (
+          // One item, one main button, whether or not you have stories: the
+          // tray reloads after your first post or the delete of your last,
+          // and the button focus went back to must stay in the page. It
+          // plays your stories, or with none it opens the composer.
           <li className="relative shrink-0 snap-start">
             <button
               type="button"
-              data-story-author={own.author.username}
-              onClick={() => watch(own, [own])}
+              aria-label={own ? undefined : "Add to your story"}
+              data-story-author={own?.author.username}
+              onClick={own ? () => watch(own, [own]) : compose}
               className={ITEM}
             >
               <StoryRingAvatar
                 user={viewer}
                 size={AVATAR}
-                ring={unseenIds(own, seen).length > 0 ? "unseen" : "seen"}
+                ring={
+                  !own
+                    ? "none"
+                    : unseenIds(own, seen).length > 0
+                      ? "unseen"
+                      : "seen"
+                }
               />
+              {!own && (
+                <span aria-hidden="true" className={`absolute ${PLUS}`}>
+                  <HiPlus />
+                </span>
+              )}
               <span className="max-w-full truncate">Your story</span>
             </button>
-            {!readOnly && (
+            {own && !readOnly && (
               <button
                 type="button"
                 aria-label="Add to your story"
@@ -170,22 +186,6 @@ export default function StoriesTray({ items }: { items: IStoryTrayItem[] }) {
                 <HiPlus aria-hidden="true" />
               </button>
             )}
-          </li>
-        )}
-        {!own && !readOnly && (
-          <li className="relative shrink-0 snap-start">
-            <button
-              type="button"
-              aria-label="Add to your story"
-              onClick={compose}
-              className={ITEM}
-            >
-              <StoryRingAvatar user={viewer} size={AVATAR} ring="none" />
-              <span aria-hidden="true" className={`absolute ${PLUS}`}>
-                <HiPlus />
-              </span>
-              <span className="max-w-full truncate">Your story</span>
-            </button>
           </li>
         )}
         {others.map((item) => {

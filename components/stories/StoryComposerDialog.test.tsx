@@ -6,8 +6,11 @@ import {
   screen,
   within,
 } from "@testing-library/react";
+import { readFileSync } from "fs";
+import path from "path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { contrastRatio } from "../../lib/superapp/contrast";
 import { sessionState } from "../../slices/sessionSlice";
 import { openDialog } from "../../slices/uiSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
@@ -57,6 +60,23 @@ function openComposer() {
   };
 }
 
+const css = readFileSync(
+  path.join(__dirname, "../../styles/globals.css"),
+  "utf8"
+);
+
+/** The theme tokens ("r g b") declared in the CSS block that starts with `selector`. */
+function themeTokens(selector: string): Record<string, string> {
+  const start = css.indexOf(selector);
+  const block = css.slice(start, css.indexOf("}", start));
+  return Object.fromEntries(
+    [...block.matchAll(/--color-([a-z-]+):\s*([\d\s]+);/g)].map((match) => [
+      match[1],
+      match[2].trim(),
+    ])
+  );
+}
+
 const share = () =>
   fireEvent.click(screen.getByRole("button", { name: "Share to your story" }));
 const preview = (dialog: HTMLElement) =>
@@ -86,6 +106,34 @@ describe("StoryComposerDialog", () => {
     fireEvent.click(screen.getByRole("radio", { name: "Purple" }));
     expect(preview(dialog).getAttribute("data-background")).toBe("purple");
     expect(preview(dialog).style.backgroundColor).toBe("rgb(109, 40, 217)");
+  });
+
+  it("edges every background swatch at 3:1 or more on the dialog in both themes", () => {
+    const { dialog } = openComposer();
+    const themes = {
+      light: themeTokens(":root {"),
+      dark: themeTokens(':root[data-theme="dark"]'),
+    };
+    const radios = within(
+      within(dialog).getByRole("group", { name: "Background" })
+    ).getAllByRole("radio");
+    expect(radios).toHaveLength(6);
+    for (const radio of radios) {
+      // The disc is the option's only visible part (its name is sr-only).
+      const disc = radio.parentElement!.querySelector(
+        "[aria-hidden='true']"
+      ) as HTMLElement;
+      const edge = /(?:^|\s)border-([a-z][a-z-]*)(?=\s|$)/.exec(
+        disc.className
+      )?.[1];
+      for (const [theme, colors] of Object.entries(themes)) {
+        expect(colors[edge ?? ""], `${theme} border-${edge}`).toBeDefined();
+        expect(
+          contrastRatio(colors[edge!], colors.surface),
+          `${radio.getAttribute("value")} in ${theme}`
+        ).toBeGreaterThanOrEqual(3);
+      }
+    }
   });
 
   it("counts characters and refuses more than 200", () => {

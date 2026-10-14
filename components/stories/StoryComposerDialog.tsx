@@ -282,7 +282,7 @@ function StoryComposer({ onDone }: { onDone: () => void }) {
                 <legend className="mb-2 text-[15px] font-bold">
                   Background
                 </legend>
-                <div className="flex flex-wrap gap-2">
+                <div className="flex flex-wrap gap-3">
                   {STORY_BACKGROUNDS.map((option) => (
                     <label key={option.id} className="cursor-pointer">
                       <input
@@ -294,10 +294,13 @@ function StoryComposer({ onDone }: { onDone: () => void }) {
                         className="peer sr-only"
                       />
                       <span className="sr-only">{option.label}</span>
+                      {/* The disc is all a sighted user sees of the option:
+                          its muted edge is at least 3:1 on the dialog in
+                          both themes, which Slate on black isn't. */}
                       <span
                         aria-hidden="true"
                         style={{ backgroundColor: option.color }}
-                        className="block h-9 w-9 rounded-full border-2 border-surface ring-2 ring-transparent transition-shadow peer-checked:ring-fg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-primary"
+                        className="block h-9 w-9 rounded-full border-2 border-muted ring-2 ring-transparent ring-offset-2 ring-offset-surface transition-shadow peer-checked:ring-fg peer-focus-visible:outline peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-primary"
                       />
                     </label>
                   ))}

@@ -101,8 +101,10 @@ const viewRows: [string, string, number][] = [
 
 /**
  * Six accounts with stories. Seeded stories all expire 24 hours after the
- * seed is made (when the server starts), whatever their age, so a fresh
- * demo always shows the full tray; restarting the server re-seeds them.
+ * seed is made, whatever their age, so a fresh demo always shows the full
+ * tray. The memory store seeds when the server starts (a restart brings
+ * them back); Sanity stores what `npm run seed:sanity` exported, so there
+ * they last 24 hours from the export (docs/api/stories.md).
  */
 export function createStoriesSeed(ctx: SeedContext): LaneSeed<StoriesSeed> {
   const people = new Map(

@@ -100,6 +100,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(360),
           hasUnseen: true,
           firstUnseenId: "seed-story07",
+          unseenIds: ["seed-story07"],
         },
         {
           author: superapp,
@@ -107,6 +108,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(60),
           hasUnseen: true,
           firstUnseenId: "seed-story01",
+          unseenIds: ["seed-story01"],
         },
         {
           author: person("foodie_ankara", "Mert Demir"),
@@ -114,6 +116,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(120),
           hasUnseen: true,
           firstUnseenId: "seed-story03",
+          unseenIds: ["seed-story03", "seed-story04"],
         },
         {
           author: person("kizilaykahve", "Kızılay Kahve"),
@@ -121,6 +124,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(180),
           hasUnseen: true,
           firstUnseenId: "seed-story02",
+          unseenIds: ["seed-story02"],
         },
         {
           author: sarah,
@@ -128,6 +132,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(1200),
           hasUnseen: true,
           firstUnseenId: "seed-story06",
+          unseenIds: ["seed-story06"],
         },
         {
           author: person("lenaframes", "Lena Hoffmann"),
@@ -135,6 +140,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
           latestAt: at(480),
           hasUnseen: false,
           firstUnseenId: null,
+          unseenIds: [],
         },
       ]);
     });
@@ -167,6 +173,7 @@ describe.each(subjects())("%s stories", (_name, create) => {
         storyIds: ["seed-story03", "seed-story04"],
         hasUnseen: true,
         firstUnseenId: "seed-story04",
+        unseenIds: ["seed-story04"],
       });
 
       await repo.stories.markSeen(["seed-story04"], demo);
@@ -180,10 +187,26 @@ describe.each(subjects())("%s stories", (_name, create) => {
       ]);
     });
 
+    it("counts only the unseen stories when a later one was seen first", async () => {
+      // A link (/stories/foodie_ankara?story=seed-story04) plays the second.
+      await repo.stories.markSeen(["seed-story04"], demo);
+      const [, , mert] = await repo.stories.listTray(DEMO_USERNAME);
+      expect(mert).toMatchObject({
+        storyIds: ["seed-story03", "seed-story04"],
+        hasUnseen: true,
+        firstUnseenId: "seed-story03",
+        unseenIds: ["seed-story03"],
+      });
+    });
+
     it("greys your own story once you have watched it", async () => {
       await repo.stories.markSeen(["seed-story07"], demo);
       const [mine] = await repo.stories.listTray(DEMO_USERNAME);
-      expect(mine).toMatchObject({ hasUnseen: false, firstUnseenId: null });
+      expect(mine).toMatchObject({
+        hasUnseen: false,
+        firstUnseenId: null,
+        unseenIds: [],
+      });
     });
   });
 

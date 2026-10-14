@@ -28,6 +28,11 @@ export interface StoriesState {
   trayVersion: number;
   /** sessionStorage has been read into `seen` (READ_ONLY). */
   restored: boolean;
+  /**
+   * The server can't store views (Sanity without a token answers 503), so
+   * nothing more is sent; `seen` still greys the rings until a reload.
+   */
+  viewsRefused: boolean;
 }
 
 const initialState: StoriesState = {
@@ -35,6 +40,7 @@ const initialState: StoriesState = {
   pending: [],
   trayVersion: 0,
   restored: false,
+  viewsRefused: false,
 };
 
 const storiesSlice = createSlice({
@@ -66,6 +72,10 @@ const storiesSlice = createSlice({
       const queued = new Set(state.pending);
       state.pending.push(...action.payload.filter((id) => !queued.has(id)));
     },
+    /** The server can't store views on this deployment: stop reporting. */
+    seenRefused(state) {
+      state.viewsRefused = true;
+    },
     seenRestored(state, action: PayloadAction<string[]>) {
       for (const id of action.payload) state.seen[id] = true;
       state.restored = true;
@@ -77,14 +87,29 @@ const storiesSlice = createSlice({
   },
 });
 
-export const { storySeen, seenSent, seenRequeued, seenRestored, trayChanged } =
-  storiesSlice.actions;
+export const {
+  storySeen,
+  seenSent,
+  seenRequeued,
+  seenRefused,
+  seenRestored,
+  trayChanged,
+} = storiesSlice.actions;
 
 function chunks<T>(items: T[], size: number): T[][] {
   return Array.from({ length: Math.ceil(items.length / size) }, (_, index) =>
     items.slice(index * size, (index + 1) * size)
   );
 }
+
+/**
+ * This deployment can't store views at all (Sanity without a token), which
+ * no retry changes: the handler's 503 for a missing configuration.
+ */
+const cannotStore = (error: unknown) =>
+  error instanceof ApiRequestError &&
+  error.status === 503 &&
+  error.code === "service_unavailable";
 
 /** Lost on the way or refused for now: the same ids can be sent again later. */
 const worthRetrying = (error: unknown) =>
@@ -99,6 +124,7 @@ const worthRetrying = (error: unknown) =>
  * a few requests. Marking seen is idempotent on the server, so a batch sent
  * twice (a retry, or one copied into the next page's store) is harmless.
  * A READ_ONLY server refuses writes: there the ids stay on this device.
+ * Once a server answers that it can't store views, nothing more is sent.
  */
 export function flushSeen() {
   return async (
@@ -109,12 +135,16 @@ export function flushSeen() {
     const ids = stories.pending;
     if (ids.length === 0) return;
     dispatch(seenSent(ids));
-    if (session.readOnly) return;
+    if (session.readOnly || stories.viewsRefused) return;
 
     for (const batch of chunks(ids, SEEN_BATCH_MAX)) {
       try {
         await storiesApi.markSeen(batch);
       } catch (error) {
+        if (cannotStore(error)) {
+          dispatch(seenRefused());
+          return;
+        }
         if (worthRetrying(error)) dispatch(seenRequeued(batch));
       }
     }
@@ -166,6 +196,7 @@ startAppListening({
 /** Action types that settle in the current page's store after a navigation (see store.ts). */
 export const followsNavigation: string[] = [
   seenRequeued.type,
+  seenRefused.type,
   trayChanged.type,
 ];
 
