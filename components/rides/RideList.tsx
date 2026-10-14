@@ -31,12 +31,13 @@ function RideRow({ ride, role }: { ride: IRide; role: RideRole }) {
       >
         <RiCarLine />
       </span>
-      <span className="min-w-0 flex-1 leading-5">
-        <span className="block truncate font-bold">
+      {/* Rows wrap on narrow screens: the route, status and date tell them apart. */}
+      <span className="min-w-0 flex-1 leading-5 [overflow-wrap:anywhere]">
+        <span className="block font-bold">
           {ride.from.name} <span aria-hidden="true">→</span>
           <span className="sr-only">to</span> {ride.to.name}
         </span>
-        <span className="block truncate text-[13px] text-muted">
+        <span className="block text-[13px] text-muted">
           {role === "driver" && `${ride.rider.fullname} · `}
           {rideListStatus(ride)} ·{" "}
           <LocalTime iso={ride.requestedAt} format="date" />

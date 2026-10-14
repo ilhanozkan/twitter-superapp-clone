@@ -34,7 +34,8 @@ export default function DriverCard({ driver }: { driver: IDriver }) {
           >
             {driver.fullname}
           </Link>
-          <p className="truncate text-[15px] text-muted">
+          {/* How the rider finds the car: it wraps rather than being cut. */}
+          <p className="text-[15px] text-muted [overflow-wrap:anywhere]">
             {vehicleName(driver)}
           </p>
         </div>

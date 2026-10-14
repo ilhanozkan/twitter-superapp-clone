@@ -1,4 +1,10 @@
-import { APIRequestContext, expect, Page, test } from "@playwright/test";
+import {
+  APIRequestContext,
+  expect,
+  Locator,
+  Page,
+  test,
+} from "@playwright/test";
 
 import type { IRide, RideQuoteResponse } from "../types/Ride";
 import type { ILiveActivity } from "../types/Superapp";
@@ -12,6 +18,7 @@ import {
   watchConsole,
   WIDTHS,
 } from "./helpers";
+import { RIDE_OPTION, tabThroughBooking } from "./rides.helpers";
 
 // Rides at SUPERAPP_TIME_SCALE=60 (playwright.config.ts): a driver is
 // matched after 3 s, pickup is 30 s after booking (the free cancel window
@@ -84,6 +91,19 @@ async function bookOnPage(page: Page) {
 
 const statusHeading = (page: Page, name: string | RegExp) =>
   page.getByRole("heading", { level: 2, name });
+
+/** Text inside `scope` cut off with an ellipsis, as its full text. */
+function cutText(scope: Locator): Promise<string[]> {
+  return scope.evaluate((root) =>
+    [root, ...Array.from(root.querySelectorAll("*"))]
+      .filter(
+        (element) =>
+          getComputedStyle(element).textOverflow === "ellipsis" &&
+          element.scrollWidth > element.clientWidth
+      )
+      .map((element) => element.textContent ?? "")
+  );
+}
 
 test.describe("booking", () => {
   test("Recent rides lists the demo user's seeded trip", async ({ page }) => {
@@ -289,6 +309,46 @@ test.describe("accessibility (axe)", () => {
 });
 
 test.describe("responsive layout", () => {
+  // The Book bar sticks over the panel's end (on phones, on top of the tab
+  // bar). Tabbing through the form, each control must scroll clear of it
+  // (WCAG 2.4.11), also at 427×240: a 1280×720 screen zoomed to 300%.
+  for (const viewport of [
+    { width: 390, height: 844 },
+    { width: 360, height: 740 },
+    { width: 360, height: 640 },
+    { width: 427, height: 240 },
+  ]) {
+    test(`focused booking controls stay clear of the Book bar at ${viewport.width}×${viewport.height}`, async ({
+      page,
+    }) => {
+      await page.setViewportSize(viewport);
+      await page.goto("/rides");
+      expect(await tabThroughBooking(page)).toContainEqual(
+        expect.stringMatching(RIDE_OPTION)
+      );
+    });
+  }
+
+  test("the car and the recent rides are never cut off on phones", async ({
+    page,
+  }) => {
+    // The vehicle line is how a rider finds the car: it wraps, even below
+    // the 360px the pages are tested at.
+    for (const width of [320, 360]) {
+      await page.setViewportSize({ width, height: 800 });
+      await page.goto("/rides/seed-ride01");
+      const driver = page.getByRole("region", { name: "Your driver" });
+      await expect(driver.getByText("White Toyota Corolla")).toBeVisible();
+      expect(await cutText(driver), `the driver card at ${width}px`).toEqual(
+        []
+      );
+    }
+    await page.goto("/rides");
+    const recent = page.getByRole("region", { name: "Recent rides" });
+    await expect(recent.getByRole("link").first()).toBeVisible();
+    expect(await cutText(recent), "Recent rides at 360px").toEqual([]);
+  });
+
   for (const width of WIDTHS) {
     test(`no horizontal scrolling at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });

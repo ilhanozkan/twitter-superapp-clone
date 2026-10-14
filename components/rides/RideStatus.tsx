@@ -12,6 +12,11 @@ interface RideStatusProps {
   role: RideRole;
   /** The headline takes focus after a change that removes the control the user was on. */
   headingRef?: Ref<HTMLHeadingElement>;
+  /**
+   * Stages something else on the page already says: the headline still
+   * changes, but the region stays quiet (and drops what it said before).
+   */
+  quiet?: (stage: IRide["status"]) => boolean;
 }
 
 /**
@@ -24,6 +29,7 @@ export default function RideStatus({
   now,
   role,
   headingRef,
+  quiet,
 }: RideStatusProps) {
   const headline = rideHeadline(ride, now, role);
   // The stage this page has shown: a different one is announced, once.
@@ -31,7 +37,7 @@ export default function RideStatus({
   const [announcement, setAnnouncement] = useState("");
   if (shown !== ride.status) {
     setShown(ride.status);
-    setAnnouncement(rideAnnouncement(ride, role));
+    setAnnouncement(quiet?.(ride.status) ? "" : rideAnnouncement(ride, role));
   }
 
   return (

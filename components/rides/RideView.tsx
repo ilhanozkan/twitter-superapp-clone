@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { usePolling } from "../../lib/client/usePolling";
 import { useServerClock } from "../../lib/client/useServerClock";
@@ -28,6 +28,13 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const driverAssigned = (ride: IRide) =>
   ride.stages.some((stage) => stage.status === "arriving" && stage.reached);
 
+// The stages the shell's live activity announcer reads out for a ride in
+// progress ("Ride to Atakule: Ahmet is on the way"), on every page, this
+// one included. Until it skips an item's own page, as the banner does,
+// this page leaves those stages to it, so each is said once. A finished
+// or cancelled ride leaves the live activity: the page says those itself.
+const SHELL_ANNOUNCES = new Set<IRide["status"]>(["arriving", "on_trip"]);
+
 /** The car on the map for a ride at its current stage. */
 function carOf(
   ride: IRide
@@ -53,6 +60,11 @@ export default function RideView({ id }: { id: string }) {
   const viewer = useAppSelector((state) => state.session.viewer);
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const wallet = useAppSelector((state) => state.session.features.wallet);
+  const live = useAppSelector((state) =>
+    state.activity.live.some((item) => item.kind === "ride" && item.id === id)
+  );
+  // A cancel made here is said by its toast and the headline taking focus.
+  const [cancelledHere, setCancelledHere] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
 
   const role: RideRole =
@@ -80,6 +92,8 @@ export default function RideView({ id }: { id: string }) {
 
   const rider = role === "rider";
   const bookAgain = `/rides?from=${ride.from.id}&to=${ride.to.id}`;
+  const quiet = (stage: IRide["status"]) =>
+    stage === "cancelled" ? cancelledHere : live && SHELL_ANNOUNCES.has(stage);
 
   return (
     <>
@@ -100,7 +114,13 @@ export default function RideView({ id }: { id: string }) {
         </div>
 
         <div className="min-w-0">
-          <RideStatus ride={ride} now={now} role={role} headingRef={heading} />
+          <RideStatus
+            ride={ride}
+            now={now}
+            role={role}
+            headingRef={heading}
+            quiet={quiet}
+          />
           {failures >= 2 && (
             <p role="status" className="px-4 pb-3 text-[13px] text-muted">
               Can’t reach the server right now. Trying again…
@@ -109,7 +129,8 @@ export default function RideView({ id }: { id: string }) {
           {rider && !readOnly && (
             <CancelRide
               ride={ride}
-              onCancelled={() => heading.current?.focus()}
+              onButtonGone={() => heading.current?.focus()}
+              onCancelling={setCancelledHere}
             />
           )}
           {rider && driverAssigned(ride) && <DriverCard driver={ride.driver} />}

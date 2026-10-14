@@ -17,11 +17,21 @@ import Dialog from "../common/Dialog";
  */
 export default function CancelRide({
   ride,
-  onCancelled,
+  onButtonGone,
+  onCancelling,
 }: {
   ride: IRide;
-  /** The button is gone afterwards: the page moves focus somewhere useful. */
-  onCancelled: () => void;
+  /**
+   * The dialog closed after its button went away (a cancel, or pickup
+   * passing): the browser can't return focus to it, so the page moves
+   * focus somewhere useful.
+   */
+  onButtonGone: () => void;
+  /**
+   * Told as this page sends a cancel (true) and if that fails (false): a
+   * cancel made here is said by its toast and the focus move.
+   */
+  onCancelling?: (cancelling: boolean) => void;
 }) {
   const dispatch = useAppDispatch();
   const [open, setOpen] = useState(false);
@@ -32,14 +42,15 @@ export default function CancelRide({
   const errorId = useId();
 
   // Also the dialog's close event, which comes after the browser has put
-  // focus back on the opener. After a cancel that button is gone, so the
-  // page moves focus instead.
+  // focus back on the opener. After a cancel, or once pickup has passed
+  // with the dialog open, that button is gone, so the page moves focus
+  // instead. Re-created each render, so it reads the current ride.
   const close = () => {
     setOpen(false);
     setError(null);
-    if (cancelled.current) {
+    if (cancelled.current || !ride.canCancel) {
       cancelled.current = false;
-      onCancelled();
+      onButtonGone();
     }
   };
 
@@ -48,6 +59,7 @@ export default function CancelRide({
     inFlight.current = true;
     setBusy(true);
     setError(null);
+    onCancelling?.(true);
     try {
       await dispatch(cancelRide(ride.id));
       cancelled.current = true;
@@ -58,6 +70,7 @@ export default function CancelRide({
         })
       );
     } catch (failure) {
+      onCancelling?.(false);
       setError(errorMessage(failure));
     } finally {
       inFlight.current = false;

@@ -1,10 +1,12 @@
 // @vitest-environment jsdom
-import { cleanup, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IDEMPOTENCY_KEY_PATTERN } from "../../lib/superapp/idempotency";
-import { ridesState } from "../../slices/ridesSlice";
+import { rideActivity } from "../../lib/superapp/rides";
+import { initialActivityState } from "../../slices/activitySlice";
+import { rideReceived, ridesState } from "../../slices/ridesSlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IRide } from "../../types/Ride";
@@ -70,7 +72,13 @@ function renderRide(
   {
     viewer = testViewer,
     readOnly = false,
-  }: { viewer?: IAuthor; readOnly?: boolean } = {}
+    live = false,
+  }: {
+    viewer?: IAuthor;
+    readOnly?: boolean;
+    /** The ride is in the shell's live activity (the rider's ride in progress). */
+    live?: boolean;
+  } = {}
 ) {
   return renderWithStore(<RideView id={ride.id} />, {
     path: `/rides/${ride.id}`,
@@ -82,9 +90,30 @@ function renderRide(
       }),
       wallet: { wallet: wallet(30_860), limits: null, loaded: true },
       rides: ridesState(ride, serverNow),
+      activity: {
+        ...initialActivityState,
+        live: live ? [rideActivity(ride)] : [],
+      },
     },
   });
 }
+
+/** RideStatus's polite region, where the page says a new stage. */
+const stageRegion = () =>
+  within(
+    document.getElementById("ride-status-ride-test1")!.parentElement!
+  ).getByRole("status");
+
+/** Puts a newer read of the ride in the store, as a poll would. */
+const polled = (
+  store: ReturnType<typeof renderRide>["store"],
+  ride: ReturnType<typeof rideAfter>
+) =>
+  act(() => {
+    store.dispatch(
+      rideReceived({ ride: ride.ride, serverNow: ride.serverNow })
+    );
+  });
 
 afterEach(() => {
   cleanup();
@@ -165,6 +194,8 @@ describe("RideView", () => {
       name: "Ride cancelled · refunded",
     });
     await waitFor(() => expect(document.activeElement).toBe(heading));
+    // The focused headline and the toast say it: the region stays quiet.
+    expect(stageRegion().textContent).toBe("");
     const cancel = calls.find((call) => call.path.endsWith("/cancel"))!;
     expect(cancel.method).toBe("POST");
     // Cancelling is idempotent by state: no key.
@@ -199,6 +230,29 @@ describe("RideView", () => {
     );
     expect((await screen.findByRole("alert")).textContent).toBe(
       "The driver has picked you up, so this ride can't be cancelled"
+    );
+  });
+
+  it("moves focus to the headline when the dialog closes after pickup took Cancel ride away", async () => {
+    stubApi();
+    const { store } = renderRide(rideAfter(170));
+    const user = userEvent.setup();
+
+    await user.click(screen.getByRole("button", { name: "Cancel ride" }));
+    const dialog = screen.getByRole("dialog", {
+      name: "Cancel this ride?",
+    }) as HTMLDialogElement;
+    // Pickup passes while the dialog is open: its button goes away.
+    polled(store, rideAfter(185));
+    await waitFor(() =>
+      expect(screen.queryByRole("button", { name: "Cancel ride" })).toBeNull()
+    );
+    expect(dialog.open).toBe(true);
+
+    // Esc: the browser can't put focus back on a button that is gone.
+    act(() => dialog.close());
+    expect(document.activeElement).toBe(
+      screen.getByRole("heading", { level: 2, name: /^On the way to Atakule/ })
     );
   });
 
@@ -286,5 +340,62 @@ describe("RideView", () => {
       )
     ).toBeTruthy();
     expect(screen.queryByRole("heading", { name: /^Tip/ })).toBeNull();
+  });
+});
+
+describe("RideView announcements", () => {
+  it("leaves a live ride's pickup and trip to the shell's announcer, and says its arrival", async () => {
+    stubApi();
+    const { store } = renderRide(rideAfter(5), { live: true });
+    expect(stageRegion().textContent).toBe("");
+
+    // The shell says "Ride to Atakule: Ahmet is on the way".
+    polled(store, rideAfter(15));
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Ahmet is 3 min away",
+    });
+    expect(stageRegion().textContent).toBe("");
+
+    // "Ride to Atakule: On the way to Atakule"
+    polled(store, rideAfter(200));
+    await screen.findByRole("heading", {
+      level: 2,
+      name: /^On the way to Atakule/,
+    });
+    expect(stageRegion().textContent).toBe("");
+
+    // A finished ride leaves the live activity: only the page can say it.
+    polled(store, rideAfter(700));
+    await screen.findByRole("heading", { level: 2, name: "You’ve arrived" });
+    expect(stageRegion().textContent).toBe("You’ve arrived at Atakule");
+  });
+
+  it("says each stage of a ride the shell doesn't announce", async () => {
+    stubApi();
+    const { store } = renderRide(rideAfter(5));
+
+    polled(store, rideAfter(15));
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Ahmet is 3 min away",
+    });
+    expect(stageRegion().textContent).toBe(
+      "Ahmet is on the way to pick you up"
+    );
+  });
+
+  it("says a cancel made elsewhere", async () => {
+    stubApi();
+    const { store } = renderRide(rideAfter(60), { live: true });
+
+    polled(store, rideAfter(70, cancelledFields(70)));
+    await screen.findByRole("heading", {
+      level: 2,
+      name: "Ride cancelled · refunded",
+    });
+    expect(stageRegion().textContent).toBe(
+      "Ride cancelled. Your fare was refunded"
+    );
   });
 });

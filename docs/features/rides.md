@@ -91,9 +91,16 @@ page.
   so stages change on time without waiting for a poll. Under
   `prefers-reduced-motion: reduce` the car jumps to each position with no
   transition.
-- **Announcements:** a polite live region says each new stage once ("Ahmet
-  is on the way to pick you up", "Picked up. On the way to Atakule"). The
-  countdown is never announced, and polling never moves focus.
+- **Announcements:** each new stage is said once, politely. While the ride
+  is in progress it is live activity, and the shell's live activity
+  announcer reads its stages out on every page, this one included ("Ride
+  to Atakule: Ahmet is on the way", "Ride to Atakule: On the way to
+  Atakule"), so the page's own region leaves those to it. The page says
+  the rest itself: "You’ve arrived at Atakule", a cancel made elsewhere
+  ("Ride cancelled. Your fare was refunded"), and every stage for the
+  driver ("Head to Kızılay"). A cancel made here is said by the headline
+  taking focus and the toast. The countdown is never announced, and
+  polling never moves focus.
 - **Polling:** every 5 seconds while the ride is in progress (to see a
   cancel from another tab), and right after each `nextChangeAt`. After two
   failed polls a quiet status says the page is trying again.
@@ -171,8 +178,17 @@ also Tweeted about joining (`seed-t26`).
 - Book, the ride options, Cancel ride, the tip chips, Message and Book
   again are at least 44px tall.
 - Dialogs (cancel, tip) are native `<dialog>`s: focus is trapped, Esc
-  closes them and focus returns to the control that opened them (or the
-  headline after a cancel, since the button is gone).
+  closes them and focus returns to the control that opened them, or to
+  the headline when that button is gone (after a cancel, or once pickup
+  has passed with the dialog open).
+- Tabbing through the booking form, each control scrolls clear of the
+  sticky Book bar (and, on phones, the tab bar under it): while the bar is
+  on the page it keeps its height, which grows with a reason or an error,
+  in `--book-bar` on `<html>` and adds it to the root's
+  `scroll-padding-bottom`, which is what browsers check before scrolling
+  focus into view.
+- The car ("White Toyota Corolla") and the rows of Recent rides wrap
+  instead of being cut off; only names truncate.
 - The pages pass axe (WCAG 2.2 AA) in light and dark themes, in progress
   and completed, and fit from 360px to 1440px without horizontal scrolling.
 

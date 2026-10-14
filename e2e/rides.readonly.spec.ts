@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 
 import { features, idempotencyKey, watchConsole } from "./helpers";
+import { RIDE_OPTION, tabThroughBooking } from "./rides.helpers";
 
 // A READ_ONLY=true deployment: rides can be looked at, never booked.
 
@@ -23,6 +24,22 @@ test("the booking form says booking is off, with the reason on the button", asyn
   await expect(page).toHaveURL(/\/rides$/);
   await page.waitForLoadState("networkidle");
   expect(problems).toEqual([]);
+});
+
+test("focused controls stay clear of the Book bar, taller with its reason", async ({
+  page,
+}) => {
+  // The bar grows with the reason above Book; focus must still clear it.
+  await page.setViewportSize({ width: 360, height: 640 });
+  await page.goto("/rides");
+  await expect(
+    page.getByRole("button", { name: /^Book / })
+  ).toHaveAccessibleDescription(
+    "Booking is turned off on this read-only demo."
+  );
+  expect(await tabThroughBooking(page)).toContainEqual(
+    expect.stringMatching(RIDE_OPTION)
+  );
 });
 
 test("a completed ride offers no tips", async ({ page }) => {
