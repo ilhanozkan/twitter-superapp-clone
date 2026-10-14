@@ -89,3 +89,23 @@ export interface ChatPaymentResponse extends MessageResponse {
 export interface ChatRequestResponse extends MessageResponse {
   request: IPaymentRequest;
 }
+
+// Response bodies of /api/channels/** (docs/api/channels.md). Messages use
+// the conversation shapes above.
+
+export interface ChannelsResponse {
+  items: IChannel[];
+}
+
+export interface ChannelResponse {
+  channel: IChannel;
+}
+
+export interface IChannelMember {
+  user: IAuthor;
+  role: ChannelRole;
+}
+
+export interface ChannelMembersResponse {
+  items: IChannelMember[];
+}

@@ -10,6 +10,7 @@ import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
 import RelativeTime from "../common/RelativeTime";
 import PageHeader from "../layout/PageHeader";
+import MessagesTabs from "./MessagesTabs";
 import { previewText } from "./messageText";
 
 /** How often the inbox refreshes while it is shown (§18 PR 7). */
@@ -139,32 +140,7 @@ export default function Inbox({ as, selectedId = null, poll }: InboxProps) {
         </div>
       )}
 
-      {channelsOn && (
-        <nav
-          aria-label="Messages and channels"
-          className="border-b border-line"
-        >
-          <ul className="flex">
-            <li className="flex flex-1">
-              <Link
-                href="/messages"
-                aria-current="page"
-                className="flex flex-1 justify-center py-4 text-[15px] font-bold transition-colors hover:bg-fg/5"
-              >
-                <span className="border-b-4 border-primary pb-3.5">Chats</span>
-              </Link>
-            </li>
-            <li className="flex flex-1">
-              <Link
-                href="/channels"
-                className="flex flex-1 justify-center py-4 text-[15px] font-medium text-muted transition-colors hover:bg-fg/5"
-              >
-                Channels
-              </Link>
-            </li>
-          </ul>
-        </nav>
-      )}
+      {channelsOn && <MessagesTabs current="chats" />}
 
       <section
         aria-label="Conversations"

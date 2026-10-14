@@ -1,5 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { HiArrowDown } from "react-icons/hi2";
+import { ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { HiArrowDown, HiEllipsisHorizontal } from "react-icons/hi2";
 
 import { errorMessage } from "../../lib/client/api";
 import { compareOldestFirst } from "../../lib/superapp/messages";
@@ -7,6 +7,8 @@ import { OutgoingMessage } from "../../slices/messagesSlice";
 import { IMessage } from "../../types/Message";
 import { IAuthor } from "../../types/User";
 import { PaymentRequestStatus } from "../../types/Wallet";
+import Avatar from "../common/Avatar";
+import Menu, { MenuItem } from "../common/Menu";
 import LocalTime from "../superapp/LocalTime";
 import { useHydrated } from "../superapp/useHydrated";
 import { groupByDay } from "./dayGroups";
@@ -16,7 +18,16 @@ import { useBatchedAnnouncements } from "./useBatchedAnnouncements";
 import { useIsomorphicLayoutEffect } from "./useIsomorphicLayoutEffect";
 
 interface MessageListProps {
-  other: IAuthor;
+  /**
+   * A direct conversation's other member: the log and its empty state are
+   * named after them. Any other conversation (a channel) passes `label`
+   * and `empty` instead.
+   */
+  other?: IAuthor;
+  /** The log's accessible name, e.g. "Messages in #ankara_eats". */
+  label?: string;
+  /** What shows while there are no messages. */
+  empty?: ReactNode;
   viewer: string;
   /** Oldest → newest. */
   messages: IMessage[];
@@ -29,6 +40,10 @@ interface MessageListProps {
   hasOlder: boolean;
   onLoadOlder: () => Promise<void>;
   onRetry: (item: OutgoingMessage) => void;
+  /** Group chats: each run of messages by someone else starts with their name. */
+  showAuthors?: boolean;
+  /** What the viewer can do to a message (a channel's Delete), in a "…" menu. */
+  actionsFor?: (message: IMessage) => MenuItem[];
 }
 
 type Row =
@@ -75,6 +90,8 @@ function shown(messages: IMessage[]): Shown {
  */
 export default function MessageList({
   other,
+  label,
+  empty,
   viewer,
   messages,
   outbox,
@@ -83,6 +100,8 @@ export default function MessageList({
   hasOlder,
   onLoadOlder,
   onRetry,
+  showAuthors = false,
+  actionsFor,
 }: MessageListProps) {
   const hydrated = useHydrated();
   const scroller = useRef<HTMLDivElement>(null);
@@ -225,7 +244,9 @@ export default function MessageList({
         role="log"
         // Arrivals are announced in batches below, not one by one.
         aria-live="off"
-        aria-label={`Messages with ${other.fullname}`}
+        aria-label={
+          other ? `Messages with ${other.fullname}` : (label ?? "Messages")
+        }
         tabIndex={0}
         onScroll={() => {
           if (atEnd()) setPill(false);
@@ -255,17 +276,20 @@ export default function MessageList({
             </div>
           )}
 
-          {rows.length === 0 && (
-            <div className="px-8 py-16 text-center">
-              <h2 className="text-[23px] font-extrabold leading-7 [overflow-wrap:anywhere]">
-                Say hi to {other.fullname} 👋
-              </h2>
-              <p className="mt-2 text-[15px] text-muted">
-                Messages, shared Tweets and credits you send here are only
-                between the two of you.
-              </p>
-            </div>
-          )}
+          {rows.length === 0 &&
+            (other ? (
+              <div className="px-8 py-16 text-center">
+                <h2 className="text-[23px] font-extrabold leading-7 [overflow-wrap:anywhere]">
+                  Say hi to {other.fullname} 👋
+                </h2>
+                <p className="mt-2 text-[15px] text-muted">
+                  Messages, shared Tweets and credits you send here are only
+                  between the two of you.
+                </p>
+              </div>
+            ) : (
+              empty
+            ))}
 
           {groups.map((group) => (
             <section key={`${group.label}-${group.items[0].id}`}>
@@ -273,13 +297,17 @@ export default function MessageList({
                 {group.label}
               </h2>
               <ol className="flex flex-col gap-2">
-                {group.items.map((row) =>
+                {group.items.map((row, index) =>
                   row.kind === "message" ? (
                     <MessageRow
                       key={row.id}
                       message={row.message}
                       viewer={viewer}
                       seen={seenLast && row.message === lastMine}
+                      named={
+                        showAuthors && startsRun(group.items, index, viewer)
+                      }
+                      actions={actionsFor?.(row.message) ?? []}
                     />
                   ) : (
                     <OutgoingRow key={row.id} item={row.item} onRetry={retry} />
@@ -310,26 +338,76 @@ export default function MessageList({
   );
 }
 
+/**
+ * Whether the message at `index` starts a run by someone other than the
+ * viewer: the first of its day, or after a message by someone else.
+ */
+function startsRun(rows: Row[], index: number, viewer: string): boolean {
+  const row = rows[index];
+  if (row.kind !== "message" || isMine(row.message.author, viewer)) {
+    return false;
+  }
+  const before = rows[index - 1];
+  return (
+    before?.kind !== "message" ||
+    before.message.author.username.toLowerCase() !==
+      row.message.author.username.toLowerCase()
+  );
+}
+
 function MessageRow({
   message,
   viewer,
   seen,
+  named,
+  actions,
 }: {
   message: IMessage;
   viewer: string;
   seen: boolean;
+  /** Show the author above (the first of their run in a group chat). */
+  named: boolean;
+  actions: MenuItem[];
 }) {
   const mine = isMine(message.author, viewer);
+  const bubble = <MessageBubble message={message} viewer={viewer} />;
   return (
     <li
-      className={`group flex flex-col gap-0.5 px-4 ${mine ? "items-end" : "items-start"}`}
+      className={`group flex flex-col gap-0.5 px-4 ${mine ? "items-end" : "items-start"} ${named ? "pt-2" : ""}`}
     >
+      {/* Screen readers hear the author with every message (below). */}
+      {named && (
+        <span
+          aria-hidden="true"
+          className="flex max-w-full items-center gap-1.5 text-[13px] font-bold text-muted"
+        >
+          <Avatar user={message.author} size={20} />
+          <span className="truncate">{message.author.fullname}</span>
+        </span>
+      )}
       {!namesAuthor(message) && (
         <span className="sr-only">
           {mine ? "You" : message.author.fullname}:
         </span>
       )}
-      <MessageBubble message={message} viewer={viewer} />
+      {actions.length > 0 ? (
+        <div
+          className={`flex max-w-full items-center gap-1 ${mine ? "flex-row-reverse" : ""}`}
+        >
+          <div className="min-w-0">{bubble}</div>
+          <Menu
+            label="Message options"
+            strategy="fixed"
+            placement="above"
+            align={mine ? "right" : "left"}
+            items={actions}
+            trigger={<HiEllipsisHorizontal aria-hidden="true" />}
+            triggerClassName="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-lg text-muted transition-colors hover:bg-primary/10 hover:text-primary"
+          />
+        </div>
+      ) : (
+        bubble
+      )}
       <span className="sr-only text-[13px] text-muted group-focus-within:not-sr-only group-hover:not-sr-only group-focus-visible/log:not-sr-only">
         <LocalTime iso={message.createdAt} />
       </span>

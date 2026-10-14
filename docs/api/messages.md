@@ -80,7 +80,7 @@ requester (such fields are ignored).
 | `text`    | `text`, `tweet`, `story`           | Text. `tweet` is a shared Tweet `{ id, author, text }`, `null` once it is deleted or moderated. `story` is the story it replies to, `{ id, author, preview }`; `preview` is `null` once the story is gone. |
 | `payment` | `transferId`, `amount`, `note`     | Credits the author sent; the receipt is `/api/wallet/transfers/<transferId>`.                                                                                                                              |
 | `request` | `request`                          | A payment request as it is now: its `status` changes when it is paid, declined, cancelled or expires.                                                                                                      |
-| `removed` | `by` (`"author"` or `"moderator"`) | A removed channel message (channels ship in their own PR).                                                                                                                                                 |
+| `removed` | `by` (`"author"` or `"moderator"`) | A deleted channel message ([Channels API](channels.md)): "Message deleted" by its author, or "Message removed by a moderator".                                                                             |
 
 ## Reading
 

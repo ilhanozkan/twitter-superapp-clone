@@ -13,7 +13,8 @@ have no cash value. The data and endpoints are described in the
   you 15.00 credits") and the time. Unread rows are bold with a dot.
   "New message" finds someone to write to. From 1024px the list (390px) sits
   beside the conversation, which reads "Select a message" until one is
-  chosen; phones show one at a time.
+  chosen; phones show one at a time. While Channels is on, the inbox has
+  Chats | Channels tabs; the second leads to [Channels](channels.md).
 - **Conversation, `/messages/<id>`.** Only its two members can open it;
   anyone else gets a 404. On phones it is in focus mode: no tab bar, the
   composer pinned at the bottom and a Back button to the inbox.

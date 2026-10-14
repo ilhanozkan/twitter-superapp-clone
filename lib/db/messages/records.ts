@@ -1,6 +1,11 @@
 import { ConversationKind } from "../../superapp/policy/messages";
 import { Cents } from "../../../types/Money";
-import { ChannelRole, IConversation, IMessage } from "../../../types/Message";
+import {
+  ChannelRole,
+  IChannel,
+  IConversation,
+  IMessage,
+} from "../../../types/Message";
 import { IStory } from "../../../types/Story";
 import { IAuthor } from "../../../types/User";
 import { IPaymentRequest } from "../../../types/Wallet";
@@ -18,10 +23,20 @@ import { MessageQuery } from "./types";
 // things messages point at (Tweets, stories, payment requests); everything
 // the API shows is decided here, so the two stores answer alike.
 
+/** What a channel is and who made it (a channel conversation's own fields). */
+export interface ChannelDetails {
+  handle: string;
+  name: string;
+  description: string | null;
+  owner: IAuthor;
+}
+
 export interface ConversationRecord {
   id: string;
   kind: ConversationKind;
   createdAt: string;
+  /** Channels only. */
+  channel?: ChannelDetails;
 }
 
 export interface MemberRecord {
@@ -266,4 +281,95 @@ export function toPage<T extends Cursor>(
     olderCursor: hasOlder && first ? encodeCursor(first) : null,
     newestCursor: last ? encodeCursor(last) : plan.afterCursor,
   };
+}
+
+/** The most channels a list returns. */
+export const CHANNEL_LIST_MAX = 100;
+/** The most members a channel's member list returns (owner and moderators first). */
+export const CHANNEL_MEMBERS_MAX = 200;
+
+/** How a list of channels is ordered: by latest activity, or by size. */
+export type ChannelOrder = "activity" | "members";
+
+/** What both stores gather about a channel to show it to a viewer. */
+export interface ChannelSummary {
+  conversation: ConversationRecord & { channel: ChannelDetails };
+  memberCount: number;
+  /** The viewer's membership; null for non-members (and anonymous viewers). */
+  member: MemberRecord | null;
+  /** The newest stored message. */
+  last: MessageRecord | null;
+  /** Messages by others since the viewer's lastReadAt; 0 for non-members. */
+  unread: number;
+}
+
+/** A channel as `summary`'s viewer sees it. */
+export function toChannel(
+  summary: ChannelSummary,
+  lastMessage: IMessage | null
+): IChannel {
+  const { conversation, member } = summary;
+  const { handle, name, description, owner } = conversation.channel;
+  return {
+    id: conversation.id,
+    kind: "channel",
+    handle,
+    name,
+    description,
+    owner: toAuthor(owner),
+    memberCount: summary.memberCount,
+    lastMessage,
+    createdAt: conversation.createdAt,
+    viewer: {
+      role: member?.role ?? null,
+      unread: member ? summary.unread : 0,
+    },
+  };
+}
+
+/** When a channel last changed: its newest message, else its creation. */
+const activityOf = (summary: ChannelSummary) =>
+  summary.last?.createdAt ?? summary.conversation.createdAt;
+
+const byHandle = (a: ChannelSummary, b: ChannelSummary) => {
+  const [x, y] = [a.conversation.channel.handle, b.conversation.channel.handle];
+  return x < y ? -1 : x > y ? 1 : 0;
+};
+
+/**
+ * Channel list order, ties by handle: the most recently active first (your
+ * channels), or the most members first (Discover). Sanity's queries order
+ * the same way before cutting the list at CHANNEL_LIST_MAX.
+ */
+export function compareChannels(
+  order: ChannelOrder
+): (a: ChannelSummary, b: ChannelSummary) => number {
+  return (a, b) => {
+    const first =
+      order === "activity"
+        ? Date.parse(activityOf(b)) - Date.parse(activityOf(a))
+        : b.memberCount - a.memberCount;
+    return first !== 0 ? first : byHandle(a, b);
+  };
+}
+
+const ROLE_RANK: Record<ChannelRole, number> = {
+  owner: 0,
+  moderator: 1,
+  member: 2,
+};
+
+/** Member list order: the owner, moderators, then members, each by username. */
+export function compareMembers(a: MemberRecord, b: MemberRecord): number {
+  const byRole = ROLE_RANK[a.role] - ROLE_RANK[b.role];
+  if (byRole !== 0) return byRole;
+  const [x, y] = [a.user.username.toLowerCase(), b.user.username.toLowerCase()];
+  return x < y ? -1 : x > y ? 1 : 0;
+}
+
+/** A channel message as authorizing its removal needs it. */
+export interface ChannelMessageRef {
+  id: string;
+  author: IAuthor;
+  removed: "author" | "moderator" | null;
 }

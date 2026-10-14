@@ -1,28 +1,39 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  channelConversationId,
   chatMessageId,
   compareOldestFirst,
   directConversationId,
   greetingMessageId,
+  isChannelConversationId,
   isDirectConversationId,
   isUnread,
   laterOf,
   memberKey,
+  parseChannelHandle,
 } from "../../superapp/messages";
 import {
   allowsMoney,
+  canChangeRoles,
+  canLeave,
   canModerate,
   canPost,
   canRead,
   isMember,
+  removalBy,
 } from "../../superapp/policy/messages";
 import { IPaymentRequest } from "../../../types/Wallet";
 import { encodeCursor } from "../cursor";
 import {
+  ChannelSummary,
+  compareChannels,
+  compareMembers,
+  MemberRecord,
   MessageRecord,
   planPage,
   referencedIds,
+  toChannel,
   toMessage,
   toPage,
 } from "./records";
@@ -227,5 +238,141 @@ describe("compareOldestFirst", () => {
       "b",
     ]);
     expect(compareOldestFirst(items[0], items[0])).toBe(0);
+  });
+});
+
+describe("channels", () => {
+  it("names a channel's conversation after its handle", () => {
+    expect(channelConversationId("ankara_eats")).toBe("channel-ankara_eats");
+    expect(isChannelConversationId("channel-ankara_eats")).toBe(true);
+    expect(isChannelConversationId("dm-a-b")).toBe(false);
+    expect(memberKey("channel-ankara_eats", "SarahCodes")).toBe(
+      "member-channel-ankara_eats-sarahcodes"
+    );
+  });
+
+  it("reads handles from URLs in lower case, or not at all", () => {
+    expect(parseChannelHandle("Ankara_Eats")).toBe("ankara_eats");
+    expect(parseChannelHandle("abc")).toBe("abc");
+    for (const value of [
+      "ab",
+      "a".repeat(31),
+      "ankara-eats",
+      "ankara eats",
+      "private.x",
+      "",
+      ["ankara_eats"],
+      undefined,
+    ]) {
+      expect(parseChannelHandle(value), String(value)).toBeNull();
+    }
+  });
+
+  it("lets owners and moderators remove anyone's message, authors their own", () => {
+    expect(removalBy("member", true)).toBe("author");
+    expect(removalBy(null, true)).toBe("author");
+    expect(removalBy("moderator", true)).toBe("author");
+    expect(removalBy("moderator", false)).toBe("moderator");
+    expect(removalBy("owner", false)).toBe("moderator");
+    expect(removalBy("member", false)).toBeNull();
+    expect(removalBy(null, false)).toBeNull();
+  });
+
+  it("keeps roles and leaving to the owner's rules", () => {
+    expect(canChangeRoles("owner")).toBe(true);
+    for (const role of ["moderator", "member", null] as const) {
+      expect(canChangeRoles(role), String(role)).toBe(false);
+    }
+    expect(canLeave("owner")).toBe(false);
+    expect(canLeave("moderator")).toBe(true);
+    expect(canLeave("member")).toBe(true);
+    expect(canLeave(null)).toBe(false);
+  });
+
+  const summary = (
+    handle: string,
+    memberCount: number,
+    lastAt: string | null,
+    member: MemberRecord | null = null
+  ): ChannelSummary => ({
+    conversation: {
+      id: channelConversationId(handle),
+      kind: "channel",
+      createdAt: "2026-10-01T00:00:00.000Z",
+      channel: { handle, name: handle, description: null, owner: alice },
+    },
+    memberCount,
+    member,
+    last: lastAt
+      ? record({
+          createdAt: lastAt,
+          content: {
+            type: "text",
+            text: "Hi",
+            tweetId: null,
+            storyId: null,
+            storyAuthor: null,
+          },
+        })
+      : null,
+    unread: 2,
+  });
+
+  it("orders lists by activity or by size, ties by handle", () => {
+    const quiet = summary("quiet", 9, null);
+    const busy = summary("busy", 2, "2026-10-09T00:00:00.000Z");
+    const also = summary("also_busy", 2, "2026-10-09T00:00:00.000Z");
+    const handles = (list: ChannelSummary[]) =>
+      list.map((entry) => entry.conversation.channel.handle);
+
+    expect(
+      handles([quiet, busy, also].sort(compareChannels("activity")))
+    ).toEqual(["also_busy", "busy", "quiet"]);
+    expect(
+      handles([busy, also, quiet].sort(compareChannels("members")))
+    ).toEqual(["quiet", "also_busy", "busy"]);
+  });
+
+  it("shows unread only to members", () => {
+    const member: MemberRecord = {
+      conversationId: "channel-room",
+      user: bob,
+      role: "moderator",
+      joinedAt: "2026-10-01T00:00:00.000Z",
+      lastReadAt: null,
+    };
+    expect(toChannel(summary("room", 3, null, member), null).viewer).toEqual({
+      role: "moderator",
+      unread: 2,
+    });
+    expect(toChannel(summary("room", 3, null), null).viewer).toEqual({
+      role: null,
+      unread: 0,
+    });
+  });
+
+  it("lists the owner, then moderators, then members, by username", () => {
+    const member = (username: string, role: MemberRecord["role"]) =>
+      ({
+        conversationId: "channel-room",
+        user: { username, fullname: username, image: null },
+        role,
+        joinedAt: "2026-10-01T00:00:00.000Z",
+        lastReadAt: null,
+      }) satisfies MemberRecord;
+    const sorted = [
+      member("zed", "member"),
+      member("Bea", "moderator"),
+      member("amy", "member"),
+      member("own", "owner"),
+      member("al", "moderator"),
+    ].sort(compareMembers);
+    expect(sorted.map((m) => m.user.username)).toEqual([
+      "own",
+      "al",
+      "Bea",
+      "amy",
+      "zed",
+    ]);
   });
 });

@@ -9,6 +9,7 @@ import {
 import { IAuthor } from "../../../types/User";
 import { IPaymentRequest, ITransfer } from "../../../types/Wallet";
 import { FeatureRepository, IdempotentInput, MoneyResult } from "../types";
+import type { ChannelMessageRef } from "./records";
 
 // Skeleton declared by the foundation; the messages lane implements
 // MessagesRepository and the channels lane ChannelsRepository.
@@ -106,4 +107,15 @@ export interface ChannelsRepository extends FeatureRepository {
     messageId: string,
     by: "author" | "moderator"
   ): Promise<boolean>;
+  /**
+   * Added by the channels lane: the message `messageId` of channel `handle`
+   * (its author and whether it is removed), or null, which is what a caller
+   * needs to authorize `removeMessage`. Both stores implement it; it is
+   * optional only because the foundation's stub (lib/db/stubs.ts) predates
+   * it (see the deviations log).
+   */
+  findMessage?(
+    handle: string,
+    messageId: string
+  ): Promise<ChannelMessageRef | null>;
 }

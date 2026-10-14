@@ -31,6 +31,13 @@ const REMOVED_CHANNEL_MESSAGES =
 const isDirect = ({ document }: ConditionalPropertyCallbackContext) =>
   document?.kind !== "channel";
 
+/**
+ * The app's channel handle rule (CHANNEL_HANDLE_PATTERN in
+ * lib/superapp/messages.ts, kept equal by lib/db/channels.contract.test.ts).
+ * The handle is the channel's id, so it is never edited here.
+ */
+export const CHANNEL_HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+
 /** A string the app writes and moderators only read. */
 const fixedString = (name: string, title: string) =>
   defineField({ name, title, type: "string", readOnly: true });
@@ -57,16 +64,31 @@ const conversationType = defineType({
     defineField({
       name: "handle",
       title: "Handle",
+      description: "The channel's address (#handle). It is the channel's id.",
       type: "string",
       readOnly: true,
       hidden: isDirect,
+      validation: (rule) =>
+        rule.custom((value: string | undefined, context) =>
+          context.document?.kind !== "channel" ||
+          (!!value && CHANNEL_HANDLE_PATTERN.test(value))
+            ? true
+            : "3 to 30 lower-case letters, digits or _"
+        ),
     }),
     defineField({
       name: "name",
       title: "Name",
       type: "string",
       hidden: isDirect,
-      validation: (rule) => maxLength(rule, LIMITS.channels.nameMax),
+      validation: (rule) => [
+        maxLength(rule, LIMITS.channels.nameMax),
+        rule.custom((value: string | undefined, context) =>
+          context.document?.kind === "channel" && !value?.trim()
+            ? "A channel needs a name"
+            : true
+        ),
+      ],
     }),
     defineField({
       name: "description",
@@ -77,6 +99,11 @@ const conversationType = defineType({
       validation: (rule) => maxLength(rule, LIMITS.channels.descriptionMax),
     }),
     { ...partyField("owner", "Owner"), readOnly: true, hidden: isDirect },
+    {
+      ...usernameKeyField("ownerKey", "Owner (key)"),
+      readOnly: true,
+      hidden: true,
+    },
     { ...timestampField("createdAt", "Created"), readOnly: true },
   ],
   orderings: [newestFirst],

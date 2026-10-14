@@ -67,13 +67,24 @@ const party = (person: IAuthor) =>
     image: person.image,
   });
 
+/** A conversation; a channel's also carries its handle, name, description and owner. */
 export function conversationDocument(record: ConversationRecord) {
-  return {
+  const { channel } = record;
+  return compact({
     _id: privateId(record.id),
     _type: "conversation",
     kind: record.kind,
+    ...(channel
+      ? {
+          handle: channel.handle,
+          name: channel.name,
+          description: channel.description,
+          owner: party(channel.owner),
+          ownerKey: lower(channel.owner.username),
+        }
+      : {}),
     createdAt: record.createdAt,
-  };
+  });
 }
 
 export function memberDocument(record: MemberRecord) {
@@ -121,7 +132,11 @@ export function messageDocument(record: MessageRecord) {
   });
 }
 
-type PartyRow = { username: string; fullname: string; image?: string | null };
+export type PartyRow = {
+  username: string;
+  fullname: string;
+  image?: string | null;
+};
 
 /** A message as MESSAGE_FIELDS reads it. */
 export interface MessageRow {
@@ -152,7 +167,7 @@ export interface MemberRow {
   lastReadAt?: string | null;
 }
 
-const personFrom = (row: PartyRow): IAuthor => ({
+export const personFrom = (row: PartyRow): IAuthor => ({
   username: row.username,
   fullname: row.fullname,
   image: row.image ?? null,
@@ -201,6 +216,52 @@ export function memberFromRow(row: MemberRow): MemberRecord {
     role: row.role,
     joinedAt: row.joinedAt,
     lastReadAt: row.lastReadAt ?? null,
+  };
+}
+
+/**
+ * Turns stored messages into what `viewer` sees, reading what they point at
+ * (Tweets and payment requests in one query, stories through their
+ * repository). Channels resolve theirs with it too.
+ */
+export function createSanityMessageResolver(
+  deps: SanityDeps
+): (records: MessageRecord[], viewer: string) => Promise<IMessage[]> {
+  const { read, now } = deps;
+  return async (records, viewer) => {
+    const { tweetIds, storyIds, requestIds } = referencedIds(records);
+    const [found, stories] = await Promise.all([
+      tweetIds.length + requestIds.length > 0
+        ? read<{ requests: RequestRow[]; tweets: TweetRef[] }>(REFS_QUERY, {
+            requestIds: requestIds
+              .filter((id) => KEY_PATTERN.test(id))
+              .map(privateId),
+            tweetIds,
+          })
+        : null,
+      Promise.all(
+        storyIds.map((id) => deps.self().stories.getStory(id, viewer))
+      ),
+    ]);
+    const at = now();
+    const refs: MessageRefs = {
+      tweets: new Map(
+        (found?.tweets ?? []).map((tweet) => [
+          tweet.id,
+          { ...tweet, author: personFrom(tweet.author) },
+        ])
+      ),
+      stories: new Map(
+        stories.flatMap((story) => (story ? [[story.id, story] as const] : []))
+      ),
+      requests: new Map(
+        (found?.requests ?? []).map((row) => {
+          const request = toPaymentRequest(row, at);
+          return [request.id, request] as const;
+        })
+      ),
+    };
+    return toMessages(records, refs);
   };
 }
 
@@ -277,45 +338,7 @@ export function createSanityMessages(deps: SanityDeps): MessagesRepository {
     return personFrom(access.other);
   };
 
-  /** Resolves stored messages for `viewer`, reading what they point at in one query. */
-  const resolve = async (
-    records: MessageRecord[],
-    viewer: string
-  ): Promise<IMessage[]> => {
-    const { tweetIds, storyIds, requestIds } = referencedIds(records);
-    const [found, stories] = await Promise.all([
-      tweetIds.length + requestIds.length > 0
-        ? read<{ requests: RequestRow[]; tweets: TweetRef[] }>(REFS_QUERY, {
-            requestIds: requestIds
-              .filter((id) => KEY_PATTERN.test(id))
-              .map(privateId),
-            tweetIds,
-          })
-        : null,
-      Promise.all(
-        storyIds.map((id) => deps.self().stories.getStory(id, viewer))
-      ),
-    ]);
-    const at = now();
-    const refs: MessageRefs = {
-      tweets: new Map(
-        (found?.tweets ?? []).map((tweet) => [
-          tweet.id,
-          { ...tweet, author: personFrom(tweet.author) },
-        ])
-      ),
-      stories: new Map(
-        stories.flatMap((story) => (story ? [[story.id, story] as const] : []))
-      ),
-      requests: new Map(
-        (found?.requests ?? []).map((row) => {
-          const request = toPaymentRequest(row, at);
-          return [request.id, request] as const;
-        })
-      ),
-    };
-    return toMessages(records, refs);
-  };
+  const resolve = createSanityMessageResolver(deps);
 
   const resolveOne = async (record: MessageRecord, viewer: string) => {
     const [message] = await resolve([record], viewer);
