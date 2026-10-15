@@ -44,6 +44,14 @@ export default function Dialog({
       ref={dialog}
       aria-label={title}
       onClose={onClose}
+      // Escape: close through React now, during the keypress. The browser
+      // hides the dialog at once but fires "close" only at its next frame,
+      // and until then focus stays on the hidden content when there is no
+      // opener to return it to (a dialog opened by a shortcut): a key typed
+      // in between went into it, e.g. "/" right after closing Compose.
+      onCancel={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
       onPointerDown={(event) => {
         pressedBackdrop.current = event.target === event.currentTarget;
       }}

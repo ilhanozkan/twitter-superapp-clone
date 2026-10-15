@@ -182,8 +182,21 @@ test.describe("keyboard", () => {
     await page.keyboard.press("n");
     const compose = page.getByRole("dialog", { name: "Compose Tweet" });
     await expect(compose).toBeVisible();
+    // Escape hides the dialog at once, but the browser fires its close event
+    // a frame later. By then focus must have left it: a key typed in between
+    // (like "/" next) went to the hidden text box.
+    await page.evaluate(() => {
+      const record = () => {
+        document.body.dataset.focusOnClose = document.activeElement?.tagName;
+      };
+      window.addEventListener("close", record, { capture: true, once: true });
+    });
     await page.keyboard.press("Escape");
     await expect(compose).toBeHidden();
+    await expect(page.locator("body")).toHaveAttribute(
+      "data-focus-on-close",
+      "BODY"
+    );
 
     await page.keyboard.press("/");
     await expect(
