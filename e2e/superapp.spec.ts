@@ -45,10 +45,20 @@ test.describe("pages", () => {
       page.getByText("Demo credits have no cash value", { exact: false })
     ).toBeVisible();
 
+    // Transfers made by earlier specs on the same server come first: load
+    // pages until the seeded payment shows (a click before hydration is
+    // lost, so this retries).
     const activity = page.getByRole("region", { name: "Activity" });
-    await activity
-      .getByRole("link", { name: /Payment from Marco Rossi/ })
-      .click();
+    const payment = activity.getByRole("link", {
+      name: /Payment from Marco Rossi/,
+    });
+    const more = activity.getByRole("button", { name: "Show more" });
+    await expect(async () => {
+      if ((await payment.count()) === 0 && (await more.isVisible()))
+        await more.click();
+      await expect(payment).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 20_000 });
+    await payment.click();
     await expect(page).toHaveURL(/\/wallet\/transactions\/seed-tx03$/);
     await expect(page.getByText("Thanks for the code review 🙏")).toBeVisible();
   });
