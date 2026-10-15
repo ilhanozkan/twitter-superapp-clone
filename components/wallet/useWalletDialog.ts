@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 
 import { closeDialog, ModalDialogName } from "../../slices/uiSlice";
-import { useAppSelector } from "../../store";
+import { latestStore, useAppSelector } from "../../store";
 import { useAppStore } from "./useAppStore";
 
 /**
@@ -20,14 +20,15 @@ export function useWalletDialog(name: ModalDialogName) {
   // The store this renders with now. A navigation that brings page data
   // starts a new store, which keeps the open dialog; a close that runs once
   // a tip or top-up is confirmed (after an await) must close it there, not
-  // in the store of the click, or the sheet stays open to pay again.
+  // in the store of the click, or the sheet stays open to pay again. Before
+  // the new page commits, the ref still holds the old store: latestStore.
   const current = useRef(store);
   useLayoutEffect(() => {
     current.current = store;
   }, [store]);
 
   const close = useCallback(() => {
-    const { getState, dispatch } = current.current;
+    const { getState, dispatch } = latestStore(current.current);
     if (getState().ui.dialog === name) dispatch(closeDialog());
   }, [name]);
 

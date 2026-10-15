@@ -364,6 +364,9 @@ test("a tip confirmed after going Back closes the sheet and shows on the page le
   await page.goto("/sarahcodes/status/seed-t02");
   await page.locator("#focused-tweet-author").click();
   await expect(page).toHaveURL(/\/sarahcodes$/);
+  // The URL changes before the profile renders, and until then the Tweet's
+  // page (with its own Tip button, on the store being replaced) is still up.
+  await expect(page.locator("#focused-tweet-author")).toHaveCount(0);
   const card = page
     .locator("main article")
     .filter({ hasText: "Hot take: every icon-only button" });
@@ -371,7 +374,7 @@ test("a tip confirmed after going Back closes the sheet and shows on the page le
   const sheet = page.getByRole("dialog", { name: "Tip @sarahcodes" });
   await sheet.getByRole("button", { name: "Tip 2.00 credits" }).click();
 
-  // The tip reaches the server only once Back has read the Tweet's page.
+  // The tip reaches the server only once Back has shown the Tweet's page.
   let release = () => {};
   const readBack = new Promise<void>((resolve) => (release = resolve));
   await page.route("**/api/tweets/seed-t02/tip", async (route) => {
@@ -389,6 +392,8 @@ test("a tip confirmed after going Back closes the sheet and shows on the page le
   await page.goBack();
   await pageData;
   await expect(page).toHaveURL(/\/sarahcodes\/status\/seed-t02$/);
+  // Once the Tweet's page shows, so the tip lands in the store it rendered.
+  await expect(page.locator("#focused-tweet-author")).toBeVisible();
   release();
 
   await expect(
