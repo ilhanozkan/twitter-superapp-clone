@@ -188,13 +188,16 @@ describe("activity slice", () => {
       });
 
     poll([ride("Finding your driver")]);
-    expect(store.getState().activity.announcement).toBe("");
+    expect(store.getState().activity.changes).toEqual([]);
     poll([ride("Finding your driver")]);
-    expect(store.getState().activity.announcement).toBe("");
+    expect(store.getState().activity.changes).toEqual([]);
     poll([ride("Ahmet is 3 min away")]);
-    expect(store.getState().activity.announcement).toBe(
-      "Ride to Atakule: Ahmet is 3 min away"
-    );
+    // With the item's page, so the shell can leave it to that page.
+    expect(store.getState().activity.changes).toEqual([
+      { href: "/rides/r1", text: "Ride to Atakule: Ahmet is 3 min away" },
+    ]);
+    poll([ride("Ahmet is 3 min away")]);
+    expect(store.getState().activity.changes).toEqual([]);
   });
 
   it("server-rendered activity waits for the client's own count", () => {

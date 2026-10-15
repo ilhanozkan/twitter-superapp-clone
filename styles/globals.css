@@ -14,6 +14,7 @@
     --color-like: 212 20 106;
     --color-retweet: 0 127 85;
     --color-danger: 220 38 38;
+    --color-danger-strong: 185 28 28;
     --color-warning: 180 83 9;
     --color-tip: 180 83 9;
     --color-success: 0 127 85;
@@ -34,6 +35,7 @@
     --color-like: 249 24 128;
     --color-retweet: 0 186 124;
     --color-danger: 244 33 46;
+    --color-danger-strong: 255 92 102;
     --color-warning: 255 212 0;
     --color-tip: 255 212 0;
     --color-success: 0 186 124;
@@ -55,6 +57,7 @@
       --color-like: 249 24 128;
       --color-retweet: 0 186 124;
       --color-danger: 244 33 46;
+      --color-danger-strong: 255 92 102;
       --color-warning: 255 212 0;
       --color-tip: 255 212 0;
       --color-success: 0 186 124;

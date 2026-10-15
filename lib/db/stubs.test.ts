@@ -57,6 +57,9 @@ describe("feature stubs", () => {
     expect(await stories.getStory("seed-s1", DEMO_USERNAME)).toBeNull();
     expect(await messages.unreadConversations(DEMO_USERNAME)).toBe(0);
     expect(await channels.listChannels({}, DEMO_USERNAME)).toEqual([]);
+    expect(
+      await channels.findMessage("builders", "seed-msg-sab-04")
+    ).toBeNull();
     await expect(
       messages.listMessages("dm-a-b", DEMO_USERNAME)
     ).rejects.toBeInstanceOf(NotFoundError);

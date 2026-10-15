@@ -81,6 +81,17 @@ describe("TweetMenu", () => {
     expect(await menuItems()).toEqual(["Delete", "Send via Direct Message"]);
   });
 
+  it("tints Delete red when focused, with a red that stays readable on it", async () => {
+    renderWithStore(<TweetMenu tweet={tweetBy(testViewer.username)} />);
+    await menuItems();
+    const remove = screen.getByRole("menuitem", { name: "Delete" });
+    expect(document.activeElement).toBe(remove);
+    // The contrast of these tokens is checked in lib/superapp/contrast.test.ts.
+    expect(remove.className).toContain("focus:bg-danger/10");
+    expect(remove.className).toContain("focus:text-danger-strong");
+    expect(remove.className).not.toContain("focus:bg-fg/10");
+  });
+
   it("drops Delete in read-only mode, and the menu with it when nothing is left", () => {
     renderWithStore(<TweetMenu tweet={tweetBy(testViewer.username)} />, {
       state: {

@@ -11,10 +11,9 @@ import {
 } from "../../slices/ordersSlice";
 import { openCompose, showToast } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
-import { OrderStatus } from "../../types/Order";
 import { IPlace } from "../../types/Superapp";
 import { Button, ButtonLink } from "../common/Button";
-import { useBottomScrollPadding } from "../shop/useBottomScrollPadding";
+import { useBottomScrollPadding } from "../layout/useBottomScrollPadding";
 import LocalTime from "../superapp/LocalTime";
 import StageList from "../superapp/StageList";
 import CancelOrderDialog from "./CancelOrderDialog";
@@ -36,18 +35,6 @@ export const POLL_MS = 5_000;
 /** The stages and the courier move between polls on the server's clock. */
 const TICK_MS = 1_000;
 const AFTER_CHANGE_MS = 500;
-
-/**
- * Status changes the shell's live activity announcer reads out itself while
- * the order is in the viewer's live activity ("Order from Kızılay Kahve:
- * On the way"), even on this page. The page leaves those to it, so each is
- * heard once. A stopgap: once the shell skips an item on its own page (a
- * requested foundation change), this goes and the page says every stage.
- */
-const SHELL_ANNOUNCES: ReadonlySet<OrderStatus> = new Set([
-  "accepted",
-  "on_the_way",
-]);
 
 const focusLost = () =>
   !document.activeElement || document.activeElement === document.body;
@@ -79,9 +66,6 @@ export default function OrderTracker({
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const entry = useAppSelector((state) => latestEntry(state, initial));
   const id = initial.order.id;
-  const inShellActivity = useAppSelector((state) =>
-    state.activity.live.some((item) => item.kind === "order" && item.id === id)
-  );
   // As the server last said: once settled, nothing changes by itself.
   const settled = !inProgress(entry.order);
   const now = useServerTime(entry.serverNow, TICK_MS, !settled);
@@ -114,13 +98,12 @@ export default function OrderTracker({
   }, [nextChange, clock, refreshNow]);
 
   // Status changes only, each once: the poll and the clock both see a
-  // stage arrive. A cancel made here (the dialog is still open when it
-  // lands) is said by the toast and the headline taking focus instead.
+  // stage arrive (the shell's announcer leaves this order to the page). A
+  // cancel made here (the dialog is still open when it lands) is said by
+  // the toast and the headline taking focus instead.
   const [said, setSaid] = useState({ status: order.status, text: "" });
   if (said.status !== order.status) {
-    const quiet =
-      (inShellActivity && SHELL_ANNOUNCES.has(order.status)) ||
-      (order.status === "cancelled" && (cancelling || cancelledHere));
+    const quiet = order.status === "cancelled" && (cancelling || cancelledHere);
     setSaid({
       status: order.status,
       text: quiet ? said.text : statusText(order, side),

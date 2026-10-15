@@ -1,3 +1,4 @@
+import { ApiRequestError } from "../../lib/client/api";
 import { LIMITS } from "../../lib/superapp/limits";
 import { formatCredits } from "../../lib/superapp/money";
 import { OrderPrice } from "../../lib/superapp/orders";
@@ -64,4 +65,18 @@ export function orderBlocker({
     };
   }
   return null;
+}
+
+/**
+ * The products a 422 `unavailable` names (sold out, or gone from the
+ * menu), from the error's details. Empty when it isn't one, or when the
+ * refusal is about the business itself (closed, paused, the minimum).
+ */
+export function unavailableProducts(error: unknown): string[] {
+  if (!(error instanceof ApiRequestError) || error.code !== "unavailable") {
+    return [];
+  }
+  return (error.details ?? [])
+    .filter((detail) => detail.path === "productId")
+    .map((detail) => detail.message);
 }

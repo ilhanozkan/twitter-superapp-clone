@@ -3,6 +3,7 @@ import { act, cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { toLiveActivity } from "../../lib/db/orders/views";
 import { getPlace } from "../../lib/superapp/places";
 import { initialActivityState } from "../../slices/activitySlice";
 import { ordersState } from "../../slices/ordersSlice";
@@ -10,7 +11,8 @@ import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IOrder } from "../../types/Order";
 import { stubFetch } from "../shop/testing";
-import { clockText, tweetAboutIt } from "./format";
+import AppShell from "../layout/AppShell";
+import { clockText, inProgress, tweetAboutIt } from "./format";
 import OrderTracker from "./OrderTracker";
 import { at, iso, order, wallet } from "./testing";
 
@@ -25,12 +27,15 @@ function setup({
   side = "buyer" as "buyer" | "business",
   readOnly = false,
   inLiveActivity = false,
+  inShell = false,
 }: {
   initial?: IOrder;
   serverNow?: string;
   side?: "buyer" | "business";
   readOnly?: boolean;
   inLiveActivity?: boolean;
+  /** Inside the app's shell, whose announcer polls the live activity. */
+  inShell?: boolean;
 } = {}) {
   // When the tracker asked, in seconds after T0.
   const polledAt: number[] = [];
@@ -61,23 +66,30 @@ function setup({
         serverNow: iso(4),
       },
     ],
-    "/api/activity": () => [
-      200,
-      {
-        serverNow: iso(4),
-        unreadConversations: 0,
-        newNotifications: 0,
-        live: [],
-      },
-    ],
+    // The order in the buyer's live activity while it is on its way.
+    "/api/activity": () => {
+      const now = order({}, { now: new Date() });
+      return [
+        200,
+        {
+          serverNow: inLiveActivity ? new Date().toISOString() : iso(4),
+          unreadConversations: 0,
+          newNotifications: 0,
+          live: inLiveActivity && inProgress(now) ? [toLiveActivity(now)] : [],
+        },
+      ];
+    },
   });
   vi.stubGlobal("fetch", vi.fn(api.fetch));
-  const result = renderWithStore(
+  const tracker = (
     <OrderTracker
       initial={{ order: initial, serverNow }}
       from={kizilay}
       side={side}
-    />,
+    />
+  );
+  const result = renderWithStore(
+    inShell ? <AppShell>{tracker}</AppShell> : tracker,
     {
       path: "/orders/order-abc",
       state: {
@@ -86,22 +98,12 @@ function setup({
           readOnly,
           features: featuresWith("wallet", "shop", "orders"),
         }),
+        trends: { items: [], loaded: true, loading: false },
+        wallet: { wallet: wallet(30_210), limits: null, loaded: true },
         orders: ordersState([initial], serverNow),
         activity: {
           ...initialActivityState,
-          live: inLiveActivity
-            ? [
-                {
-                  kind: "order",
-                  id: initial.id,
-                  title: "Order from Kızılay Kahve",
-                  status: "Placed",
-                  eta: initial.deliverAt,
-                  href: "/orders/order-abc",
-                  nextChangeAt: initial.acceptAt,
-                },
-              ]
-            : [],
+          live: inLiveActivity ? [toLiveActivity(initial)] : [],
         },
       },
     }
@@ -109,8 +111,12 @@ function setup({
   return { ...result, calls: api.calls, polledAt };
 }
 
+/** The tracker's own polite region. */
 const liveRegion = () =>
-  document.querySelector<HTMLElement>('p[aria-live="polite"]')!;
+  document.querySelector<HTMLElement>('section > p[aria-live="polite"]')!;
+/** The shell's, which reads out live activity changes. */
+const shellRegion = () =>
+  document.querySelector<HTMLElement>('body > div > p[aria-live="polite"]')!;
 const currentStep = () =>
   within(screen.getByRole("region", { name: "Progress" }))
     .getAllByRole("listitem")
@@ -132,14 +138,14 @@ describe("OrderTracker over time", () => {
     });
   });
 
-  /** What the live region says, second by second, until `seconds`. */
-  async function listen(seconds: number) {
+  /** What a live region says, second by second, until `seconds`. */
+  async function listen(seconds: number, region = liveRegion) {
     const heard: string[] = [];
     for (let second = 1; second < seconds; second++) {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_000);
       });
-      const text = liveRegion().textContent ?? "";
+      const text = region().textContent ?? "";
       if (text && text !== heard.at(-1)) heard.push(text);
     }
     return heard;
@@ -197,10 +203,67 @@ describe("OrderTracker over time", () => {
     }
   });
 
-  it("leaves what the shell's live activity reads out to it", async () => {
-    setup({ inLiveActivity: true });
-    expect(await listen(40)).toEqual([
-      `Delivered at ${clockText(order().deliverAt)}`,
+  it("says every stage once on its own page, leaving the shell quiet", async () => {
+    const { calls } = setup({ inLiveActivity: true, inShell: true });
+    const shell: string[] = [];
+    const page = await listen(40, () => {
+      const text = shellRegion().textContent ?? "";
+      if (text) shell.push(text);
+      return liveRegion();
+    });
+    const eta = clockText(order().deliverAt);
+    expect(page).toEqual([
+      `Accepted · Arrives around ${eta}`,
+      `On the way · Arrives around ${eta}`,
+      `Delivered at ${eta}`,
+    ]);
+    expect(shell).toEqual([]);
+    // The shell did see the changes: it polled at each one.
+    expect(
+      calls.filter((call) => call.path.startsWith("/api/activity")).length
+    ).toBeGreaterThan(2);
+  });
+
+  it("is said by the shell on other pages", async () => {
+    const api = stubFetch({
+      "/api/activity": () => {
+        const now = order({}, { now: new Date() });
+        return [
+          200,
+          {
+            serverNow: new Date().toISOString(),
+            unreadConversations: 0,
+            newNotifications: 0,
+            live: inProgress(now) ? [toLiveActivity(now)] : [],
+          },
+        ];
+      },
+    });
+    vi.stubGlobal("fetch", vi.fn(api.fetch));
+    renderWithStore(
+      <AppShell>
+        <h1>Services</h1>
+      </AppShell>,
+      {
+        path: "/services",
+        state: {
+          session: sessionState({
+            viewer: testViewer,
+            readOnly: false,
+            features: featuresWith("wallet", "shop", "orders"),
+          }),
+          trends: { items: [], loaded: true, loading: false },
+          wallet: { wallet: wallet(30_210), limits: null, loaded: true },
+          activity: {
+            ...initialActivityState,
+            live: [toLiveActivity(order())],
+          },
+        },
+      }
+    );
+    expect(await listen(40, shellRegion)).toEqual([
+      "Order from Kızılay Kahve: Accepted",
+      "Order from Kızılay Kahve: On the way",
     ]);
   });
 

@@ -4,6 +4,7 @@ import { HiXMark } from "react-icons/hi2";
 import { ApiRequestError } from "../../lib/client/api";
 import { shopApi } from "../../lib/client/shopApi";
 import { IProductCard } from "../../types/Shop";
+import { TweetAttachmentInput } from "../../types/Tweet";
 import Money from "../superapp/Money";
 import { cardBusinessLine } from "./format";
 import ProductThumb from "./ProductThumb";
@@ -13,18 +14,24 @@ type Loaded =
   | { id: string; card: IProductCard }
   | { id: string; card: null; problem: "gone" | "failed" };
 
-/**
- * The product a Tweet being written carries, as its card will show, with a
- * Remove button. It is read by id, because the composer may start with one
- * (e.g. "Tweet about it" after an order) that the picker never listed.
- */
-export default function AttachmentPreview({
-  productId,
-  onRemove,
-}: {
-  productId: string;
+export interface ComposerProductPreviewProps {
+  /** The product attached to the Tweet being written. */
+  attachment: TweetAttachmentInput;
+  /** Remove clicked: the composer drops it and keeps focus in its toolbar. */
   onRemove: () => void;
-}) {
+}
+
+/**
+ * Slot (§12.3): the product a Tweet being written carries, as its card will
+ * show, with a Remove button, above the composer's toolbar. It is read by
+ * id, because the composer may start with one (e.g. "Tweet about it" after
+ * an order) that the picker never listed.
+ */
+export default function ComposerProductPreview({
+  attachment,
+  onRemove,
+}: ComposerProductPreviewProps) {
+  const { productId } = attachment;
   const [loaded, setLoaded] = useState<Loaded | null>(null);
 
   useEffect(() => {

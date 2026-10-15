@@ -168,5 +168,6 @@ export function unbuiltChannels(configured: boolean): ChannelsRepository {
     setRole: refuse,
     listMembers: async () => [],
     removeMessage: refuse,
+    findMessage: async () => null,
   };
 }

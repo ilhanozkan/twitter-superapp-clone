@@ -2,7 +2,10 @@
 import { act, cleanup, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { initialActivityState } from "../../slices/activitySlice";
+import {
+  fetchActivity,
+  initialActivityState,
+} from "../../slices/activitySlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { ILiveActivity } from "../../types/Superapp";
@@ -43,13 +46,19 @@ function stubApi(live: ILiveActivity[] = []) {
 
 function renderShell(
   shell?: PageShell,
-  { walletLoaded = true, activityLoaded = true } = {}
+  {
+    walletLoaded = true,
+    activityLoaded = true,
+    path = "/",
+    live = [] as ILiveActivity[],
+  } = {}
 ) {
   return renderWithStore(
     <AppShell shell={shell}>
       <h1>Page</h1>
     </AppShell>,
     {
+      path,
       state: {
         session: sessionState({
           viewer: testViewer,
@@ -62,7 +71,7 @@ function renderShell(
           limits: null,
           loaded: walletLoaded,
         },
-        activity: { ...initialActivityState, loaded: activityLoaded },
+        activity: { ...initialActivityState, loaded: activityLoaded, live },
       },
     }
   );
@@ -165,5 +174,93 @@ describe("AppShell data", () => {
       await vi.advanceTimersByTimeAsync(6_000);
     });
     expect(polls()).toBe(2);
+  });
+});
+
+describe("AppShell live activity announcements", () => {
+  const ride = (status: string): ILiveActivity => ({
+    kind: "ride",
+    id: "r1",
+    title: "Ride to Atakule",
+    status,
+    eta: null,
+    href: "/rides/r1",
+    nextChangeAt: null,
+  });
+  const order = (status: string): ILiveActivity => ({
+    kind: "order",
+    id: "o1",
+    title: "Order from Kızılay Kahve",
+    status,
+    eta: null,
+    href: "/orders/o1",
+    nextChangeAt: null,
+  });
+
+  /** What the shell's polite region says. */
+  const said = () =>
+    document.querySelector('body > div > p[aria-live="polite"]')!.textContent;
+
+  /** A poll of GET /api/activity answering `live`. */
+  const polled = (
+    store: ReturnType<typeof renderShell>["store"],
+    live: ILiveActivity[]
+  ) =>
+    act(() => {
+      store.dispatch({
+        type: fetchActivity.fulfilled.type,
+        payload: {
+          serverNow: new Date().toISOString(),
+          unreadConversations: 0,
+          newNotifications: 0,
+          live,
+          since: null,
+        },
+      });
+    });
+
+  it("reads out a status change on other pages", () => {
+    stubApi();
+    const { store } = renderShell(undefined, {
+      path: "/services",
+      live: [ride("Finding your driver")],
+    });
+    expect(said()).toBe("");
+    polled(store, [ride("Ahmet is on the way")]);
+    expect(said()).toBe("Ride to Atakule: Ahmet is on the way");
+    polled(store, [ride("Ahmet is on the way")]);
+    expect(said()).toBe("");
+  });
+
+  it("leaves an item to its own page, query and hash aside", () => {
+    stubApi();
+    const { store } = renderShell(undefined, {
+      path: "/rides/r1?from=kizilay#map",
+      live: [ride("Finding your driver"), order("Placed")],
+    });
+    polled(store, [ride("Ahmet is on the way"), order("Accepted")]);
+    expect(said()).toBe("Order from Kızılay Kahve: Accepted");
+    polled(store, [ride("On the way to Atakule"), order("Accepted")]);
+    expect(said()).toBe("");
+  });
+
+  it("doesn't read out an old change after a navigation", () => {
+    stubApi();
+    const { store, router, rerender } = renderShell(undefined, {
+      path: "/rides/r1",
+      live: [ride("Finding your driver")],
+    });
+    polled(store, [ride("Ahmet is on the way")]);
+    expect(said()).toBe("");
+
+    router.asPath = "/services";
+    rerender(
+      <AppShell>
+        <h1>Services</h1>
+      </AppShell>
+    );
+    expect(said()).toBe("");
+    polled(store, [ride("On the way to Atakule")]);
+    expect(said()).toBe("Ride to Atakule: On the way to Atakule");
   });
 });

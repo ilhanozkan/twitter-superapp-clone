@@ -30,12 +30,12 @@ import BusinessStatus from "../shop/BusinessStatus";
 import { deliveryText } from "../shop/format";
 import { FOOD_PATH, menuPath } from "../shop/paths";
 import QuantityStepper from "../shop/QuantityStepper";
-import { useBottomScrollPadding } from "../shop/useBottomScrollPadding";
+import { useBottomScrollPadding } from "../layout/useBottomScrollPadding";
 import { useCart, useCartSync } from "../shop/useCart";
 import DemoBadge from "../superapp/DemoBadge";
 import Money from "../superapp/Money";
 import PlaceSelect from "../superapp/PlaceSelect";
-import { orderBlocker } from "./blockers";
+import { orderBlocker, unavailableProducts } from "./blockers";
 import { useDeliverTo, writeDeliverTo } from "./deliverTo";
 import { orderNumber, orderPath } from "./format";
 import PriceSummary from "./PriceSummary";
@@ -60,6 +60,17 @@ async function loadMenu(username: string): Promise<Menu> {
       ? { state: "gone" }
       : { state: "failed", message: errorMessage(reason) };
   }
+}
+
+/** The menu with these products sold out, as the server just said. */
+function markSoldOut(menu: Menu, productIds: string[]): Menu {
+  if (menu.state !== "loaded") return menu;
+  const products = new Map(menu.products);
+  for (const id of productIds) {
+    const product = products.get(id);
+    if (product) products.set(id, { ...product, available: false });
+  }
+  return { ...menu, products };
 }
 
 /** A cart line as it can be ordered now: the menu's price, or why not. */
@@ -338,9 +349,16 @@ function CheckoutForm({
         message: errorMessage(failure),
         funds: code === "insufficient_funds",
       });
-      // The server's prices or availability differ from what is shown:
-      // read the menu again, so the lines and total are the ones it means.
-      if (code === "price_changed" || code === "unavailable") reload();
+      // The server's prices or availability differ from what is shown.
+      // Sold-out items are named in the error: mark those lines. Otherwise
+      // (new prices, or the business closed meanwhile) read the menu again,
+      // so the lines and total are the ones it means.
+      const soldOut = unavailableProducts(failure);
+      if (soldOut.length > 0) {
+        setMenu((current) => markSoldOut(current, soldOut));
+      } else if (code === "price_changed" || code === "unavailable") {
+        reload();
+      }
     } finally {
       inFlight.current = false;
       setBusy(false);

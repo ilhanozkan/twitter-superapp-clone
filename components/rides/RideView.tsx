@@ -28,13 +28,6 @@ const same = (a: string, b: string) => a.toLowerCase() === b.toLowerCase();
 const driverAssigned = (ride: IRide) =>
   ride.stages.some((stage) => stage.status === "arriving" && stage.reached);
 
-// The stages the shell's live activity announcer reads out for a ride in
-// progress ("Ride to Atakule: Ahmet is on the way"), on every page, this
-// one included. Until it skips an item's own page, as the banner does,
-// this page leaves those stages to it, so each is said once. A finished
-// or cancelled ride leaves the live activity: the page says those itself.
-const SHELL_ANNOUNCES = new Set<IRide["status"]>(["arriving", "on_trip"]);
-
 /** The car on the map for a ride at its current stage. */
 function carOf(
   ride: IRide
@@ -60,9 +53,6 @@ export default function RideView({ id }: { id: string }) {
   const viewer = useAppSelector((state) => state.session.viewer);
   const readOnly = useAppSelector((state) => state.session.readOnly);
   const wallet = useAppSelector((state) => state.session.features.wallet);
-  const live = useAppSelector((state) =>
-    state.activity.live.some((item) => item.kind === "ride" && item.id === id)
-  );
   // A cancel made here is said by its toast and the headline taking focus.
   const [cancelledHere, setCancelledHere] = useState(false);
   const heading = useRef<HTMLHeadingElement>(null);
@@ -92,8 +82,9 @@ export default function RideView({ id }: { id: string }) {
 
   const rider = role === "rider";
   const bookAgain = `/rides?from=${ride.from.id}&to=${ride.to.id}`;
+  // The page says every stage; the shell's announcer leaves this ride to it.
   const quiet = (stage: IRide["status"]) =>
-    stage === "cancelled" ? cancelledHere : live && SHELL_ANNOUNCES.has(stage);
+    stage === "cancelled" && cancelledHere;
 
   return (
     <>

@@ -1,5 +1,6 @@
 import { useState } from "react";
 
+import { LIMITS } from "../../lib/superapp/limits";
 import { formatCredits } from "../../lib/superapp/money";
 import { showToast } from "../../slices/uiSlice";
 import { requestCredits } from "../../slices/walletUiSlice";
@@ -7,11 +8,11 @@ import { useAppDispatch } from "../../store";
 import { IPaymentRequest } from "../../types/Wallet";
 import Dialog from "../common/Dialog";
 import Spinner from "../common/Spinner";
+import PaymentConfirm from "../superapp/PaymentConfirm";
 import AmountStep from "./AmountStep";
 import DialogProblem from "./DialogProblem";
 import DoneStep from "./DoneStep";
 import RecipientStep from "./RecipientStep";
-import RequestConfirm from "./RequestConfirm";
 import { useCreditsDraft } from "./useCreditsDraft";
 import { useMoneyAction } from "./useMoneyAction";
 import { useWalletDialog } from "./useWalletDialog";
@@ -72,10 +73,14 @@ function RequestFlow({
 
   if (flow.step === "review" || !sent) {
     return (
-      <RequestConfirm
-        payer={draft.other}
+      <PaymentConfirm
+        kind="request"
+        action="Request"
+        payee={draft.other}
         amount={draft.amount}
         note={draft.note}
+        explanation={`${draft.other.fullname} gets a notification and can pay or decline. Requests expire after ${LIMITS.request.lifetimeDays} days.`}
+        // The flow keeps the key (draft changes rotate it), not the review.
         onConfirm={async () => {
           const request = await run(requestCredits(draft, flow.key));
           setSent(request);

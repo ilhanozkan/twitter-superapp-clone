@@ -12,11 +12,11 @@ import { useAppDispatch, useAppSelector } from "../../store";
 import { RideQuoteResponse, RideType } from "../../types/Ride";
 import { PlaceId } from "../../types/Superapp";
 import { Button } from "../common/Button";
+import { useBottomScrollPadding } from "../layout/useBottomScrollPadding";
 import DemoBadge from "../superapp/DemoBadge";
 import Money from "../superapp/Money";
 import PlaceSelect from "../superapp/PlaceSelect";
 import RideOptions from "./RideOptions";
-import { useBarHeight } from "./useBarHeight";
 import { RideRouteChoice } from "./useRideQuote";
 
 interface BookingPanelProps {
@@ -64,7 +64,8 @@ export default function BookingPanel({
   );
   // Two clicks in one frame both see busy=false: guard synchronously too.
   const inFlight = useRef(false);
-  const bar = useBarHeight<HTMLDivElement>("--book-bar");
+  const [bar, setBar] = useState<HTMLDivElement | null>(null);
+  useBottomScrollPadding(bar);
   const headingId = useId();
   const chipsId = useId();
   const reasonId = useId();
@@ -229,15 +230,12 @@ export default function BookingPanel({
         </p>
       </div>
 
-      {/* Whether a focused control needs scrolling is judged against the
-          root's scroll padding (Chrome ignores the control's scroll margin
-          there), so while the bar is on the page it adds its height and
-          1rem to that padding: tabbing never leaves focus under the bar
-          (WCAG 2.4.11). On phones the bar sits on the tab bar, whose 53px
-          + 1rem globals.css already pads. */}
+      {/* The bar's height (it grows with a reason or an error) goes into
+          the root's scroll padding while it is on the page, so tabbing
+          never leaves focus under it (WCAG 2.4.11). */}
       <div
-        ref={bar}
-        className="sticky bottom-[calc(53px+env(safe-area-inset-bottom))] z-10 flex flex-col gap-2 border-t border-line bg-surface px-4 py-3 xs:bottom-0 [html:has(&)]:[scroll-padding-bottom:calc(var(--book-bar,5rem)+1rem)] max-xs:[html:has(&)]:[scroll-padding-bottom:calc(53px+1rem+env(safe-area-inset-bottom)+var(--book-bar,5rem))]"
+        ref={setBar}
+        className="sticky bottom-[calc(53px+env(safe-area-inset-bottom))] z-10 flex flex-col gap-2 border-t border-line bg-surface px-4 py-3 xs:bottom-0"
       >
         {reason && (
           <p id={reasonId} className="text-[15px] text-muted">

@@ -5,7 +5,7 @@ import { selectCartCount, selectCartSubtotal } from "../../slices/cartSlice";
 import { useAppSelector } from "../../store";
 import CartStatus from "./CartStatus";
 import { cartText } from "./format";
-import { useBottomScrollPadding } from "./useBottomScrollPadding";
+import { useBottomScrollPadding } from "../layout/useBottomScrollPadding";
 import { useCart, useCartSync } from "./useCart";
 
 /** Where the cart is reviewed and paid (the orders feature's page). */

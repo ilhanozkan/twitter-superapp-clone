@@ -14,7 +14,7 @@ import { directConversationId } from "../../lib/superapp/messages";
 import { messagesState } from "../../slices/messagesSlice";
 import { openDialog } from "../../slices/uiSlice";
 import { useAppDispatch } from "../../store";
-import { NextPageWithShell } from "../../types/PageShell";
+import { NextPageWithShell, PageShell } from "../../types/PageShell";
 import { FeatureStatus } from "../../types/Superapp";
 import { IAuthor } from "../../types/User";
 
@@ -27,7 +27,11 @@ type Draft =
 interface MessagesPageProps {
   feature: FeatureStatus;
   draft: Draft | null;
+  /** A draft is a conversation: focus mode, like /messages/[id]. */
+  shell?: PageShell;
 }
+
+const DRAFT_SHELL: PageShell = { hideMobileNav: true };
 
 function NewMessageButton() {
   const dispatch = useAppDispatch();
@@ -111,8 +115,6 @@ const MessagesPage: NextPageWithShell<MessagesPageProps> = ({
       ) : (
         <MessagesLayout
           show={draft ? "conversation" : "inbox"}
-          // The shell is per page, so the draft keeps the phone tab bar.
-          tabBar
           inbox={
             <Inbox
               as={draft ? "pane" : "page"}
@@ -171,7 +173,11 @@ export const getServerSideProps = withPageState<MessagesPageProps>(
     if (!user || problem) {
       ctx.res.statusCode = 404;
       return {
-        props: { feature, draft: { problem: problem ?? "unknown" } },
+        props: {
+          feature,
+          draft: { problem: problem ?? "unknown" },
+          shell: DRAFT_SHELL,
+        },
         state: { messages: messagesState(await inbox) },
       };
     }
@@ -201,6 +207,7 @@ export const getServerSideProps = withPageState<MessagesPageProps>(
           conversationId: directConversationId(viewer.username, user.username),
           serverNow: new Date().toISOString(),
         },
+        shell: DRAFT_SHELL,
       },
       state: { messages: messagesState(await inbox) },
     };

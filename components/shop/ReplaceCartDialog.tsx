@@ -1,5 +1,5 @@
 import { Button } from "../common/Button";
-import NestedDialog from "./NestedDialog";
+import Dialog from "../common/Dialog";
 
 /**
  * A cart holds one business: adding from another asks before clearing it.
@@ -18,7 +18,7 @@ export default function ReplaceCartDialog({
   onCancel: () => void;
 }) {
   return (
-    <NestedDialog
+    <Dialog
       open={open}
       onClose={onCancel}
       title="Start a new cart?"
@@ -35,6 +35,6 @@ export default function ReplaceCartDialog({
           Cancel
         </Button>
       </div>
-    </NestedDialog>
+    </Dialog>
   );
 }

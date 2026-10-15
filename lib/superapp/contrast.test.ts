@@ -2,7 +2,7 @@ import { readFileSync } from "fs";
 import path from "path";
 import { describe, expect, it } from "vitest";
 
-import { contrastRatio, parseColor } from "./contrast";
+import { contrastRatio, overlay, parseColor } from "./contrast";
 
 // The SuperApp text colors must stay readable (WCAG AA, 4.5:1) on the page
 // and panel backgrounds in both themes, and badges (white on the filled
@@ -40,6 +40,7 @@ describe("contrast", () => {
     expect(parseColor("#1570C2")).toEqual([21, 112, 194]);
     expect(() => parseColor("red")).toThrow();
     expect(() => parseColor("1 2 300")).toThrow();
+    expect(overlay("255 0 0", "0 0 255", 0.25)).toEqual([64, 0, 191]);
   });
 
   it.each(Object.entries(themes))(
@@ -54,6 +55,21 @@ describe("contrast", () => {
           ).toBeGreaterThanOrEqual(4.5);
         }
       }
+    }
+  );
+
+  it.each(Object.entries(themes))(
+    "keeps a hovered or focused danger menu item readable (%s)",
+    (_theme, colors) => {
+      // components/common/Menu.tsx: text-danger-strong on bg-danger/10.
+      const tint = overlay(colors.danger, colors.surface, 0.1);
+      expect(
+        contrastRatio(colors["danger-strong"], tint)
+      ).toBeGreaterThanOrEqual(4.5);
+      expect(
+        contrastRatio(colors.danger, colors.surface),
+        "danger on surface"
+      ).toBeGreaterThanOrEqual(4.5);
     }
   );
 

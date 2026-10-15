@@ -26,10 +26,12 @@ const line = (item: IProduct, quantity: number, unitPrice = item.price) =>
   ({ productId: item.id, name: item.name, unitPrice, quantity }) as CartLine;
 
 type Answer = [number, unknown];
-const failure = (status: number, code: string, message: string): Answer => [
-  status,
-  { error: { code, message } },
-];
+const failure = (
+  status: number,
+  code: string,
+  message: string,
+  details?: { path: string; message: string }[]
+): Answer => [status, { error: { code, message, details } }];
 
 function setup({
   lines = [line(latte, 2), line(simit, 1, 250)],
@@ -204,13 +206,12 @@ describe("Checkout", () => {
     expect((await placeButton()).textContent).toContain("15.50 credits");
   });
 
-  it("marks what is sold out after the server says so, and lets it go", async () => {
-    setup({
-      menus: [
-        [latte, simit],
-        [latte, { ...simit, available: false }],
-      ],
-      answer: failure(422, "unavailable", "Simit is sold out"),
+  it("marks what the server says is sold out, and lets it go", async () => {
+    // The menu read a moment ago still lists Simit: the error names it.
+    const { menuReads } = setup({
+      answer: failure(422, "unavailable", "Simit is sold out", [
+        { path: "productId", message: simit.id },
+      ]),
     });
     await userEvent.click(await placeButton());
     expect((await screen.findByRole("alert")).textContent).toBe(
@@ -218,12 +219,30 @@ describe("Checkout", () => {
     );
     const remove = await screen.findByRole("button", { name: "Remove Simit" });
     expect(screen.getByText("Sold out")).toBeTruthy();
+    expect(menuReads()).toBe(1);
 
     await userEvent.click(remove);
     const place = await placeButton();
     expect(place.getAttribute("aria-disabled")).toBeNull();
     expect(place.textContent).toContain("11.50 credits");
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("reads the menu again when the refusal names no item", async () => {
+    // The business stopped taking orders meanwhile.
+    const { menuReads } = setup({
+      answer: failure(
+        422,
+        "unavailable",
+        "Kızılay Kahve isn't taking orders right now"
+      ),
+    });
+    await userEvent.click(await placeButton());
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "Kızılay Kahve isn't taking orders right now"
+    );
+    await waitFor(() => expect(menuReads()).toBe(2));
+    expect(screen.queryByText("Sold out")).toBeNull();
   });
 
   it("keeps focus on the lines when one goes, then on Browse Food", async () => {

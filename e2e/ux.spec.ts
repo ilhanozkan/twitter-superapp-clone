@@ -34,6 +34,25 @@ test.describe("accessibility (axe)", () => {
         await expectNoSeriousViolations(page);
       });
     }
+
+    test(`an open Tweet menu with Delete focused in ${theme} mode`, async ({
+      page,
+    }) => {
+      await setTheme(page, theme);
+      await page.goto("/illlhanozkan/status/seed-t05");
+      await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
+      // The Tweet's own menu (replies below it have theirs).
+      await page
+        .getByRole("main")
+        .getByRole("button", { name: "More options" })
+        .first()
+        .press("Enter");
+      const remove = page.getByRole("menuitem", { name: "Delete" });
+      await expect(remove).toBeFocused();
+      // Focused, not hovered: the pointer stays out of the menu.
+      await page.mouse.move(0, 0);
+      await expectNoSeriousViolations(page);
+    });
   }
 });
 

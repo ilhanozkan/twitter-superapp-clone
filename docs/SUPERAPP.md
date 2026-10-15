@@ -114,10 +114,14 @@ always comes from `lib/auth.ts`.
   page.
 - A page sets `Page.shell` (`types/PageShell.ts`) for the wide layout (990px
   main, no right column), focus mode (no tab bar on phones) or no compose
-  button.
+  button. `getServerSideProps` can adjust it for one request by returning
+  `shell` in its props (a draft at `/messages?to=` is in focus mode; the
+  inbox on the same page is not).
 - `AppShell` polls `GET /api/activity` every 30 seconds while the page is
   visible and online, and early at the next known change (`nextChangeAt`).
-  Badges and the "Happening now" card come from it.
+  Badges and the "Happening now" card come from it, and a polite region
+  reads out live items' status changes, except on the item's own page,
+  which says them itself.
 
 ### Client
 
@@ -372,7 +376,7 @@ components render nothing; hooks return `[]`; seeds return nothing.
 | `components/tweet/TweetActions.tsx`                                                              | `<TipAction>`                                                                                                                       | `components/wallet/TipAction.tsx`                                                                                                                                                       |
 | `components/tweet/TweetMenu.tsx`                                                                 | `useWalletTweetMenuItems(tweet)`, then `useMessageTweetMenuItems(tweet)`, always in this order                                      | `components/wallet/walletTweetMenuItems.ts`, `components/messages/messageTweetMenuItems.ts`                                                                                             |
 | `components/tweet/{TweetCard,TweetDetail}.tsx`                                                   | `<ProductAttachment tweet variant>`                                                                                                 | `components/shop/ProductAttachment.tsx`                                                                                                                                                 |
-| `components/tweet/Composer.tsx`                                                                  | attachment state, `<ComposerProductPicker>`                                                                                         | `components/shop/ComposerProductPicker.tsx`                                                                                                                                             |
+| `components/tweet/Composer.tsx`                                                                  | attachment state, `<ComposerProductPicker>` in the toolbar, `<ComposerProductPreview>` above it                                     | `components/shop/ComposerProductPicker.tsx`, `components/shop/ComposerProductPreview.tsx`                                                                                               |
 | `components/layout/AppShell.tsx`                                                                 | `WalletDialogs`, `MessageDialogs`, `OrderDialogs`, `StoryDialogs` (loaded with `next/dynamic`)                                      | `components/{wallet,messages,orders,stories}/*Dialogs.tsx`                                                                                                                              |
 | `pages/wallet/index.tsx`                                                                         | `<WalletActions>`, `<WalletRequests>`                                                                                               | `components/wallet/{WalletActions,WalletRequests}.tsx`                                                                                                                                  |
 | `pages/services.tsx`                                                                             | `<BusinessCarousel>`                                                                                                                | `components/shop/BusinessCarousel.tsx`                                                                                                                                                  |

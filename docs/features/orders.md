@@ -21,7 +21,7 @@ is in [docs/SUPERAPP.md](../SUPERAPP.md).
 | A menu (`/<business>/menu`)            | **Add** on each product, quantity steppers, and the cart bar "View cart · 3 items · 14.50 credits", leading to checkout.                                                                                                                                                          |
 | **Checkout** (`/checkout`)             | The business with its open state, the cart's lines with steppers, **Deliver to**, a note, subtotal, delivery fee and total, "SuperApp Wallet · 308.60 credits available · Demo" with the balance after the order, and **Place order · 14.00 credits**.                            |
 | An order (`/orders/<id>`)              | "Order #K7Q2 from Kızılay Kahve", where it stands ("On the way · Arrives around 14:35"), a schematic line from the business to the delivery place with the courier's dot, the stages with their times, the receipt, and what can be done now.                                     |
-| **Your orders** (`/orders`)            | **Active** (on their way) and **Past** (delivered or cancelled), each linking to its page; delivered ones offer **Order again**.                                                                                                                                                  |
+| **Your orders** (`/orders`)            | **Active** (on their way) and **Past** (delivered or cancelled), each linking to its page; delivered ones offer **Order again**. Reached from the **Orders** tile in Services, Food's header, live activity, notifications and every order's page.                                |
 | **Food** (`/food`)                     | **Order again** with your latest delivery from up to three places, and **Your orders** (the receipt icon in the header).                                                                                                                                                          |
 | **Business** (`/business`), Orders tab | The board (the page's default tab): "Today: 4 orders · 63.00 credits · 15.00 pending", the business's wallet ("Available · Pending"), **Simulate a customer order · Demo bot**, then **In progress** (with **Cancel & refund**) and **Completed**, side by side from 1024px wide. |
 | Live activity                          | An order on its way shows in the right column's "Happening now" card (from 1024px) or as a banner under the page header ("Order from Kızılay Kahve · On the way · arrives 14:35 · Track"), except on its own page.                                                                |
@@ -72,6 +72,8 @@ before anything is sent, or as an alert when the server says so:
 - The business is closed ("Kızılay Kahve: Closed · Opens 11:00") or not
   taking orders.
 - An item is sold out or gone ("Simit is sold out. Remove it to order.").
+  When the server refuses an order for it, its answer names the items
+  (the 422's `details`), and checkout or the sheet marks exactly those.
 - The subtotal is under the business's minimum ("The minimum order at
   Kızılay Kahve is 3.00 credits. Add 0.50 credits more.").
 - Over 200.00 credits, or 5 orders already on their way.
@@ -79,7 +81,8 @@ before anything is sent, or as an alert when the server says so:
   credits**).
 - Prices changed since the page read them: "Prices changed. Review your
   order." Checkout and the sheet read the menu again and show the new
-  total; nothing was charged.
+  total; nothing was charged. They do the same when the business closed
+  or paused meanwhile.
 
 ## Tracking
 
@@ -179,7 +182,9 @@ order is due to change.
   review, and Place order names the total and the business.
 - Disabled Pay, Place order, Cancel & refund and Demo bot stay focusable
   (`aria-disabled`) and are described by the reason.
-- Status changes are announced once, politely; countdowns never are.
+- Status changes are announced once, politely: by the order's page while
+  it is open, by the shell's live activity announcer anywhere else.
+  Countdowns never are.
   Polling never moves focus. After a cancel, focus goes to the headline
   (the order page) or to the order's new place (the board).
 - The sheet and the confirmations are native `<dialog>`s. Quantity

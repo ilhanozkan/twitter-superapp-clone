@@ -18,10 +18,12 @@ const latte = product();
 const placed = order();
 
 type Answer = [number, unknown];
-const failure = (status: number, code: string, message: string): Answer => [
-  status,
-  { error: { code, message } },
-];
+const failure = (
+  status: number,
+  code: string,
+  message: string,
+  details?: { path: string; message: string }[]
+): Answer => [status, { error: { code, message, details } }];
 
 function setup({
   answers = [
@@ -225,6 +227,66 @@ describe("QuickOrderSheet", () => {
     );
     expect((await within(sheet()).findByRole("alert")).textContent).toContain(
       "Prices changed. Review your order."
+    );
+    await waitFor(() =>
+      expect(
+        calls.filter((call) => call.path === "/api/businesses/kizilaykahve")
+      ).toHaveLength(2)
+    );
+  });
+
+  it("marks the item sold out when the server says so, without reading it again", async () => {
+    const { calls } = setup({
+      answers: [
+        failure(422, "unavailable", "Pistachio latte is sold out", [
+          { path: "productId", message: latte.id },
+        ]),
+      ],
+    });
+    await userEvent.click(await payButton());
+    await userEvent.click(
+      within(sheet()).getByRole("button", {
+        name: "Pay 6.50 credits to Kızılay Kahve",
+      })
+    );
+    expect((await within(sheet()).findByRole("alert")).textContent).toContain(
+      "Pistachio latte is sold out"
+    );
+
+    // Back on the form: the badge, and Pay says why it won't.
+    await userEvent.click(
+      within(sheet()).getByRole("button", { name: "Back" })
+    );
+    const pay = await payButton();
+    expect(within(sheet()).getByText("Sold out")).toBeTruthy();
+    expect(pay.getAttribute("aria-disabled")).toBe("true");
+    expect(
+      document.getElementById(pay.getAttribute("aria-describedby")!)
+        ?.textContent
+    ).toBe("Pistachio latte is sold out.");
+    expect(
+      calls.filter((call) => call.path === "/api/businesses/kizilaykahve")
+    ).toHaveLength(1);
+  });
+
+  it("re-reads the item when the refusal is about the business", async () => {
+    const { calls } = setup({
+      answers: [
+        failure(
+          422,
+          "unavailable",
+          "Kızılay Kahve isn't taking orders right now"
+        ),
+      ],
+    });
+    await userEvent.click(await payButton());
+    await userEvent.click(
+      within(sheet()).getByRole("button", {
+        name: "Pay 6.50 credits to Kızılay Kahve",
+      })
+    );
+    expect((await within(sheet()).findByRole("alert")).textContent).toContain(
+      "isn't taking orders right now"
     );
     await waitFor(() =>
       expect(

@@ -108,13 +108,11 @@ export interface ChannelsRepository extends FeatureRepository {
     by: "author" | "moderator"
   ): Promise<boolean>;
   /**
-   * Added by the channels lane: the message `messageId` of channel `handle`
-   * (its author and whether it is removed), or null, which is what a caller
-   * needs to authorize `removeMessage`. Both stores implement it; it is
-   * optional only because the foundation's stub (lib/db/stubs.ts) predates
-   * it (see the deviations log).
+   * The message `messageId` of channel `handle` (its author and whether it
+   * is removed), or null, which is what a caller needs to authorize
+   * `removeMessage`.
    */
-  findMessage?(
+  findMessage(
     handle: string,
     messageId: string
   ): Promise<ChannelMessageRef | null>;

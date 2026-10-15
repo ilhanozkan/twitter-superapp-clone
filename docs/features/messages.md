@@ -20,9 +20,9 @@ have no cash value. The data and endpoints are described in the
   composer pinned at the bottom and a Back button to the inbox.
 - **`/messages?to=<username>`.** The conversation with that person. If it
   exists, the server redirects to it (307). Otherwise it shows a draft that
-  the first message, payment or request creates. Opening the page never
-  writes anything. Yourself or an unknown username shows a not-found page
-  (404).
+  the first message, payment or request creates, in focus mode on phones
+  like a conversation. Opening the page never writes anything. Yourself or
+  an unknown username shows a not-found page (404).
 
 `/messages?to=<username>` is the link every entry point uses: the Message
 button on profiles, "Message @user" in a Tweet's "…" menu, and the New

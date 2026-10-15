@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { useEffect, useId, useRef, useState } from "react";
+import { ReactNode, useEffect, useId, useRef, useState } from "react";
 
 import { ApiRequestError, errorMessage } from "../../lib/client/api";
 import { useIdempotencyKey } from "../../lib/client/useIdempotencyKey";
@@ -12,13 +12,22 @@ import { Button } from "../common/Button";
 import Money from "./Money";
 
 export interface PaymentConfirmProps {
-  /** The verb of the operation: "Send", "Pay", "Tip"... */
+  /** The verb of the operation: "Send", "Pay", "Tip", "Request"... */
   action: string;
+  /** Who gets paid; for a request, who is asked to pay. */
   payee: IAuthor;
   amount: Cents;
   /** Added to the amount, e.g. a delivery fee. */
   fee?: Cents;
   note?: string | null;
+  /**
+   * "request" reviews asking `payee` for credits: "Request 4.50 credits
+   * from Sarah Chen". Nothing leaves the wallet, so no balance is shown or
+   * checked.
+   */
+  kind?: "payment" | "request";
+  /** What happens next, under the amounts (e.g. how a request is answered). */
+  explanation?: ReactNode;
   /** What the viewer can spend; defaults to their wallet in the store. */
   available?: Cents | null;
   /**
@@ -40,7 +49,8 @@ const insufficientMessage = (available: Cents) =>
 /**
  * The review step of every money movement (WCAG 3.3.4): who gets paid, how
  * much, the fee, the note and what is left afterwards, with a focused
- * confirm button that repeats the amount and the payee. Money is never
+ * confirm button that repeats the amount and the payee. A payment request
+ * is reviewed the same way, without the balance. Money is never
  * optimistic: the button waits for the server.
  */
 export default function PaymentConfirm({
@@ -49,6 +59,8 @@ export default function PaymentConfirm({
   amount,
   fee = 0,
   note = null,
+  kind = "payment",
+  explanation,
   available: availableProp,
   onConfirm,
   onDone,
@@ -56,8 +68,12 @@ export default function PaymentConfirm({
   onAddCredits,
 }: PaymentConfirmProps) {
   const stored = useAppSelector((state) => state.wallet.wallet?.available);
-  const available =
-    availableProp === undefined ? (stored ?? null) : availableProp;
+  const request = kind === "request";
+  const available = request
+    ? null
+    : availableProp === undefined
+      ? (stored ?? null)
+      : availableProp;
   const { key, rotate } = useIdempotencyKey([
     payee.username,
     amount,
@@ -76,7 +92,8 @@ export default function PaymentConfirm({
 
   const total = amount + fee;
   const short = available !== null && total > available;
-  const label = `${action} ${formatCredits(total)} to ${payee.fullname}`;
+  const preposition = request ? "from" : "to";
+  const label = `${action} ${formatCredits(total)} ${preposition} ${payee.fullname}`;
 
   useEffect(() => {
     confirm.current?.focus();
@@ -121,14 +138,15 @@ export default function PaymentConfirm({
     </>
   ) : error ? (
     <>
-      <span>{error.message}</span> {error.funds && addCredits}
+      <span>{error.message}</span>
+      {error.funds && <> {addCredits}</>}
     </>
   ) : null;
 
   return (
     <div className="flex flex-col gap-4">
       <p className="text-xl font-bold leading-7">
-        {action} <Money amount={total} /> to {payee.fullname}{" "}
+        {action} <Money amount={total} /> {preposition} {payee.fullname}{" "}
         <span className="font-normal text-muted">(@{payee.username})</span>
       </p>
 
@@ -180,6 +198,7 @@ export default function PaymentConfirm({
           </>
         )}
       </dl>
+      {explanation && <p className="text-[15px] text-muted">{explanation}</p>}
 
       {alert && (
         <p

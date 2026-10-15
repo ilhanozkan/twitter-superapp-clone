@@ -91,16 +91,15 @@ page.
   so stages change on time without waiting for a poll. Under
   `prefers-reduced-motion: reduce` the car jumps to each position with no
   transition.
-- **Announcements:** each new stage is said once, politely. While the ride
-  is in progress it is live activity, and the shell's live activity
-  announcer reads its stages out on every page, this one included ("Ride
-  to Atakule: Ahmet is on the way", "Ride to Atakule: On the way to
-  Atakule"), so the page's own region leaves those to it. The page says
-  the rest itself: "You’ve arrived at Atakule", a cancel made elsewhere
-  ("Ride cancelled. Your fare was refunded"), and every stage for the
-  driver ("Head to Kızılay"). A cancel made here is said by the headline
-  taking focus and the toast. The countdown is never announced, and
-  polling never moves focus.
+- **Announcements:** each new stage is said once, politely, by the page
+  ("Ahmet is on the way to pick you up", "Picked up. On the way to
+  Atakule", "You’ve arrived at Atakule", a cancel made elsewhere), and
+  every stage for the driver ("Head to Kızılay"). While the ride is in
+  progress it is live activity: on every other page the shell's announcer
+  says its stages ("Ride to Atakule: Ahmet is on the way"), and on this
+  one it leaves them to the page. A cancel made here is said by the
+  headline taking focus and the toast. The countdown is never announced,
+  and polling never moves focus.
 - **Polling:** every 5 seconds while the ride is in progress (to see a
   cancel from another tab), and right after each `nextChangeAt`. After two
   failed polls a quiet status says the page is trying again.
@@ -183,10 +182,11 @@ also Tweeted about joining (`seed-t26`).
   has passed with the dialog open).
 - Tabbing through the booking form, each control scrolls clear of the
   sticky Book bar (and, on phones, the tab bar under it): while the bar is
-  on the page it keeps its height, which grows with a reason or an error,
-  in `--book-bar` on `<html>` and adds it to the root's
-  `scroll-padding-bottom`, which is what browsers check before scrolling
-  focus into view.
+  on the page, its height (which grows with a reason or an error) and its
+  offset go into the root's `scroll-padding-bottom`, which is what
+  browsers check before scrolling focus into view
+  (`components/layout/useBottomScrollPadding.ts`, shared by every sticky
+  bottom bar).
 - The car ("White Toyota Corolla") and the rows of Recent rides wrap
   instead of being cut off; only names truncate.
 - The pages pass axe (WCAG 2.2 AA) in light and dark themes, in progress

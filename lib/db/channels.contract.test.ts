@@ -508,7 +508,7 @@ describe.each(subjects())("%s channels", (name, create) => {
 
   describe("removing messages", () => {
     it("marks a message removed, once, for every reader", async () => {
-      const ref = await repo.channels.findMessage!(BUILDERS, "seed-msg-sab-04");
+      const ref = await repo.channels.findMessage(BUILDERS, "seed-msg-sab-04");
       expect(ref).toEqual({
         id: "seed-msg-sab-04",
         author: marco,
@@ -532,7 +532,7 @@ describe.each(subjects())("%s channels", (name, create) => {
         body: { type: "removed", by: "moderator" },
       });
       expect(
-        await repo.channels.findMessage!(BUILDERS, "seed-msg-sab-04")
+        await repo.channels.findMessage(BUILDERS, "seed-msg-sab-04")
       ).toMatchObject({ removed: "moderator" });
     });
 
@@ -571,9 +571,9 @@ describe.each(subjects())("%s channels", (name, create) => {
 
     it("only finds and removes channel messages", async () => {
       expect(
-        await repo.channels.findMessage!(EATS, "seed-msg-sab-04")
+        await repo.channels.findMessage(EATS, "seed-msg-sab-04")
       ).toBeNull();
-      expect(await repo.channels.findMessage!(BUILDERS, "nope")).toBeNull();
+      expect(await repo.channels.findMessage(BUILDERS, "nope")).toBeNull();
       for (const id of ["seed-msg-marco-02", "no-such-message", "bad.id"]) {
         await expect(
           repo.channels.removeMessage(id, "moderator")

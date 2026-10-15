@@ -821,6 +821,8 @@ describe("messages pages", () => {
     const { result, status } = await serverSide("index");
     expect(status).toBe(200);
     expect(result.props).toMatchObject({ feature: "on", draft: null });
+    // The inbox keeps the page's shell (the phone tab bar).
+    expect(result.props.shell).toBeUndefined();
     const inbox = result.props.initialState.messages.inbox;
     expect(inbox.loaded).toBe(true);
     expect(inbox.items.find((c: IConversation) => c.id === SARAH).unread).toBe(
@@ -853,6 +855,8 @@ describe("messages pages", () => {
       conversationId: NIGHTOWL,
       serverNow: expect.any(String),
     });
+    // A draft is a conversation: focus mode on phones, like /messages/[id].
+    expect(result.props.shell).toEqual({ hideMobileNav: true });
     expect(conversationIds()).toEqual(before);
     expect(
       (await call(api.conversation, { query: { id: NIGHTOWL } })).statusCode
@@ -868,6 +872,7 @@ describe("messages pages", () => {
       const { result, status } = await serverSide("index", { query: { to } });
       expect(status, to).toBe(404);
       expect(result.props.draft, to).toEqual({ problem });
+      expect(result.props.shell, to).toEqual({ hideMobileNav: true });
     }
   });
 

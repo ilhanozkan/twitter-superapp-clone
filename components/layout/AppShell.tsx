@@ -1,5 +1,6 @@
 import dynamic from "next/dynamic";
-import { ReactNode, useEffect, useMemo } from "react";
+import { useRouter } from "next/router";
+import { ReactNode, useEffect, useMemo, useState } from "react";
 
 import { fetchSession } from "../../slices/sessionSlice";
 import { fetchTrends } from "../../slices/trendsSlice";
@@ -9,6 +10,7 @@ import { PageShell } from "../../types/PageShell";
 import Toaster from "../common/Toaster";
 import DisplayDialog from "../settings/DisplayDialog";
 import ShortcutsDialog from "../settings/ShortcutsDialog";
+import { pathOf } from "../superapp/useLiveActivity";
 import ComposeDialog from "../tweet/ComposeDialog";
 import MobileNav from "./MobileNav";
 import RightBar from "./RightBar";
@@ -42,12 +44,29 @@ function phonePadding({ hideMobileNav, hideComposeButton }: PageShell) {
   return "pb-[env(safe-area-inset-bottom)]";
 }
 
-/** Status changes of orders and rides in progress, read out politely. */
+/**
+ * Status changes of orders and rides in progress, read out politely, except
+ * the one whose own page is open: that page says its stages itself, so each
+ * is heard once. Worked out when a poll brings changes, so navigating
+ * afterwards doesn't read out an old one.
+ */
 function LiveActivityAnnouncer() {
-  const announcement = useAppSelector((state) => state.activity.announcement);
+  const router = useRouter();
+  const changes = useAppSelector((state) => state.activity.changes);
+  const [said, setSaid] = useState({ changes, text: "" });
+  if (said.changes !== changes) {
+    const here = pathOf(router.asPath);
+    setSaid({
+      changes,
+      text: changes
+        .filter((change) => pathOf(change.href) !== here)
+        .map((change) => change.text)
+        .join(". "),
+    });
+  }
   return (
     <p aria-live="polite" className="sr-only">
-      {announcement}
+      {said.text}
     </p>
   );
 }

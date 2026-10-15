@@ -1,6 +1,7 @@
 import { APIRequestContext, expect, Page, test } from "@playwright/test";
 
 import {
+  coveredWhileTabbing,
   expectNoHorizontalScroll,
   expectNoSeriousViolations,
   features,
@@ -114,6 +115,18 @@ test.describe("pages", () => {
     // seed-o02 is Sarah's, from a business the demo user runs: visible.
     expect((await page.goto("/orders/seed-o02"))?.status()).toBe(200);
     expect((await page.goto("/orders/no-such-order"))?.status()).toBe(404);
+  });
+
+  test("Services links to your orders", async ({ page }) => {
+    await page.goto("/services");
+    await page
+      .getByRole("region", { name: "Services" })
+      .getByRole("link", { name: /^Orders/ })
+      .click();
+    await expect(page).toHaveURL(/\/orders$/);
+    await expect(
+      page.getByRole("heading", { level: 1, name: "Your orders" })
+    ).toBeVisible();
   });
 });
 
@@ -463,6 +476,38 @@ test.describe("accessibility (axe)", () => {
       await expectNoSeriousViolations(page);
     });
   }
+});
+
+test.describe("sticky action bars at 390", () => {
+  test("focus stays clear of checkout's Place order bar", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/kizilaykahve/menu");
+    for (const name of ["Add Pistachio latte", "Add Simit"]) {
+      await page.getByRole("button", { name }).click();
+    }
+    await page.getByRole("link", { name: /^View cart/ }).click();
+    await expect(page).toHaveURL(/\/checkout$/);
+    await expect(
+      page.getByRole("button", { name: /^Place order/ })
+    ).toBeVisible();
+
+    await page.locator("main").focus();
+    expect(
+      await coveredWhileTabbing(page, { presses: 30, until: /^Place order/ })
+    ).toEqual([]);
+  });
+
+  test("focus stays clear of a delivered order's actions", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/orders/seed-o01");
+    await expect(
+      page.getByRole("button", { name: "Order again" })
+    ).toBeVisible();
+    await page.locator("main").focus();
+    expect(
+      await coveredWhileTabbing(page, { presses: 30, until: /^Order again/ })
+    ).toEqual([]);
+  });
 });
 
 test.describe("responsive layout", () => {

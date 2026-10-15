@@ -1,6 +1,5 @@
-import { FormEvent, useEffect, useId, useRef, useState } from "react";
+import { FormEvent, useId, useRef, useState } from "react";
 
-import { errorMessage } from "../../lib/client/api";
 import { useIdempotencyKey } from "../../lib/client/useIdempotencyKey";
 import { textLength } from "../../lib/constants";
 import { LIMITS } from "../../lib/superapp/limits";
@@ -40,110 +39,6 @@ function Person({ user }: { user: IAuthor }) {
         <p className="truncate font-bold">{user.fullname}</p>
         <p className="truncate text-muted">@{user.username}</p>
       </div>
-    </div>
-  );
-}
-
-/**
- * The review step of a request (WCAG 3.3.4), in PaymentConfirm's pattern:
- * PaymentConfirm words everything "<action> X to <payee>" and checks the
- * viewer's balance, while a request reads "Request X from <payer>" and
- * spends nothing.
- */
-function RequestReview({
-  payer,
-  amount,
-  note,
-  onConfirm,
-  onBack,
-}: {
-  payer: IAuthor;
-  amount: Cents;
-  note: string | null;
-  onConfirm: () => Promise<void>;
-  onBack: () => void;
-}) {
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const confirm = useRef<HTMLButtonElement>(null);
-  const inFlight = useRef(false);
-  const errorId = useId();
-  const label = `Request ${formatCredits(amount)} from ${payer.fullname}`;
-
-  useEffect(() => {
-    confirm.current?.focus();
-  }, []);
-
-  const submit = async () => {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true);
-    setError(null);
-    try {
-      await onConfirm();
-    } catch (reason) {
-      setError(errorMessage(reason));
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
-    }
-  };
-
-  return (
-    <div className="flex flex-col gap-4">
-      <p className="text-xl font-bold leading-7">
-        Request <Money amount={amount} /> from {payer.fullname}{" "}
-        <span className="font-normal text-muted">(@{payer.username})</span>
-      </p>
-      <Person user={payer} />
-      <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-2 text-[15px]">
-        <dt className="text-muted">Amount</dt>
-        <dd className="text-right">
-          <Money amount={amount} />
-        </dd>
-        {note && (
-          <>
-            <dt className="text-muted">Note</dt>
-            <dd className="text-right [overflow-wrap:anywhere]">{note}</dd>
-          </>
-        )}
-      </dl>
-      <p className="text-[15px] text-muted">
-        {payer.fullname} can pay or decline it in this conversation. Nothing
-        leaves your wallet.
-      </p>
-      {error && (
-        <p
-          id={errorId}
-          role="alert"
-          className="rounded-md border border-danger px-3 py-2 text-[15px] text-danger"
-        >
-          {error}
-        </p>
-      )}
-      <div className="flex flex-col gap-3">
-        <Button
-          ref={confirm}
-          size="lg"
-          aria-describedby={error ? errorId : undefined}
-          aria-disabled={busy}
-          aria-busy={busy}
-          onClick={submit}
-          className="gap-2 aria-disabled:cursor-not-allowed aria-disabled:opacity-60"
-        >
-          {busy && (
-            <span
-              aria-hidden="true"
-              className="h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-white/40 border-t-white"
-            />
-          )}
-          {label}
-        </Button>
-        <Button variant="outline" size="lg" onClick={onBack} disabled={busy}>
-          Back
-        </Button>
-      </div>
-      <p className="text-[13px] text-muted">Demo credits · no cash value</p>
     </div>
   );
 }
@@ -188,10 +83,13 @@ function MoneyFlow({
     const args = { conversationId, amount: cents, note, key, openWith };
     if (mode === "request") {
       return (
-        <RequestReview
-          payer={other}
+        <PaymentConfirm
+          kind="request"
+          action="Request"
+          payee={other}
           amount={cents}
           note={note}
+          explanation={`${other.fullname} can pay or decline it in this conversation. Nothing leaves your wallet.`}
           onBack={back}
           onConfirm={async () => {
             await dispatch(sendChatRequest(args));
