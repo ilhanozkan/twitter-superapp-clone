@@ -546,6 +546,9 @@ test.describe("accessibility (axe)", () => {
 test.describe("responsive layout", () => {
   for (const width of WIDTHS) {
     test(`no horizontal scrolling at ${width}px`, async ({ page }) => {
+      // Nine page loads, each waiting for the network to go quiet: about 9 s
+      // on a fast machine but 30 s or more on a slow CI runner.
+      test.setTimeout(90_000);
       await page.setViewportSize({ width, height: 900 });
       for (const path of [
         "/food",
