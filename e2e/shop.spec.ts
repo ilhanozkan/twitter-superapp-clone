@@ -392,35 +392,37 @@ test.describe("with orders on", () => {
   test("the new-cart prompt leaves a product's details open", async ({
     page,
   }) => {
+    // Both businesses are open around the clock, so Add is never disabled
+    // by the time of day the suite runs at.
     await page.goto("/kizilaykahve/menu");
     await page.getByRole("button", { name: "Add Simit" }).click();
-    await page.goto("/lahmacunlab/menu");
-    await page.getByRole("link", { name: "Lahmacun", exact: true }).click();
-    const details = page.getByRole("dialog", { name: "Lahmacun" });
+    await page.goto("/superapp/menu");
+    await page.getByRole("link", { name: "Sticker pack", exact: true }).click();
+    const details = page.getByRole("dialog", { name: "Sticker pack" });
     const prompt = page.getByRole("dialog", { name: "Start a new cart?" });
-    const url = /\/lahmacunlab\/menu\?product=seed-p-ll-lahmacun$/;
+    const url = /\/superapp\/menu\?product=seed-p-sa-stickers$/;
 
-    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await details.getByRole("button", { name: "Add Sticker pack" }).click();
     await prompt.getByRole("button", { name: "Cancel" }).click();
     await expect(prompt).toBeHidden();
     await expect(details).toBeVisible();
     await expect(page).toHaveURL(url);
 
-    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await details.getByRole("button", { name: "Add Sticker pack" }).click();
     await page.keyboard.press("Escape");
     await expect(prompt).toBeHidden();
     await expect(details).toBeVisible();
 
-    await details.getByRole("button", { name: "Add Lahmacun" }).click();
+    await details.getByRole("button", { name: "Add Sticker pack" }).click();
     await prompt.getByRole("button", { name: "Start new cart" }).click();
     await expect(details).toBeVisible();
     await expect(page).toHaveURL(url);
     await expect(
-      details.getByRole("button", { name: "Add one Lahmacun" })
+      details.getByRole("button", { name: "Add one Sticker pack" })
     ).toBeFocused();
     // The page's own status is inert behind the dialog: it has its own.
     await expect(details.locator('[aria-live="polite"]')).toHaveText(
-      "Your cart: 1 item · 4.00 credits"
+      "Your cart: 1 item · 3.00 credits"
     );
   });
 
