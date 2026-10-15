@@ -5,9 +5,9 @@ can't be bought, withdrawn or exchanged. You add them for free, then tip
 Tweets, pay people, ask them to pay you, and pay for orders and rides. Every balance in
 the app carries a "Demo" pill or says "Demo credits".
 
-The [wallet API](../api/wallet.md) and the ledger behind it
-([docs/SUPERAPP.md](../SUPERAPP.md#ledger-and-holds)) come from the
-foundation; this page describes the wallet's screens and controls.
+The data and endpoints are in the [wallet API](../api/wallet.md), and the
+ledger behind them in [docs/SUPERAPP.md](../SUPERAPP.md#ledger-and-holds);
+this page describes the wallet's screens and controls.
 
 ## Where it lives
 

@@ -63,7 +63,6 @@ server (`lib/auth.ts`) and is never read from request bodies.
   | 422    | `unavailable`            | Closed, paused or sold out; `details` name each `productId`                        |
   | 422    | `idempotency_key_reused` | The `Idempotency-Key` was already used with a different body                       |
   | 429    | `rate_limited`           | See the `Retry-After` header                                                       |
-  | 501    | `not_implemented`        | A SuperApp feature whose PR has not shipped yet                                    |
   | 503    | `service_unavailable`    | Data source misconfigured (e.g. Sanity without a token)                            |
   | 500    | `internal_error`         | Anything else (details are only logged)                                            |
 
@@ -108,9 +107,10 @@ server (`lib/auth.ts`) and is never read from request bodies.
 
 ## SuperApp conventions
 
-These apply to the SuperApp endpoints (wallet, messages, orders, rides,
-stories) in addition to everything above. How the features are built (the
-demo-credit ledger, holds, privacy) is in [SUPERAPP.md](SUPERAPP.md).
+These apply to the SuperApp endpoints (wallet, messages, channels,
+businesses, orders, rides, stories) in addition to everything above. How
+the features are built (the demo-credit ledger, holds, privacy) is in
+[SUPERAPP.md](SUPERAPP.md).
 
 - **Amounts** are integer cents of demo credits: `1250` is 12.50 credits.
   Floats, strings, zero and negatives fail validation. Credits have no cash
@@ -160,12 +160,12 @@ demo-credit ledger, holds, privacy) is in [SUPERAPP.md](SUPERAPP.md).
 - **Time.** Pending credits, request expiry, orders and rides are derived
   from stored timestamps and the server's clock on every read, so nothing
   runs in the background. Time-derived responses include `serverNow`.
-- **Feature switches.** A feature that is off (its PR has not shipped, or it
-  is listed in `DISABLED_FEATURES`) answers 404 `not_found` "This feature is
-  turned off" on all its routes. On Sanity without `SANITY_API_TOKEN`, the
-  private features (wallet, messages, channels, orders, rides) answer 503
-  `service_unavailable`, for example "Wallet needs SANITY_API_TOKEN on this
-  deployment". `GET /api/me` reports which features are on.
+- **Feature switches.** A feature listed in `DISABLED_FEATURES` is off: all
+  its routes answer 404 `not_found` "This feature is turned off". On Sanity
+  without `SANITY_API_TOKEN`, the private features (wallet, messages,
+  channels, orders, rides) answer 503 `service_unavailable`, for example
+  "Wallet needs SANITY_API_TOKEN on this deployment". `GET /api/me` reports
+  which features are on.
 
 ## Endpoints
 
@@ -186,7 +186,7 @@ demo-credit ledger, holds, privacy) is in [SUPERAPP.md](SUPERAPP.md).
 | `GET /api/me`                   | The current user, whether writes are allowed, SuperApp features                                                                 | `200 { user, readOnly, … }`       |
 | `GET /api/notifications?limit=` | Likes, retweets and replies on your tweets, plus SuperApp notifications (tips, payments, requests, orders, rides), newest first | `200 { items }`                   |
 | `GET /api/activity?since=`      | Badge counts and live activity for the app shell                                                                                | `200 { serverNow, … }`            |
-| `GET /api/places`               | The fixed places for deliveries and rides; cacheable for an hour                                                                | `200 { items }`                   |
+| `GET /api/places`               | The fixed places for deliveries and rides ([below](#get-apiplaces))                                                             | `200 { items }`                   |
 | `GET /api/trends?limit=`        | Most used hashtags (default 10, max 20); cacheable for 60 s                                                                     | `200 { items }`                   |
 | `GET /api/health`               | Liveness and the configured data source                                                                                         | `200 { status, dataSource }`      |
 
@@ -197,15 +197,15 @@ plus those they manage).
 
 ### SuperApp endpoints
 
-| Area                 | Endpoints                                                 | Docs                                    |
-| -------------------- | --------------------------------------------------------- | --------------------------------------- |
-| Wallet and tips      | `/api/wallet/**`, `/api/tweets/:id/tip`, `/api/users?q=`  | [docs/api/wallet.md](api/wallet.md)     |
-| Messages             | `/api/conversations/**`                                   | [docs/api/messages.md](api/messages.md) |
-| Channels             | `/api/channels/**`                                        | [docs/api/channels.md](api/channels.md) |
-| Businesses and menus | `/api/businesses/**`, `/api/products/**`                  | [docs/api/shop.md](api/shop.md)         |
-| Orders               | `/api/orders/**`, `/api/businesses/:username/demo-orders` | [docs/api/orders.md](api/orders.md)     |
-| Rides                | `/api/rides/**`                                           | [docs/api/rides.md](api/rides.md)       |
-| Stories              | `/api/stories/**`                                         | [docs/api/stories.md](api/stories.md)   |
+| Area                 | Endpoints                                                                | Docs                                    |
+| -------------------- | ------------------------------------------------------------------------ | --------------------------------------- |
+| Wallet and tips      | `/api/wallet/**`, `/api/tweets/:id/tip`, `/api/users?q=`                 | [docs/api/wallet.md](api/wallet.md)     |
+| Messages             | `/api/conversations/**`                                                  | [docs/api/messages.md](api/messages.md) |
+| Channels             | `/api/channels/**`                                                       | [docs/api/channels.md](api/channels.md) |
+| Businesses and menus | `/api/businesses/**`, `/api/products/**`                                 | [docs/api/shop.md](api/shop.md)         |
+| Orders               | `/api/orders/**`, `/api/businesses/:username/demo-orders` and `/summary` | [docs/api/orders.md](api/orders.md)     |
+| Rides                | `/api/rides/**`                                                          | [docs/api/rides.md](api/rides.md)       |
+| Stories              | `/api/stories/**`                                                        | [docs/api/stories.md](api/stories.md)   |
 
 ### Product attachments on tweets
 
@@ -250,6 +250,28 @@ live activity card. It never writes: reading does not mark anything seen.
 - `unreadConversations` is 0 and `live` lists nothing for features that are
   off. A feature whose read fails counts as nothing rather than failing the
   response (the error is logged).
+
+### `GET /api/places`
+
+The fixed catalog of places that deliveries go to and rides go between:
+public Ankara landmarks with approximate coordinates. It changes only with a
+deploy, so it is `public, max-age=3600`. Places are referred to by `id`
+everywhere else (`deliveryPlaceId` in [orders](api/orders.md), `from` and
+`to` in [rides](api/rides.md)).
+
+```json
+{
+  "items": [
+    {
+      "id": "kizilay",
+      "name": "Kızılay",
+      "area": "Çankaya",
+      "lat": 39.9208,
+      "lng": 32.8541
+    }
+  ]
+}
+```
 
 ### `GET /api/tweets` query
 

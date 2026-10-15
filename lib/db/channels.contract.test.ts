@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   expectLedgerInvariants,
   expectStoresAgree,
+  SLOW,
   Subject,
   SUBJECT_NOW,
   subjects,
@@ -93,7 +94,7 @@ const newChannel = (
   ...overrides,
 });
 
-describe.each(subjects())("%s channels", (name, create) => {
+describe.each(subjects())("%s channels", SLOW, (name, create) => {
   let subject: Subject;
   let repo: Repository;
 
@@ -647,7 +648,7 @@ describe("channel rules", () => {
   });
 });
 
-describe("stores agree on channels", () => {
+describe("stores agree on channels", SLOW, () => {
   const read = async (repo: Repository) => ({
     discover: await repo.channels.listChannels({}, DEMO_USERNAME),
     mine: await repo.channels.listChannels(

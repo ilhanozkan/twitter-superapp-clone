@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   expectLedgerInvariants,
   expectStoresAgree,
+  SLOW,
   Subject,
   SUBJECT_NOW,
   subjects,
@@ -135,10 +136,6 @@ async function rejection<T extends Error>(
   expect(error).toBeInstanceOf(type);
   return error as T;
 }
-
-// The Sanity subject runs every read as GROQ (groq-js) over the whole seed:
-// a test of many reads takes seconds on a busy machine, past the default 5 s.
-const SLOW = { timeout: 30_000 };
 
 describe.each(subjects())("%s orders", SLOW, (name, create) => {
   let subject: Subject;

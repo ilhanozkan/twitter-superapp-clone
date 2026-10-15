@@ -7,6 +7,7 @@ import {
   heldPayment,
   mulberry32,
   reverseTransfer,
+  SLOW,
   Subject,
   SUBJECT_NOW,
   subjects,
@@ -153,7 +154,7 @@ const payInput = (payer: IAuthor, id: string, key?: string) => ({
 const minutesFrom = (subject: Subject, minutes: number) =>
   new Date(subject.clock.now().getTime() + minutes * MINUTE).toISOString();
 
-describe.each(subjects())("%s wallet", (name, create) => {
+describe.each(subjects())("%s wallet", SLOW, (name, create) => {
   let subject: Subject;
   let repo: Repository;
   const balance = async (user: IAuthor) =>
@@ -1268,7 +1269,7 @@ describe.each(subjects())("%s wallet", (name, create) => {
   });
 });
 
-describe("stores agree on the wallet", () => {
+describe("stores agree on the wallet", SLOW, () => {
   it("for seeded reads", async () => {
     await expectStoresAgree((repo: Repository) =>
       Promise.all([
