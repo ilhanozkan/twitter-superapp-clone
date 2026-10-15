@@ -35,7 +35,7 @@ export default function RightBar() {
               <TrendsList trends={trends.slice(0, SIDEBAR_TRENDS)} />
               <Link
                 href="/explore"
-                className="block px-4 py-4 text-[15px] text-primary transition-colors hover:bg-fg/[0.03]"
+                className="block px-4 py-4 text-[15px] text-primary outline-offset-[-2px] transition-colors hover:bg-fg/[0.03]"
               >
                 Show more
               </Link>

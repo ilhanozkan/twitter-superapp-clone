@@ -4,6 +4,7 @@ import { HiEllipsisHorizontal, HiOutlineTrash } from "react-icons/hi2";
 
 import { errorMessage } from "../../lib/client/api";
 import { deleteTweet } from "../../slices/tweetsSlice";
+import { showToast } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { ITweet } from "../../types/Tweet";
 import { Button } from "../common/Button";
@@ -32,6 +33,7 @@ export default function TweetMenu({ tweet }: { tweet: ITweet }) {
     try {
       await dispatch(deleteTweet(tweet.id)).unwrap();
       setConfirming(false);
+      dispatch(showToast({ message: "Your Tweet was deleted" }));
       // Leave the tweet's own page once it no longer exists.
       if (router.asPath.split(/[?#]/)[0] === statusPath(tweet))
         router.replace("/");
@@ -68,7 +70,7 @@ export default function TweetMenu({ tweet }: { tweet: ITweet }) {
           timelines and search results, together with its replies and likes.
         </p>
         {error && (
-          <p role="alert" className="mt-3 text-sm text-red-600">
+          <p role="alert" className="mt-3 text-sm text-danger">
             {error}
           </p>
         )}

@@ -9,6 +9,10 @@ import type { PageStateProps } from "../lib/server/pageState";
 import { setHistoryNavigation, useStore } from "../store";
 import "../styles/globals.css";
 
+const DESCRIPTION = "A Twitter clone on its way to becoming a SuperApp.";
+// Absolute URLs are required for link previews; set NEXT_PUBLIC_SITE_URL in production.
+const SITE_URL = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
+
 export default function App({
   Component,
   pageProps,
@@ -37,11 +41,19 @@ export default function App({
     <Provider store={store}>
       <Head>
         <title>Twitter SuperApp</title>
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
         <meta
-          name="description"
-          content="A Twitter clone on its way to becoming a SuperApp."
+          name="viewport"
+          content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
+        <meta name="description" content={DESCRIPTION} key="description" />
+        {/* No site-wide og:title/og:description: link previews fall back to
+            each page's own <title> and description (a tweet, a profile). */}
+        <meta property="og:site_name" content="Twitter SuperApp" />
+        <meta property="og:type" content="website" />
+        <meta name="twitter:card" content="summary_large_image" />
+        {SITE_URL && (
+          <meta property="og:image" content={`${SITE_URL}/og.png`} />
+        )}
       </Head>
       <AppShell>
         <Component {...pageProps} />

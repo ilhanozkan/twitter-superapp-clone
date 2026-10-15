@@ -8,7 +8,10 @@ interface TweetTextProps {
   className?: string;
 }
 
-const linkClass = "text-primary hover:underline";
+// Links inside text need a cue besides color (WCAG 1.4.1): in the dark theme
+// the link blue and the body text are too close in brightness.
+export const inlineLinkClass =
+  "text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary";
 
 /** Tweet text with #hashtags, @mentions and URLs turned into links. */
 export default function TweetText({ text, className = "" }: TweetTextProps) {
@@ -26,7 +29,7 @@ export default function TweetText({ text, className = "" }: TweetTextProps) {
               <Link
                 key={index}
                 href={`/explore?q=${encodeURIComponent(`#${token.tag}`)}`}
-                className={linkClass}
+                className={inlineLinkClass}
               >
                 {token.value}
               </Link>
@@ -36,7 +39,7 @@ export default function TweetText({ text, className = "" }: TweetTextProps) {
               <Link
                 key={index}
                 href={`/${token.username}`}
-                className={linkClass}
+                className={inlineLinkClass}
               >
                 {token.value}
               </Link>
@@ -51,7 +54,7 @@ export default function TweetText({ text, className = "" }: TweetTextProps) {
                 dir="ltr"
                 target="_blank"
                 rel="noopener noreferrer nofollow ugc"
-                className={linkClass}
+                className={inlineLinkClass}
               >
                 {displayUrl(token.href)}
               </a>

@@ -11,12 +11,15 @@ export default function TrendsList({ trends }: { trends: ITrend[] }) {
         <li key={trend.tag}>
           <Link
             href={`/explore?q=${encodeURIComponent(trend.tag)}`}
-            className="block px-4 py-3 transition-colors duration-200 hover:bg-fg/[0.03]"
+            // Inset focus ring: the rounded panel clips anything outside.
+            className="block px-4 py-3 outline-offset-[-2px] transition-colors duration-200 hover:bg-fg/[0.03]"
           >
             <span className="block text-[13px] text-muted">
               {index + 1} · Trending
             </span>
-            <span className="block text-[15px] font-bold">{trend.tag}</span>
+            <span className="block truncate text-[15px] font-bold">
+              {trend.tag}
+            </span>
             <span className="block text-[13px] text-muted">
               {pluralize(trend.tweetCount, "Tweet")}
             </span>

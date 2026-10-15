@@ -24,7 +24,7 @@ export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
 
   return (
     <div>
-      <div className="aspect-[3/1] w-full bg-[rgb(207_217_222)]">
+      <div className="aspect-[3/1] w-full bg-banner">
         {user.banner && (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -41,7 +41,9 @@ export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
         </div>
 
         <h2 className="flex items-center gap-1 text-xl font-extrabold leading-6">
-          {user.fullname}
+          <span className="min-w-0 [overflow-wrap:anywhere]">
+            {user.fullname}
+          </span>
           {user.verified && (
             <HiCheckBadge
               role="img"

@@ -21,7 +21,7 @@ import {
 
 import { useAppSelector } from "../../store";
 
-interface NavItem {
+export interface NavItem {
   label: string;
   href: string;
   icon: IconType;
@@ -29,7 +29,7 @@ interface NavItem {
   isActive: (path: string) => boolean;
 }
 
-function navItems(username: string | null): NavItem[] {
+export function navItems(username: string | null): NavItem[] {
   const profile = username ? `/${username}` : null;
   const lower = (value: string) => value.toLowerCase();
 
@@ -93,10 +93,16 @@ function navItems(username: string | null): NavItem[] {
   return items.filter((item): item is NavItem => item !== null);
 }
 
-export default function Navigation() {
+/** The current path without query or hash, for matching nav items. */
+export function useCurrentPath() {
   const router = useRouter();
+  return router.asPath.split(/[?#]/)[0] || "/";
+}
+
+/** Sidebar navigation: icons with labels from 1280px, an icon rail below. */
+export default function Navigation() {
   const viewer = useAppSelector((state) => state.session.viewer);
-  const path = router.asPath.split(/[?#]/)[0] || "/";
+  const path = useCurrentPath();
 
   return (
     <nav aria-label="Primary">
@@ -110,11 +116,14 @@ export default function Navigation() {
               <Link
                 href={item.href}
                 aria-current={active ? "page" : undefined}
-                className="group flex py-1"
+                title={item.label}
+                className="group flex justify-center py-1 xl:justify-start"
               >
-                <span className="flex items-center gap-5 rounded-full p-3 pr-6 transition-colors duration-200 group-hover:bg-fg/10">
+                <span className="flex items-center gap-5 rounded-full p-3 transition-colors duration-200 group-hover:bg-fg/10 xl:pr-6">
                   <Icon aria-hidden="true" className="text-[26px]" />
-                  <span className={`text-xl ${active ? "font-bold" : ""}`}>
+                  <span
+                    className={`sr-only text-xl xl:not-sr-only ${active ? "font-bold" : ""}`}
+                  >
                     {item.label}
                   </span>
                 </span>

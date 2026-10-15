@@ -37,13 +37,15 @@ describe("Composer", () => {
 
     await user.type(box, "hello");
     expect(button).toHaveProperty("disabled", false);
-    expect(screen.getByText("275")).toBeTruthy();
+    // The number only appears near the limit.
+    expect(screen.queryByText("275")).toBeNull();
 
     await user.clear(box);
     await user.click(box);
     await user.paste("x".repeat(281));
     expect(button).toHaveProperty("disabled", true);
     expect(screen.getByText("-1")).toBeTruthy();
+    expect(screen.getByText("-1 characters left")).toBeTruthy();
   });
 
   it("posts the trimmed text, then clears the box", async () => {
@@ -113,6 +115,28 @@ describe("Composer", () => {
       "value",
       "hello"
     );
+  });
+
+  it("sends with Ctrl+Enter", async () => {
+    const fetch = vi.fn(
+      async () =>
+        new Response(
+          JSON.stringify({
+            error: { code: "x", message: "nope", requestId: "r" },
+          }),
+          { status: 400 }
+        )
+    );
+    vi.stubGlobal("fetch", fetch);
+    renderComposer();
+    const user = userEvent.setup();
+
+    await user.type(
+      screen.getByLabelText("Tweet text"),
+      "hello{Control>}{Enter}{/Control}"
+    );
+
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
   });
 
   it("is hidden in read-only mode", () => {
