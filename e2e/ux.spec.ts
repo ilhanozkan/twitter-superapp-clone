@@ -179,9 +179,13 @@ test.describe("keyboard", () => {
   }) => {
     await page.goto("/notifications");
 
-    await page.keyboard.press("n");
     const compose = page.getByRole("dialog", { name: "Compose Tweet" });
-    await expect(compose).toBeVisible();
+    // The shortcuts listen from an effect, which can run after the load event
+    // goto waits for: a key pressed before React has hydrated is lost.
+    await expect(async () => {
+      await page.keyboard.press("n");
+      await expect(compose).toBeVisible({ timeout: 1_000 });
+    }).toPass();
     // Escape hides the dialog at once, but the browser fires its close event
     // a frame later. By then focus must have left it: a key typed in between
     // (like "/" next) went to the hidden text box.
@@ -215,23 +219,34 @@ test.describe("keyboard", () => {
   });
 
   test("single-key shortcuts can be turned off", async ({ page }) => {
-    await page.goto("/");
-    await page.keyboard.press("?");
     const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
-    await dialog
-      .getByRole("switch", { name: /Single-key shortcuts/ })
-      .uncheck();
+    const toggle = dialog.getByRole("switch", { name: /Single-key shortcuts/ });
+    const compose = page.getByRole("dialog", { name: "Compose Tweet" });
+
+    await page.goto("/");
+    // The shortcuts listen from an effect, which can run after the load event
+    // goto waits for: a key pressed before React has hydrated is lost.
+    await expect(async () => {
+      await page.keyboard.press("?");
+      await expect(dialog).toBeVisible({ timeout: 1_000 });
+    }).toPass();
+    await toggle.uncheck();
     await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
 
     await page.keyboard.press("n");
-    await expect(
-      page.getByRole("dialog", { name: "Compose Tweet" })
-    ).toBeHidden();
+    await expect(compose).toBeHidden();
+
     await page.reload();
+    // Still off. The menu renders only after React has hydrated and run its
+    // effects, so the shortcuts are listening when "n" is pressed below.
+    await page.getByRole("button", { name: "More", exact: true }).click();
+    await page.getByRole("menuitem", { name: "Keyboard shortcuts" }).click();
+    await expect(toggle).not.toBeChecked();
+    await page.keyboard.press("Escape");
+    await expect(dialog).toBeHidden();
     await page.keyboard.press("n");
-    await expect(
-      page.getByRole("dialog", { name: "Compose Tweet" })
-    ).toBeHidden();
+    await expect(compose).toBeHidden();
   });
 
   test("/ focuses the Explore search when the right column is hidden", async ({
@@ -239,8 +254,12 @@ test.describe("keyboard", () => {
   }) => {
     await page.setViewportSize({ width: 800, height: 900 });
     await page.goto("/notifications");
-    await page.keyboard.press("/");
-    await expect(page).toHaveURL(/\/explore$/);
+    // goto resolves on the load event, which can come before hydration adds
+    // the shortcut listener: a key pressed in between is lost, so retry.
+    await expect(async () => {
+      await page.keyboard.press("/");
+      await expect(page).toHaveURL(/\/explore$/, { timeout: 2_000 });
+    }).toPass({ timeout: 15_000 });
     await expect(
       page.getByRole("main").getByRole("searchbox", { name: "Search Twitter" })
     ).toBeFocused();
@@ -248,11 +267,15 @@ test.describe("keyboard", () => {
 
   test("the compose dialog opens at full height", async ({ page }) => {
     await page.goto("/");
-    await page.keyboard.press("n");
     const box = page
       .getByRole("dialog", { name: "Compose Tweet" })
       .getByLabel("Tweet text");
-    await expect(box).toBeVisible();
+    // "n" is heard by a listener the page adds once React has hydrated it,
+    // which can be after the load event: press again until the dialog opens.
+    await expect(async () => {
+      await page.keyboard.press("n");
+      await expect(box).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 10_000 });
     expect(
       await box.evaluate((el) => (el as HTMLTextAreaElement).clientHeight)
     ).toBeGreaterThanOrEqual(60);
