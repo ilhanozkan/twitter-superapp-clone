@@ -33,6 +33,7 @@ export async function setTheme(page: Page, theme: "light" | "dark") {
 
 /** No serious or critical WCAG 2.2 AA violations on the page as it is. */
 export async function expectNoSeriousViolations(page: Page) {
+  await settleTransitions(page);
   const results = await new AxeBuilder({ page })
     .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
     .analyze();
@@ -47,6 +48,23 @@ export async function expectNoSeriousViolations(page: Page) {
           .join(", ")}`
     )
   ).toEqual([]);
+}
+
+/**
+ * Waits for running CSS transitions to end. axe reads colours as painted, so
+ * a control whose state just changed (a chip turning blue with white text)
+ * would be checked halfway between its two colour schemes. Looping
+ * animations, like spinners, are left alone.
+ */
+async function settleTransitions(page: Page) {
+  await page.evaluate(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => animation instanceof CSSTransition)
+        .map((animation) => animation.finished.catch(() => undefined))
+    )
+  );
 }
 
 /** The widths every page must fit without scrolling sideways. */
