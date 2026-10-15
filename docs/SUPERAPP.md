@@ -170,6 +170,12 @@ ride for free. Seeds always use scale 1.
   seeded world obeys the same rules as the app.
 
 `npm run seed:sanity` exports the world for `sanity dataset import`.
+`lib/db/world.test.ts` checks that the parts fit together: the demo user
+ends at 308.60 credits (325.00 from the wallet seed, less the Kızılay Kahve
+order and the ride to Atakule), every cross-reference between features
+resolves, ids are unique, and a Sanity store built from the export serves
+the same world as memory. `test/studioSchemas.test.ts` validates every
+exported document against the Studio's schemas.
 
 ## Ledger and holds
 
@@ -449,14 +455,16 @@ sub-repository on `Repository`, stub files and any slots it needs.
 
 ## Testing
 
-| Layer        | Where                       | Notes                                                                                                                                                               |
-| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rules        | `lib/superapp/*.test.ts`    | Pure functions, fixed clocks                                                                                                                                        |
-| Repositories | `lib/db/*.contract.test.ts` | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                 |
-| Fake Sanity  | `test/fakeSanityClient.ts`  | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous` |
-| Routes       | `test/routes/*.test.ts`     | `freshApi({ world })` and `loadRoute(path)`                                                                                                                         |
-| Components   | `components/**/*.test.tsx`  | `renderWithStore` (`test/render.tsx`)                                                                                                                               |
-| End-to-end   | `e2e/`                      | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px                                                                    |
+| Layer        | Where                        | Notes                                                                                                                                                               |
+| ------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rules        | `lib/superapp/*.test.ts`     | Pure functions, fixed clocks                                                                                                                                        |
+| Repositories | `lib/db/*.contract.test.ts`  | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                 |
+| Fake Sanity  | `test/fakeSanityClient.ts`   | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous` |
+| Routes       | `test/routes/*.test.ts`      | `freshApi({ world })` and `loadRoute(path)`                                                                                                                         |
+| Components   | `components/**/*.test.tsx`   | `renderWithStore` (`test/render.tsx`)                                                                                                                               |
+| Whole world  | `lib/db/world.test.ts`       | The composed `superapp` world: balances, ledger invariants, cross-references, unique ids, private ids in the export, and the same reads from both stores            |
+| Studio       | `test/studioSchemas.test.ts` | The full `seed:sanity` export against `sanity/schemaTypes`, loaded through `test/sanityStub.ts` (the app doesn't install `sanity`)                                  |
+| End-to-end   | `e2e/`                       | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px; `e2e/journey.spec.ts` walks one afternoon across every feature    |
 
 Playwright runs three projects, each with its own server on the same build
 and the in-memory store:

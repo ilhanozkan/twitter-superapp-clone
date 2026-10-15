@@ -8,11 +8,10 @@
 import { mkdirSync, writeFileSync } from "fs";
 import path from "path";
 
-import { seedToSanityDocuments } from "../lib/db/sanity/seed";
-import { createSeedData } from "../lib/db/seed";
+import { seedExportDocuments } from "../lib/db/sanity/seed";
 
 const outFile = path.join(__dirname, "..", "sanity", "seed", "demo.ndjson");
-const documents = seedToSanityDocuments(createSeedData());
+const documents = seedExportDocuments();
 
 mkdirSync(path.dirname(outFile), { recursive: true });
 writeFileSync(

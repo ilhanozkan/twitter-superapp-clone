@@ -1,4 +1,4 @@
-import { SeedData } from "../seed";
+import { createSeedData, SeedData } from "../seed";
 import { businessSanityDocuments } from "./seeds/business";
 import { coreSanityDocuments } from "./seeds/core";
 import { SanitySeedDocument } from "./seeds/documents";
@@ -27,4 +27,15 @@ export function seedToSanityDocuments(seed: SeedData): SanitySeedDocument[] {
     ...storiesSanityDocuments(seed),
     ...messagesSanityDocuments(seed),
   ];
+}
+
+/**
+ * What `npm run seed:sanity` writes: the world the memory store serves
+ * (`createSeedData`'s default, the full SuperApp world) at `now`, so a
+ * Sanity project starts with the same demo.
+ */
+export function seedExportDocuments(
+  now: Date = new Date()
+): SanitySeedDocument[] {
+  return seedToSanityDocuments(createSeedData(now));
 }

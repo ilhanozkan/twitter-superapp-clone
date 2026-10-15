@@ -130,6 +130,10 @@ cd sanity && npx sanity dataset import seed/demo.ndjson production --missing
 
 `--missing` only creates documents that do not exist yet. Use `--replace` to overwrite them.
 
+The app's `test/studioSchemas.test.ts` validates every exported document
+against these schemas (types, required fields, rules and references), so an
+import shows no validation errors in the Studio.
+
 The export includes private documents (`private.*` ids: wallets, transfers,
 payment requests). **Importing them needs a token**: the CLI uses your
 `npx sanity login` session, or set `SANITY_AUTH_TOKEN` to a token with write
