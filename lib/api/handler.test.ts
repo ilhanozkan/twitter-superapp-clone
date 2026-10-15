@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 import { call, stubDefaultEnv } from "../../test/api";
+import type { Routes } from "./handler";
 
 let createHandler: typeof import("./handler").createHandler;
 // Imported after resetModules so `instanceof` checks see the same classes as the handler.
@@ -85,6 +86,66 @@ describe("createHandler", () => {
       expect(res.body.error.requestId).toBe(res.headers["x-request-id"]);
     }
     expect(console.error).toHaveBeenCalledTimes(2);
+  });
+
+  it("maps SuperApp domain errors to their statuses and codes", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => undefined);
+    const throwing = (error: unknown) =>
+      createHandler({
+        GET: () => {
+          throw error;
+        },
+      });
+
+    const cases: [Error, number, string][] = [
+      [
+        new dbErrors.InsufficientFundsError(800, 1000),
+        402,
+        "insufficient_funds",
+      ],
+      [new dbErrors.WalletFrozenError("sarahcodes"), 403, "wallet_frozen"],
+      [
+        new dbErrors.ForbiddenError("You can't tip your own Tweet"),
+        403,
+        "forbidden",
+      ],
+      [
+        new dbErrors.LimitExceededError("Too many requests"),
+        422,
+        "limit_exceeded",
+      ],
+      [new dbErrors.UnavailableError("Sold out"), 422, "unavailable"],
+      [new dbErrors.IdempotencyKeyReusedError(), 422, "idempotency_key_reused"],
+      [new dbErrors.InvalidStateError("Already paid"), 409, "invalid_state"],
+      [new dbErrors.PriceChangedError(650, 700), 409, "price_changed"],
+      [new dbErrors.ConflictError(), 409, "conflict"],
+      [new dbErrors.NotImplementedError(), 501, "not_implemented"],
+    ];
+
+    for (const [error, status, code] of cases) {
+      const res = await call(throwing(error));
+      expect(res.statusCode, code).toBe(status);
+      expect(res.body.error).toMatchObject({ code, message: error.message });
+    }
+  });
+
+  it("names the unavailable products in the details", async () => {
+    const res = await call(
+      createHandler({
+        GET: () => {
+          throw new dbErrors.UnavailableError("Some items are sold out", [
+            "seed-p-sa-mug",
+            "seed-p-kk-simit",
+          ]);
+        },
+      })
+    );
+
+    expect(res.statusCode).toBe(422);
+    expect(res.body.error.details).toEqual([
+      { path: "productId", message: "seed-p-sa-mug" },
+      { path: "productId", message: "seed-p-kk-simit" },
+    ]);
   });
 
   it("keeps a well-formed incoming request id and replaces others", async () => {
@@ -279,5 +340,81 @@ describe("createHandler", () => {
     for (let i = 0; i < 50; i++) {
       expect((await call(handler, { method: "POST" })).statusCode).toBe(201);
     }
+  });
+});
+
+describe("createHandler with a feature", () => {
+  const routes = (calls: string[]): Routes => ({
+    GET: (req, res) => {
+      calls.push("GET");
+      res.status(200).json({});
+    },
+    POST: (req, res) => {
+      calls.push("POST");
+      res.status(201).json({});
+    },
+  });
+
+  it("runs the routes while the feature is on", async () => {
+    const calls: string[] = [];
+    const handler = createHandler(routes(calls), { feature: "wallet" });
+
+    expect((await call(handler)).statusCode).toBe(200);
+    expect((await call(handler, { method: "POST" })).statusCode).toBe(201);
+    expect(calls).toEqual(["GET", "POST"]);
+  });
+
+  it("answers 404 for every method while it is off, before the write checks", async () => {
+    vi.stubEnv("DISABLED_FEATURES", "wallet");
+    vi.stubEnv("READ_ONLY", "true");
+    vi.stubEnv("WRITE_RATE_LIMIT", "1");
+    const calls: string[] = [];
+    const handler = createHandler(routes(calls), { feature: "wallet" });
+
+    for (const method of ["GET", "POST", "POST"]) {
+      const res = await call(handler, { method });
+      expect(res.statusCode, method).toBe(404);
+      expect(res.body.error).toMatchObject({
+        code: "not_found",
+        message: "This feature is turned off",
+      });
+    }
+    expect(calls).toEqual([]);
+
+    // The refused writes used none of the client's write budget.
+    vi.stubEnv("READ_ONLY", "");
+    const other = createHandler({ POST: (req, res) => res.status(201).end() });
+    expect((await call(other, { method: "POST" })).statusCode).toBe(201);
+  });
+
+  it("answers 503 while the data source can't serve it", async () => {
+    vi.stubEnv("DATA_SOURCE", "sanity");
+    vi.stubEnv("SANITY_PROJECT_ID", "testproject");
+    vi.stubEnv("SANITY_API_TOKEN", "");
+    const calls: string[] = [];
+    const handler = createHandler(routes(calls), { feature: "wallet" });
+
+    const res = await call(handler);
+    expect(res.statusCode).toBe(503);
+    expect(res.body.error).toMatchObject({
+      code: "service_unavailable",
+      message: "Wallet needs SANITY_API_TOKEN on this deployment",
+    });
+    expect(res.headers["cache-control"]).toBe("no-store");
+    expect(calls).toEqual([]);
+  });
+
+  it("sends the headers an error carries", async () => {
+    const res = await call(
+      createHandler({
+        GET: () => {
+          throw errors.rateLimited(42);
+        },
+      })
+    );
+
+    expect(res.statusCode).toBe(429);
+    expect(res.headers["retry-after"]).toBe("42");
+    expect(res.body.error.code).toBe("rate_limited");
   });
 });

@@ -44,17 +44,19 @@ Changes you make are kept until the server restarts.
 
 ### Scripts
 
-| Script                | What it does                                                 |
-| --------------------- | ------------------------------------------------------------ |
-| `npm run dev`         | Development server                                           |
-| `npm run build`       | Production build                                             |
-| `npm start`           | Serves the production build                                  |
-| `npm run lint`        | ESLint (Next.js core web vitals + TypeScript rules)          |
-| `npm run format`      | Prettier (with Tailwind class sorting); `format:check` in CI |
-| `npm run typecheck`   | TypeScript check                                             |
-| `npm test`            | Unit, component and repository contract tests (Vitest)       |
-| `npm run test:e2e`    | End-to-end and accessibility tests (Playwright + axe)        |
-| `npm run seed:sanity` | Exports the demo dataset as NDJSON for a Sanity import       |
+| Script                         | What it does                                                       |
+| ------------------------------ | ------------------------------------------------------------------ |
+| `npm run dev`                  | Development server                                                 |
+| `npm run build`                | Production build                                                   |
+| `npm start`                    | Serves the production build                                        |
+| `npm run lint`                 | ESLint (Next.js core web vitals + TypeScript rules)                |
+| `npm run format`               | Prettier (with Tailwind class sorting); `format:check` in CI       |
+| `npm run typecheck`            | TypeScript check                                                   |
+| `npm test`                     | Unit, component and repository contract tests (Vitest)             |
+| `npm run test:e2e`             | End-to-end and accessibility tests (Playwright + axe)              |
+| `npm run seed:sanity`          | Exports the demo dataset as NDJSON for a Sanity import             |
+| `npm run audit:ledger`         | Checks the demo-credit ledger's invariants (Sanity: needs a token) |
+| `npm run check:sanity-privacy` | Fails if private Sanity documents are readable without a token     |
 
 `npm run test:e2e` runs against `npm run build` output. The first run needs a browser:
 `npx playwright install chromium`.
@@ -121,6 +123,10 @@ The app talks to a small REST API under `/api` (tweets, replies, likes, Retweets
 bookmarks, users, notifications, trends). Every request acts as the account in
 `DEMO_USERNAME`, decided on the server; writes are validated, rate limited and
 same-origin only. See [docs/API.md](./docs/API.md).
+
+The SuperApp features (wallet, messages, food, rides, stories, channels) share one
+demo-credit ledger and a set of extension points, described in
+[docs/SUPERAPP.md](./docs/SUPERAPP.md).
 
 ## Deployment
 

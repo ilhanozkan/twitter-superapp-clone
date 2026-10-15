@@ -1,6 +1,7 @@
 import Link from "next/link";
 import {
   HiCheckBadge,
+  HiOutlineBuildingStorefront,
   HiOutlineCalendarDays,
   HiOutlineLink,
   HiOutlineMapPin,
@@ -8,19 +9,50 @@ import {
 
 import { formatJoinDate } from "../../lib/format";
 import { displayUrl, safeHref } from "../../lib/text";
+import { useAppSelector } from "../../store";
+import { BusinessCategory, IBusiness } from "../../types/Business";
 import { IUserProfile } from "../../types/User";
 import Avatar from "../common/Avatar";
+import MessageProfileAction from "../messages/MessageProfileAction";
+import RideHereLink from "../rides/RideHereLink";
+import BusinessInfo from "../shop/BusinessInfo";
+import OrderButton from "../shop/OrderButton";
 import TweetText from "../tweet/TweetText";
+import SendCreditsProfileAction from "../wallet/SendCreditsProfileAction";
+
+export type ProfileTab = "tweets" | "menu" | "likes";
 
 interface ProfileHeaderProps {
   user: IUserProfile;
+  /** The business behind a business account, if it has a profile. */
+  business?: IBusiness | null;
   /** Which tab is selected. */
-  tab: "tweets" | "likes";
+  tab: ProfileTab;
 }
 
-export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
+export const CATEGORY_LABELS: Record<BusinessCategory, string> = {
+  cafe: "Café",
+  restaurant: "Restaurant",
+  healthy: "Healthy",
+  shop: "Shop",
+};
+
+export default function ProfileHeader({
+  user,
+  business = null,
+  tab,
+}: ProfileHeaderProps) {
+  const shopOn = useAppSelector((state) => state.session.features.shop);
   const website = safeHref(user.website);
   const base = `/${user.username}`;
+
+  const tabs: { id: ProfileTab; label: string; href: string }[] = [
+    { id: "tweets", label: "Tweets", href: base },
+    ...(business && shopOn
+      ? [{ id: "menu" as const, label: "Menu", href: `${base}/menu` }]
+      : []),
+    { id: "likes", label: "Likes", href: `${base}/likes` },
+  ];
 
   return (
     <div>
@@ -36,8 +68,20 @@ export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
       </div>
 
       <div className="px-4 pb-3 pt-3">
-        <div className="-mt-[15%] mb-3">
-          <Avatar user={user} size={134} className="border-4 border-surface" />
+        <div className="mb-3 flex items-start justify-between gap-2">
+          <div className="-mt-[15%] min-w-0">
+            <Avatar
+              user={user}
+              size={134}
+              className="border-4 border-surface"
+            />
+          </div>
+          {/* Each feature's own actions (§12.3): Order, Message, Send credits. */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <MessageProfileAction user={user} />
+            <SendCreditsProfileAction user={user} />
+            {business && <OrderButton business={business} />}
+          </div>
         </div>
 
         <h2 className="flex items-center gap-1 text-xl font-extrabold leading-6">
@@ -52,9 +96,27 @@ export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
             />
           )}
         </h2>
-        <p className="text-[15px] text-muted">@{user.username}</p>
+        <p className="flex flex-wrap items-center gap-x-2 text-[15px] text-muted">
+          <span>@{user.username}</span>
+          {/* Text with an icon, never a badge that could pass for verification. */}
+          {user.accountType === "business" && (
+            <span className="flex items-center gap-1">
+              <HiOutlineBuildingStorefront aria-hidden="true" />
+              {business
+                ? `Business · ${CATEGORY_LABELS[business.category]}`
+                : "Business"}
+            </span>
+          )}
+        </p>
 
         {user.bio && <TweetText text={user.bio} className="mt-3 text-[15px]" />}
+
+        {business && (
+          <div className="mt-3 flex flex-col gap-1 text-[15px] text-muted">
+            <BusinessInfo business={business} />
+            <RideHereLink placeId={business.placeId} />
+          </div>
+        )}
 
         <ul className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[15px] text-muted">
           {user.location && (
@@ -86,10 +148,7 @@ export default function ProfileHeader({ user, tab }: ProfileHeaderProps) {
       </div>
 
       <nav aria-label="Profile timelines" className="flex border-b border-line">
-        {[
-          { id: "tweets", label: "Tweets", href: base },
-          { id: "likes", label: "Likes", href: `${base}/likes` },
-        ].map((item) => {
+        {tabs.map((item) => {
           const active = item.id === tab;
           return (
             <Link

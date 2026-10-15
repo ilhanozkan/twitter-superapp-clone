@@ -5,6 +5,7 @@ import { MouseEvent } from "react";
 import { ITweet } from "../../types/Tweet";
 import Avatar from "../common/Avatar";
 import RelativeTime from "../common/RelativeTime";
+import ProductAttachment from "../shop/ProductAttachment";
 import { profilePath, statusPath } from "./paths";
 import TweetActions from "./TweetActions";
 import TweetImage from "./TweetImage";
@@ -82,6 +83,7 @@ export default function TweetCard({ tweet }: { tweet: ITweet }) {
 
         <TweetText text={tweet.text} className="text-[15px] leading-5" />
         {tweet.image && <TweetImage src={tweet.image} />}
+        <ProductAttachment tweet={tweet} variant="card" />
         <TweetActions tweet={tweet} />
       </div>
     </article>

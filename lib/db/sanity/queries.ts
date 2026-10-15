@@ -30,7 +30,8 @@ export const TWEET_PROJECTION = `{
     "liked": ${viewerReacted("like")},
     "retweeted": ${viewerReacted("retweet")},
     "bookmarked": ${viewerReacted("bookmark")}
-  }
+  },
+  "attachment": attachment
 }`;
 
 export const REPLY_PROJECTION = `{
@@ -103,18 +104,21 @@ export const TWEET_AND_REFERENCES_QUERY = `{
 
 export const REPLIES_QUERY = `*[_type == "comment" && tweet._ref == $tweetId] | order(_createdAt asc, _id asc) ${REPLY_PROJECTION}`;
 
+const USER_PROJECTION = `{
+  "username": username,
+  "fullname": coalesce(fullname, username),
+  "image": image,
+  "banner": banner,
+  "bio": bio,
+  "location": location,
+  "website": website,
+  "verified": coalesce(verified, false),
+  "joinedAt": coalesce(joinedAt, _createdAt),
+  "accountType": coalesce(accountType, "personal")
+}`;
+
 export const USER_QUERY = `{
-  "user": *[_type == "user" && lower(username) == $username][0] {
-    "username": username,
-    "fullname": coalesce(fullname, username),
-    "image": image,
-    "banner": banner,
-    "bio": bio,
-    "location": location,
-    "website": website,
-    "verified": coalesce(verified, false),
-    "joinedAt": coalesce(joinedAt, _createdAt)
-  },
+  "user": *[_type == "user" && lower(username) == $username][0] ${USER_PROJECTION},
   "latest": *[${TWEET_FILTER} && lower(username) == $username] | order(_createdAt desc)[0] ${author(
     "userImage"
   )},
@@ -145,3 +149,7 @@ export const notificationsQuery = (limit: number) => `{
     "reply": { "id": _id, "text": coalesce(comment, "") }
   }
 }`;
+
+/** Expects `$search`: prefix terms ("mar*"); every term must match the same field. */
+export const searchUsersQuery = (limit: number) =>
+  `*[_type == "user" && (username match $search || fullname match $search)] | order(lower(username) asc) [0...${limit}] ${USER_PROJECTION}`;

@@ -1,3 +1,5 @@
+import { AccountType } from "./Business";
+
 /** The public identity attached to tweets, replies and reactions. */
 export interface IAuthor {
   username: string;
@@ -12,6 +14,7 @@ export interface IUser extends IAuthor {
   banner: string | null;
   verified: boolean;
   joinedAt: string;
+  accountType: AccountType;
 }
 
 export interface IUserProfile extends IUser {

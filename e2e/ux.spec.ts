@@ -1,5 +1,11 @@
-import AxeBuilder from "@axe-core/playwright";
-import { expect, Page, test } from "@playwright/test";
+import { expect, test } from "@playwright/test";
+
+import {
+  expectNoHorizontalScroll,
+  expectNoSeriousViolations,
+  setTheme,
+  WIDTHS,
+} from "./helpers";
 
 const PAGES = [
   "/",
@@ -15,13 +21,6 @@ const PAGES = [
   "/nobody/status/nope",
 ];
 
-async function setTheme(page: Page, theme: "light" | "dark") {
-  await page.addInitScript(
-    (value) => window.localStorage.setItem("theme", value),
-    theme
-  );
-}
-
 test.describe("accessibility (axe)", () => {
   for (const theme of ["light", "dark"] as const) {
     for (const path of PAGES) {
@@ -32,28 +31,14 @@ test.describe("accessibility (axe)", () => {
         await page.goto(path);
         await expect(page.locator("html")).toHaveAttribute("data-theme", theme);
         await page.waitForLoadState("networkidle");
-
-        const results = await new AxeBuilder({ page })
-          .withTags(["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"])
-          .analyze();
-        const serious = results.violations.filter((v) =>
-          ["serious", "critical"].includes(v.impact ?? "")
-        );
-        expect(
-          serious.map(
-            (v) =>
-              `${v.id}: ${v.nodes.map((n) => n.target.join(" ")).join(", ")}`
-          )
-        ).toEqual([]);
+        await expectNoSeriousViolations(page);
       });
     }
   }
 });
 
 test.describe("responsive layout", () => {
-  const widths = [360, 390, 768, 1024, 1280, 1440];
-
-  for (const width of widths) {
+  for (const width of WIDTHS) {
     test(`no horizontal scrolling at ${width}px`, async ({ page }) => {
       await page.setViewportSize({ width, height: 900 });
       for (const path of [
@@ -65,10 +50,7 @@ test.describe("responsive layout", () => {
         `/explore?q=${"x".repeat(100)}`,
       ]) {
         await page.goto(path);
-        const overflow = await page.evaluate(
-          () => document.documentElement.scrollWidth - window.innerWidth
-        );
-        expect(overflow, `${path} at ${width}px`).toBeLessThanOrEqual(0);
+        await expectNoHorizontalScroll(page, `${path} at ${width}px`);
       }
     });
   }

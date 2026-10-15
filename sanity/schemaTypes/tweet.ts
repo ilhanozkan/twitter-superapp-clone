@@ -1,5 +1,6 @@
 import { defineField, defineType } from "sanity";
 
+import { KEY_PATTERN } from "../env";
 import { imageUrl, tweetText, username } from "./rules";
 
 // Field names are unchanged from the original schema so existing documents
@@ -40,6 +41,33 @@ export const tweetType = defineType({
       title: "Tweet image",
       type: "url",
       validation: imageUrl,
+    }),
+    defineField({
+      name: "attachment",
+      title: "Attachment",
+      description:
+        "A product card shown under the tweet (shown only while the shop is on). Any account can attach any product, like sharing a link.",
+      type: "object",
+      fields: [
+        defineField({
+          name: "kind",
+          title: "Kind",
+          type: "string",
+          options: { list: [{ title: "Product", value: "product" }] },
+          initialValue: "product",
+          validation: (rule) => rule.required(),
+        }),
+        defineField({
+          name: "productId",
+          title: "Product id",
+          description: "The id of a product document, such as seed-p-kk-latte.",
+          type: "string",
+          validation: (rule) =>
+            rule.required().regex(KEY_PATTERN, {
+              name: "id (letters, digits, - and _)",
+            }),
+        }),
+      ],
     }),
     defineField({
       name: "blockTweet",

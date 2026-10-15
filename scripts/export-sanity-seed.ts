@@ -1,5 +1,7 @@
 // Writes the demo dataset as NDJSON for `sanity dataset import`, so a fresh
 // Sanity project can start with the same content as the in-memory store.
+// Private documents (wallets, transfers...) have "private." ids, which only
+// a logged-in CLI or SANITY_AUTH_TOKEN can import (sanity/README.md).
 //
 //   npm run seed:sanity
 //   cd sanity && npx sanity dataset import seed/demo.ndjson production --missing
@@ -27,3 +29,11 @@ console.log(
 console.log(
   "Import them with: cd sanity && npx sanity dataset import seed/demo.ndjson <dataset> --missing"
 );
+const privateCount = documents.filter((document) =>
+  document._id.startsWith("private.")
+).length;
+if (privateCount > 0) {
+  console.log(
+    `${privateCount} of them are private ("private." ids): the import needs \`npx sanity login\` or SANITY_AUTH_TOKEN.`
+  );
+}
