@@ -382,6 +382,10 @@ test.describe("layout", () => {
 test.describe("accessibility (axe)", () => {
   for (const theme of ["light", "dark"] as const) {
     test(`/channels and channels in ${theme} mode`, async ({ page }) => {
+      // Seven full axe scans (each injects axe twice) plus five navigations
+      // that wait for network idle: well inside 30 s on a fast machine, but
+      // not on a loaded CI runner.
+      test.slow();
       await setTheme(page, theme);
       await page.goto("/channels");
       await expect(page.locator("html")).toHaveAttribute("data-theme", theme);

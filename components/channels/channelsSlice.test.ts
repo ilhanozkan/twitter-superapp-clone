@@ -1,10 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+import { channelsApi } from "../../lib/client/channelsApi";
+import { makeStore } from "../../store";
 
 import reducer, {
   channelRead,
   channelsState,
   channelUpdated,
   messageRemoved,
+  pollChannel,
   textQueued,
   textSent,
   threadPolled,
@@ -25,6 +29,10 @@ const first = channelMessage("m1", sarah, "2026-10-09T09:00:00.000Z", "Hi");
 const second = channelMessage("m2", viewer, "2026-10-09T09:05:00.000Z", "Hey");
 
 describe("channelsSlice", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
   it("starts from what the server read, and says when a list failed", () => {
     const state = channelsState({
       mine: null,
@@ -124,6 +132,31 @@ describe("channelsSlice", () => {
     });
   });
 
+  it("keeps a removal when a poll read before it lands", () => {
+    let state = channelsState({
+      thread: {
+        channel: channel("moderator", { lastMessage: second }),
+        page: page([first, second]),
+      },
+    });
+    state = reducer(
+      state,
+      messageRemoved({ handle: HANDLE, messageId: "m2", by: "moderator" })
+    );
+    // The poll was served before the DELETE committed.
+    state = reducer(
+      state,
+      threadPolled({
+        channel: channel("moderator", { lastMessage: second }),
+        page: page([first, second]),
+      })
+    );
+    expect(state.threads[HANDLE].messages[1].body).toEqual({
+      type: "removed",
+      by: "moderator",
+    });
+  });
+
   it("swaps a sent text for the server's message", () => {
     let state = channelsState({
       mine: [channel("member", { viewer: { role: "member", unread: 3 } })],
@@ -151,5 +184,32 @@ describe("channelsSlice", () => {
 
     state = reducer(state, channelRead(HANDLE));
     expect(state.mine.items[0].viewer.unread).toBe(0);
+  });
+
+  it("keeps a role changed while a poll was out, rather than the poll's older one", async () => {
+    const store = makeStore({
+      channels: channelsState({
+        thread: { channel: channel("member"), page: page([first]) },
+      }),
+    });
+    // The poll's channel was read before the reader left...
+    vi.spyOn(channelsApi, "getChannel").mockResolvedValue({
+      channel: channel("member"),
+    });
+    let answer: (value: ReturnType<typeof page>) => void = () => {};
+    vi.spyOn(channelsApi, "listMessages").mockReturnValue(
+      new Promise((resolve) => {
+        answer = resolve;
+      })
+    );
+    const polled = store.dispatch(pollChannel(HANDLE));
+    // ...and its messages come back after the leave was shown.
+    store.dispatch(channelUpdated(channel(null)));
+    answer(page([first, second]));
+    await polled;
+
+    const thread = store.getState().channels.threads[HANDLE];
+    expect(thread.channel.viewer.role).toBeNull();
+    expect(thread.messages).toEqual([first, second]);
   });
 });

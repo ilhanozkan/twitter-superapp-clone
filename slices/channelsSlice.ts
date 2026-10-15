@@ -332,12 +332,19 @@ export const fetchChannels =
 export const pollChannel =
   (handle: string): Thunk<void> =>
   async (dispatch, getState) => {
-    if (!getState().channels.threads[handle]) return;
+    const before = getState().channels.threads[handle]?.channel;
+    if (!before) return;
     const [{ channel }, page] = await Promise.all([
       channelsApi.getChannel(handle),
       channelsApi.listMessages(handle, { limit: POLL_PAGE_SIZE }),
     ]);
-    dispatch(threadPolled({ channel, page }));
+    // Changed meanwhile (say, left while the poll was out): the server may
+    // have answered before that change, so keep what is shown until the
+    // next poll rather than bring back a role the reader just gave up.
+    const now = getState().channels.threads[handle]?.channel;
+    dispatch(
+      threadPolled({ channel: now && now !== before ? now : channel, page })
+    );
   };
 
 export const loadOlderChannel =
