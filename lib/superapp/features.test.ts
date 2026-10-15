@@ -1,11 +1,15 @@
 import { describe, expect, it } from "vitest";
 
+import { FeatureId, FeatureStatus } from "../../types/Superapp";
+
 import {
   FEATURE_IDS,
+  FEATURE_REQUIRES,
   featuresFrom,
   featureStatus,
   isFeatureId,
   parseFeatureList,
+  requiredStatus,
 } from "./features";
 
 describe("parseFeatureList", () => {
@@ -54,6 +58,24 @@ describe("featureStatus", () => {
       rides: false,
       stories: false,
     });
+  });
+
+  it("is only as available as the features it requires", () => {
+    const statuses: Partial<Record<FeatureId, FeatureStatus>> = {
+      shop: "off",
+      wallet: "unconfigured",
+    };
+    const own = (id: FeatureId) => statuses[id] ?? "on";
+
+    // Orders sells the shop's products for wallet credits.
+    expect(FEATURE_REQUIRES.orders).toEqual(["shop", "wallet"]);
+    expect(requiredStatus("orders", own)).toBe("off");
+    expect(requiredStatus("rides", own)).toBe("unconfigured");
+    expect(requiredStatus("wallet", own)).toBe("unconfigured");
+    expect(requiredStatus("stories", own)).toBe("on");
+    expect(requiredStatus("rides", () => "on")).toBe("on");
+    statuses.rides = "off";
+    expect(requiredStatus("rides", own)).toBe("off");
   });
 
   it("knows every feature id", () => {

@@ -635,6 +635,31 @@ describe("feature gating", () => {
     expect(ids).not.toContain("ride-completed-seed-ride01");
   });
 
+  it("turns the rides routes into 404s with DISABLED_FEATURES=wallet, moving nothing", async () => {
+    // Rides are paid and tipped from the wallet: without it nothing may move
+    // credits the rider can't see.
+    vi.stubEnv("DISABLED_FEATURES", "wallet");
+    const wallet = state().wallet;
+    const before = {
+      balances: new Map(wallet.balances),
+      transfers: wallet.transfers.size,
+      rides: state().rides.rides.size,
+    };
+
+    for (const [name, handler, request] of [...reads(), ...writes()]) {
+      const res = await call(handler, request);
+      expectError(res, 404, "not_found", name);
+      expect(res.body.error.message, name).toBe("This feature is turned off");
+    }
+    expect(wallet.balances).toEqual(before.balances);
+    expect(wallet.transfers.size).toBe(before.transfers);
+    expect(state().rides.rides.size).toBe(before.rides);
+    expect((await call(api.me)).body.features).toMatchObject({
+      wallet: false,
+      rides: false,
+    });
+  });
+
   it("answers 503 while the data source can't serve rides", async () => {
     vi.stubEnv("DATA_SOURCE", "sanity");
     vi.stubEnv("SANITY_PROJECT_ID", "testproject");

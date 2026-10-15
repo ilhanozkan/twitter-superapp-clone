@@ -57,4 +57,32 @@ describe("resolveFeatures", () => {
       stories: false,
     });
   });
+
+  it("turns a feature off with the features it requires", () => {
+    const repos = subs();
+    repos.wallet = { ...repos.wallet, implemented: true };
+    repos.shop = { ...repos.shop, implemented: true };
+    repos.orders = { ...repos.orders, implemented: true };
+    repos.rides = { ...repos.rides, implemented: true };
+
+    const withoutShop = resolveFeatures(repos, new Set(["shop"]));
+    expect(withoutShop.featureStatus("orders")).toBe("off");
+    expect(withoutShop.features).toMatchObject({
+      wallet: true,
+      orders: false,
+      rides: true,
+    });
+
+    const withoutWallet = resolveFeatures(repos, new Set(["wallet"]));
+    expect(withoutWallet.features).toMatchObject({
+      shop: true,
+      orders: false,
+      rides: false,
+    });
+
+    repos.wallet = { ...repos.wallet, configured: false };
+    expect(resolveFeatures(repos, new Set()).featureStatus("rides")).toBe(
+      "unconfigured"
+    );
+  });
 });

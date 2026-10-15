@@ -754,6 +754,32 @@ describe("feature gating", () => {
     expectError(await call(api.wallet), 404, "not_found");
   });
 
+  it("sends a story reply as plain text while stories are off", async () => {
+    // Before the first read: the repository settles its features once.
+    vi.stubEnv("DISABLED_FEATURES", "stories");
+    const reply = { text: "Nice story!", storyId: "seed-story06" };
+
+    // No story's author or text reaches the chat through this route.
+    const res = await call(api.messages, keyed(SARAH, reply));
+    expect(res.statusCode).toBe(201);
+    expect(res.body.message.body).toMatchObject({
+      type: "text",
+      text: "Nice story!",
+      story: null,
+    });
+    expect(JSON.stringify(res.body)).not.toContain("Coffee count");
+    expect((await call(api.me)).body.features.stories).toBe(false);
+  });
+
+  it("carries the story a reply answers while stories are on", async () => {
+    const res = await call(
+      api.messages,
+      keyed(SARAH, { text: "Nice story!", storyId: "seed-story06" })
+    );
+    expect(res.statusCode).toBe(201);
+    expect(res.body.message.body.story).toMatchObject({ id: "seed-story06" });
+  });
+
   it("answers 503 to chat money while the wallet is unconfigured", async () => {
     const { getRepository } = await import("../../lib/db");
     const repo = getRepository();

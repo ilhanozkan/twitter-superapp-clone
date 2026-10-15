@@ -140,7 +140,8 @@ the first message is sent.
 Sends a message. `text` is sanitized like Tweet text and is 1–1,000
 characters, or empty when sharing a Tweet with `tweetId`. `storyId` makes
 it a reply to that story, which must be one you can see (a channel's
-`channel-<handle>` id drops it, as [its own route](channels.md) does).
+`channel-<handle>` id drops it, as [its own route](channels.md) does, and
+so does every conversation while stories are off, sending plain text).
 Retrying with the same key answers the original `201` with
 `Idempotent-Replayed: true` and posts nothing again. For a channel id,
 this route and `GET` follow the `channels` switch as well (404 while it is

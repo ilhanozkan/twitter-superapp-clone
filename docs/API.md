@@ -161,7 +161,8 @@ the features are built (the demo-credit ledger, holds, privacy) is in
   from stored timestamps and the server's clock on every read, so nothing
   runs in the background. Time-derived responses include `serverNow`.
 - **Feature switches.** A feature listed in `DISABLED_FEATURES` is off: all
-  its routes answer 404 `not_found` "This feature is turned off". On Sanity
+  its routes answer 404 `not_found` "This feature is turned off". Orders is
+  also off while the shop or the wallet is, and rides while the wallet is. On Sanity
   without `SANITY_API_TOKEN`, the private features (wallet, messages,
   channels, orders, rides) answer 503 `service_unavailable`, for example
   "Wallet needs SANITY_API_TOKEN on this deployment". `GET /api/me` reports

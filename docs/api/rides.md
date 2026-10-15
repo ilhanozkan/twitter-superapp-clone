@@ -6,7 +6,9 @@ held for the driver until pickup, so cancelling before then refunds it in
 full. Drivers, cars and times are simulated: nothing moves in the real
 world, and demo trips are shorter than real ones.
 
-These endpoints belong to the `rides` feature. They follow the
+These endpoints belong to the `rides` feature, which is also off while the
+wallet is (`DISABLED_FEATURES=wallet`): rides are paid and tipped from it.
+They follow the
 [SuperApp conventions](../API.md#superapp-conventions): amounts are integer
 cents (`740` is 7.40 credits), booking and tipping need an
 `Idempotency-Key`, both count against the per-user budget of 12 money

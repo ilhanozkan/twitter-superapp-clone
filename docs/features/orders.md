@@ -28,8 +28,8 @@ is in [docs/SUPERAPP.md](../SUPERAPP.md).
 | Notifications                          | "New order #M2X9 from Marco Rossi at Twitter SuperApp" (to the people who run it, leading to the board), "Your order #K7Q2 from Kızılay Kahve was delivered", and "Kızılay Kahve cancelled your order #K7Q2. You got a full refund."                                              |
 | The composer                           | **Attach a product** also suggests what you have had delivered, after the products of the businesses you run.                                                                                                                                                                     |
 
-- While orders are off (`DISABLED_FEATURES=orders`, or on Sanity without a
-  token) all of this is hidden: menus are a read-only list without Add or
+- While orders are off (`DISABLED_FEATURES=orders`, or `shop` or `wallet`,
+  or on Sanity without a token) all of this is hidden: menus are a read-only list without Add or
   the cart bar, cards have no Order now, Business opens on Menu, and
   `/checkout` and `/orders*` answer 404.
 - Orders, checkout and the order pages hide the phone's floating compose

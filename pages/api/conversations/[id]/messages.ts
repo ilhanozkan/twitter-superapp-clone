@@ -48,10 +48,13 @@ export default createHandler(
       const body = parseBody(req, messageBody);
       const tweetId = body.tweetId ?? null;
       // Story replies are direct messages: a channel drops `storyId`, as
-      // its own route does, so both routes make the same send.
-      const storyId = isChannelConversationId(id)
-        ? null
-        : (body.storyId ?? null);
+      // its own route does, so both routes make the same send. While
+      // stories are off it is dropped too, so no story's content reaches
+      // the chat through this route.
+      const storyId =
+        isChannelConversationId(id) || !getRepository().features.stories
+          ? null
+          : (body.storyId ?? null);
       const key = parseIdempotency(req, {
         scope: "messages.send",
         prefix: "msg",

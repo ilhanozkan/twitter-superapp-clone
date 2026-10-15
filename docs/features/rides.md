@@ -20,7 +20,8 @@ API is in [docs/api/rides.md](../api/rides.md).
 | A wallet receipt for a fare or a tip      | "For: Ride #R7K2" links back to the ride                                                    |
 
 Both pages use the wide layout (the map beside the panel from 1024px) and
-hide the compose button. With Rides off (`DISABLED_FEATURES=rides`) the
+hide the compose button. With Rides off (`DISABLED_FEATURES=rides`, or `wallet`: rides are paid
+and tipped from it) the
 pages answer 404, the Services tile and **Ride here** are hidden, and ride
 notifications are not listed.
 

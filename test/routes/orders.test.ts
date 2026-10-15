@@ -693,6 +693,35 @@ describe("write protections and gating", () => {
     expect((await call(api.me)).body.features.orders).toBe(false);
   });
 
+  it.each(["shop", "wallet"])(
+    "turns every route into a 404 with DISABLED_FEATURES=%s, moving nothing",
+    async (required) => {
+      // Orders sell the shop's products for wallet credits: without either
+      // an order would lead to 404 menus or charge a wallet nobody can see.
+      vi.stubEnv("DISABLED_FEATURES", required);
+      const wallet = state().wallet;
+      const before = {
+        balances: new Map(wallet.balances),
+        transfers: wallet.transfers.size,
+        orders: state().orders.orders.size,
+      };
+
+      for (const [name, handler, request] of writes()) {
+        const res = await call(handler, request);
+        expectError(res, 404, "not_found", name);
+        expect(res.body.error.message, name).toBe("This feature is turned off");
+      }
+      expectError(await call(api.orders), 404, "not_found");
+      expect(wallet.balances).toEqual(before.balances);
+      expect(wallet.transfers.size).toBe(before.transfers);
+      expect(state().orders.orders.size).toBe(before.orders);
+      expect((await call(api.me)).body.features).toMatchObject({
+        [required]: false,
+        orders: false,
+      });
+    }
+  );
+
   it("answers 503 while the data source can't serve orders", async () => {
     vi.stubEnv("DATA_SOURCE", "sanity");
     vi.stubEnv("SANITY_PROJECT_ID", "testproject");

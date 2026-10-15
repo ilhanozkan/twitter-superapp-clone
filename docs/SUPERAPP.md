@@ -49,9 +49,18 @@ table names it:
   readable.
 - **On:** everything else. `GET /api/me` reports which features are on.
 
-Features that use another one hide only what they need from it: without the
-wallet there are no tips or chat payments, without orders the menus have no
-Add buttons, without stories Home has no tray. Messages keeps its
+Two features can't work without others, so they follow those switches too
+(`FEATURE_REQUIRES` in `lib/superapp/features.ts`): orders sells the shop's
+products for wallet credits, so it is off while the shop or the wallet is,
+and rides are paid and tipped from the wallet, so they are off while the
+wallet is. Turning the wallet off therefore stops every movement of
+credits, and turning the shop off leaves no order, board or "Order again"
+leading to a missing menu. `GET /api/me` reports the result.
+
+Other features that use another one hide only what they need from it:
+without the wallet there are no Tweet tips or chat payments, without orders
+the menus have no Add buttons, without stories Home has no tray and a story
+reply sent to a chat arrives as plain text. Messages keeps its
 navigation item, which the app had before the SuperApp: while it is off,
 `/messages` says so, and the unread badge and conversations are gone.
 
