@@ -482,6 +482,10 @@ test.describe("layout", () => {
 });
 
 test.describe("accessibility (axe)", () => {
+  // Seven full axe passes over three page loads (one of them Marco's log,
+  // grown by the tests above) take most of the default 30 s on a slow runner.
+  test.slow();
+
   for (const theme of ["light", "dark"] as const) {
     test(`the inbox, a conversation and the dialogs in ${theme} mode`, async ({
       page,

@@ -97,13 +97,34 @@ export function messagesState(
   };
 }
 
-/** Both lists merged by id (`incoming` wins), oldest first. */
+const answered = (message: IMessage) =>
+  message.body.type === "request" && message.body.request.status !== "pending";
+
+/**
+ * `incoming`, unless it would undo something final that `existing` shows:
+ * a removal, or a request's answer (paid, declined, cancelled, expired).
+ * Neither can be undone, so such a copy was read before it (a poll in
+ * flight while the message was deleted or the request was answered).
+ */
+function fresher(existing: IMessage | undefined, incoming: IMessage) {
+  if (!existing) return incoming;
+  if (existing.body.type === "removed" && incoming.body.type !== "removed")
+    return existing;
+  if (answered(existing) && isPendingRequest(incoming)) return existing;
+  return incoming;
+}
+
+/**
+ * Both lists merged by id (`incoming` wins, except over a removal or a
+ * request answered since it was read), oldest first.
+ */
 export function mergeMessages(
   existing: IMessage[],
   incoming: IMessage[]
 ): IMessage[] {
   const byId = new Map(existing.map((message) => [message.id, message]));
-  for (const message of incoming) byId.set(message.id, message);
+  for (const message of incoming)
+    byId.set(message.id, fresher(byId.get(message.id), message));
   return [...byId.values()].sort(compareOldestFirst);
 }
 
@@ -198,15 +219,37 @@ const messagesSlice = createSlice({
         page.olderCursor !== null &&
         !page.items.some((message) => known.has(message.id));
 
-      thread.conversation = conversation;
+      // A newest page reaches back past the oldest message shown when the
+      // list holds less than a poll page. Those older ones are Load older's
+      // to add (it keeps the reader's place and its cursor): adding them
+      // here would push what the reader is looking at down.
+      const oldest = thread.messages[0];
+      const items =
+        gap || firstRead || !oldest || thread.olderCursor === null
+          ? page.items
+          : page.items.filter(
+              (message) =>
+                known.has(message.id) || compareOldestFirst(oldest, message) < 0
+            );
+
       thread.serverNow = page.serverNow;
-      thread.messages = gap
-        ? page.items
-        : mergeMessages(thread.messages, page.items);
+      thread.messages = gap ? items : mergeMessages(thread.messages, items);
       if (gap || firstRead) thread.olderCursor = page.olderCursor;
       thread.newestCursor = page.newestCursor ?? thread.newestCursor;
+      // The preview, too, keeps what changed here since this was read.
+      const last = conversation.lastMessage;
+      const polled: IConversation = last
+        ? {
+            ...conversation,
+            lastMessage: fresher(
+              thread.messages.find((message) => message.id === last.id),
+              last
+            ),
+          }
+        : conversation;
+      thread.conversation = polled;
       if (state.inbox.items.some((item) => item.id === conversation.id))
-        upsertConversation(state, conversation);
+        upsertConversation(state, polled);
     },
     olderLoaded(
       state,

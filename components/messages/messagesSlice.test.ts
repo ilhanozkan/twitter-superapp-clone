@@ -60,6 +60,32 @@ describe("mergeMessages", () => {
     ]);
     expect(mergeMessages([m2], [paid])[0]).toBe(paid);
   });
+
+  it("keeps an answered request over a pending copy read before the answer", () => {
+    const pending = message("m4", sarah, at("11:00"), {
+      type: "request",
+      request: paymentRequest(),
+    });
+    const cancelled = {
+      ...pending,
+      body: {
+        type: "request" as const,
+        request: paymentRequest({ status: "cancelled" }),
+      },
+    };
+    const [merged] = mergeMessages([cancelled], [pending]);
+    expect(merged.body).toBe(cancelled.body);
+    expect(mergeMessages([pending], [cancelled])[0]).toBe(cancelled);
+  });
+
+  it("never undoes a removal with a copy read before it", () => {
+    const removed: IMessage = {
+      ...m2,
+      body: { type: "removed", by: "author" },
+    };
+    expect(mergeMessages([removed], [m2])[0]).toBe(removed);
+    expect(mergeMessages([m2], [removed])[0]).toBe(removed);
+  });
 });
 
 describe("messagesState", () => {
@@ -141,6 +167,26 @@ describe("threadPolled", () => {
     expect(messages.map((m) => m.id)).toEqual(["m1", "m4"]);
     expect(messages[1]).toEqual(paid);
     expect(olderCursor).toBeNull();
+  });
+
+  it("leaves messages older than those shown to Load older", () => {
+    const m0 = message("m0", viewer, at("08:00"), "zero");
+    const state = reducer(
+      {
+        ...withThread(),
+        threads: {
+          [CONVERSATION_ID]: thread([m1, m2], { olderCursor: "older-than-m1" }),
+        },
+      },
+      threadPolled({
+        conversation: conversation(),
+        page: page([m0, m1, m2, m3]),
+        latest: true,
+      })
+    );
+    const { messages, olderCursor } = state.threads[CONVERSATION_ID];
+    expect(messages.map((m) => m.id)).toEqual(["m1", "m2", "m3"]);
+    expect(olderCursor).toBe("older-than-m1");
   });
 
   it("ignores conversations that aren't open", () => {
@@ -254,6 +300,33 @@ describe("requests and read state", () => {
     expect(preview.type === "request" && preview.request.status).toBe(
       "declined"
     );
+  });
+
+  it("keeps a request answered here when a poll read before the answer lands", () => {
+    const request = message("m4", sarah, at("11:00"), {
+      type: "request",
+      request: paymentRequest(),
+    });
+    let state = withThread([m1, request]);
+    state.threads[CONVERSATION_ID].conversation.lastMessage = request;
+    state.inbox.items[0] = conversation({ lastMessage: request });
+    state = reducer(state, requestUpdated(paymentRequest({ status: "paid" })));
+    // The poll was served while the request was still pending.
+    state = reducer(
+      state,
+      threadPolled({
+        conversation: conversation({ lastMessage: request }),
+        page: page([m1, request], { olderCursor: null }),
+        latest: true,
+      })
+    );
+    const status = (m: IMessage | null) =>
+      m?.body.type === "request" && m.body.request.status;
+    expect(status(state.threads[CONVERSATION_ID].messages[1])).toBe("paid");
+    expect(
+      status(state.threads[CONVERSATION_ID].conversation.lastMessage)
+    ).toBe("paid");
+    expect(status(state.inbox.items[0].lastMessage)).toBe("paid");
   });
 
   it("clears unread in the thread and the inbox", () => {
