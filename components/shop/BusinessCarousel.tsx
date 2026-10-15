@@ -5,6 +5,7 @@ import { shopApi } from "../../lib/client/shopApi";
 import { useAppSelector } from "../../store";
 import { IBusinessSummary } from "../../types/Shop";
 import Avatar from "../common/Avatar";
+import { revealFocusedItem } from "../common/revealFocusedItem";
 import { etaText, shortStatus } from "./format";
 import { FOOD_PATH, menuPath } from "./paths";
 
@@ -63,7 +64,10 @@ export default function BusinessCarousel() {
         // Holds the row's height so the page doesn't jump when it arrives.
         <div aria-hidden="true" className="h-[148px] rounded-2xl bg-subtle" />
       ) : (
-        <ul className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2">
+        <ul
+          onFocus={revealFocusedItem}
+          className="-mx-4 flex snap-x scroll-px-4 gap-3 overflow-x-auto px-4 pb-2"
+        >
           {load.items.map((business) => (
             <li key={business.username} className="w-40 shrink-0 snap-start">
               <Link

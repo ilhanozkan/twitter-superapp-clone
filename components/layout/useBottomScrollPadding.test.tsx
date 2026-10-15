@@ -77,4 +77,57 @@ describe("useBottomScrollPadding", () => {
     });
     expect(padding()).toBe(`${60 + 16}px`);
   });
+
+  it("hands back to globals.css while the bar isn't displayed", () => {
+    stubResizeObserver();
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockReturnValue(56);
+    // The compose button: 72px up on phones, `display: none` from 500px.
+    const { container } = render(<Bar bottom="72px" />);
+    const button = container.firstChild as HTMLElement;
+    expect(padding()).toBe(`${72 + 56 + 16}px`);
+
+    button.style.display = "none";
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(padding()).toBe("");
+
+    button.style.display = "";
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+    expect(padding()).toBe(`${72 + 56 + 16}px`);
+  });
+
+  it("keeps clear of the one reaching highest while two are shown", () => {
+    stubResizeObserver();
+    vi.spyOn(HTMLElement.prototype, "offsetHeight", "get").mockImplementation(
+      function (this: HTMLElement) {
+        return Number(this.dataset.height);
+      }
+    );
+    function Bars({ both }: { both: boolean }) {
+      const [low, setLow] = useState<HTMLDivElement | null>(null);
+      const [high, setHigh] = useState<HTMLDivElement | null>(null);
+      useBottomScrollPadding(low);
+      useBottomScrollPadding(both ? high : null);
+      return (
+        <>
+          <div ref={setLow} data-height="60" style={{ bottom: "53px" }} />
+          <div ref={setHigh} data-height="56" style={{ bottom: "72px" }} />
+        </>
+      );
+    }
+
+    // Whichever mounted or changed last, the higher one counts.
+    const { rerender, unmount } = render(<Bars both />);
+    expect(padding()).toBe(`${72 + 56 + 16}px`);
+    rerender(<Bars both={false} />);
+    expect(padding()).toBe(`${53 + 60 + 16}px`);
+    rerender(<Bars both />);
+    expect(padding()).toBe(`${72 + 56 + 16}px`);
+
+    unmount();
+    expect(padding()).toBe("");
+  });
 });

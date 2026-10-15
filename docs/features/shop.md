@@ -60,7 +60,8 @@ has nowhere to go until then.
   changes, in a product's details too (a modal dialog silences the rest of
   the page, so the dialog has its own). Focus moves to the control that
   replaces the one you pressed, and the page scrolls it clear of the cart
-  bar.
+  bar. Only the pill takes taps: the margin around it, where the menu shows
+  through, passes them to the menu.
 - It is kept on this device in `localStorage["cart:v1"]` (other tabs follow
   along). Pages render with an empty cart on the server and restore it once
   they run. When storage is blocked or full, the cart still works on the
@@ -99,7 +100,8 @@ has nowhere to go until then.
   While a change is saved the switch keeps focus and ignores presses.
 - The category chips are toggle buttons (`aria-pressed`); a polite status
   says how many places a filter left.
-- The Services row is a native list of links that scrolls sideways.
+- The Services row is a native list of links that scrolls sideways; Tab
+  scrolls it until the business it lands on is fully in view.
 - The product dialog, the picker and the new-cart prompt are native
   `<dialog>`s: focus stays inside, Escape closes them and focus returns to
   what opened them. The picker and the prompt close alone: the Compose

@@ -33,8 +33,10 @@ features are built is in [docs/SUPERAPP.md](../SUPERAPP.md).
   Items keep their place until the next load, so focus can return to the
   item that opened the viewer.
 - **Scrolling:** the list scrolls sideways inside itself (with snap), never
-  the page; Tab reaches every item. From 500px, arrow buttons appear for
-  mouse users while there is more in that direction.
+  the page; Tab reaches every item and scrolls the list until the item it
+  lands on is fully in view (`components/common/revealFocusedItem.ts`).
+  From 500px, arrow buttons appear for mouse users while there is more in
+  that direction.
 - After you post or delete a story, the tray reloads itself.
 
 ## The viewer

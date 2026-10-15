@@ -3,6 +3,7 @@ import { useId } from "react";
 import { IOrder } from "../../types/Order";
 import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
+import { revealFocusedItem } from "../common/revealFocusedItem";
 import Money from "../superapp/Money";
 import { itemsText } from "./format";
 import { useOrderAgain } from "./useOrderAgain";
@@ -42,7 +43,10 @@ export default function OrderAgainRow({ orders }: { orders: IOrder[] }) {
       <h2 id={headingId} className="px-4 pt-3 text-xl font-extrabold">
         Order again
       </h2>
-      <ul className="flex gap-3 overflow-x-auto px-4 pb-4 pt-2">
+      <ul
+        onFocus={revealFocusedItem}
+        className="flex gap-3 overflow-x-auto px-4 pb-4 pt-2"
+      >
         {orders.map((order) => (
           <li
             key={order.id}

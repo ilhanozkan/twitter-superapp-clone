@@ -186,7 +186,7 @@ also Tweeted about joining (`seed-t26`).
   offset go into the root's `scroll-padding-bottom`, which is what
   browsers check before scrolling focus into view
   (`components/layout/useBottomScrollPadding.ts`, shared by every sticky
-  bottom bar).
+  bottom bar and the phones' floating compose button).
 - The car ("White Toyota Corolla") and the rows of Recent rides wrap
   instead of being cut off; only names truncate.
 - The pages pass axe (WCAG 2.2 AA) in light and dark themes, in progress

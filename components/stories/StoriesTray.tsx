@@ -7,6 +7,7 @@ import { openDialog } from "../../slices/uiSlice";
 import { useAppDispatch, useAppSelector } from "../../store";
 import { IStoryTrayItem } from "../../types/Story";
 import { IAuthor } from "../../types/User";
+import { revealFocusedItem } from "../common/revealFocusedItem";
 import StoryRingAvatar from "./StoryRingAvatar";
 import { unseenIds, viewerArgs } from "./viewerArgs";
 
@@ -143,6 +144,7 @@ export default function StoriesTray({ items }: { items: IStoryTrayItem[] }) {
       <ul
         ref={list}
         onScroll={update}
+        onFocus={revealFocusedItem}
         className="flex snap-x snap-mandatory scroll-px-3 gap-1 overflow-x-auto px-3 py-3 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
       >
         {(own || !readOnly) && (

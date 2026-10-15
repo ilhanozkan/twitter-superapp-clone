@@ -70,11 +70,17 @@ async function settleTransitions(page: Page) {
 /** The widths every page must fit without scrolling sideways. */
 export const WIDTHS = [360, 390, 768, 1024, 1280, 1440];
 
-export async function expectNoHorizontalScroll(page: Page, label: string) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth
+/** How far the page scrolls sideways, in CSS pixels (0 or less when it fits). */
+export function horizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      (document.scrollingElement ?? document.documentElement).scrollWidth -
+      window.innerWidth
   );
-  expect(overflow, label).toBeLessThanOrEqual(0);
+}
+
+export async function expectNoHorizontalScroll(page: Page, label: string) {
+  expect(await horizontalOverflow(page), label).toBeLessThanOrEqual(0);
 }
 
 /** Which SuperApp features this server has on (a test skips while its feature is off). */

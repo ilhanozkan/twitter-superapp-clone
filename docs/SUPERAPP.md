@@ -486,17 +486,17 @@ slots it needs. Then:
 
 ## Testing
 
-| Layer        | Where                        | Notes                                                                                                                                                               |
-| ------------ | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rules        | `lib/superapp/*.test.ts`     | Pure functions, fixed clocks                                                                                                                                        |
-| Repositories | `lib/db/*.contract.test.ts`  | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                 |
-| Fake Sanity  | `test/fakeSanityClient.ts`   | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous` |
-| Routes       | `test/routes/*.test.ts`      | `freshApi({ world })` and `loadRoute(path)`                                                                                                                         |
-| Components   | `components/**/*.test.tsx`   | `renderWithStore` (`test/render.tsx`)                                                                                                                               |
-| Whole world  | `lib/db/world.test.ts`       | The composed `superapp` world: balances, ledger invariants, cross-references, unique ids, private ids in the export, and the same reads from both stores            |
-| Studio       | `test/studioSchemas.test.ts` | The full `seed:sanity` export against `sanity/schemaTypes`, loaded through `test/sanityStub.ts` (the app doesn't install `sanity`)                                  |
-| Docs         | `test/docsLinks.test.ts`     | Every relative link, image and `#anchor` in the READMEs and `docs/` resolves (GitHub heading slugs), and so do the app's links into the docs                        |
-| End-to-end   | `e2e/`                       | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px; `e2e/journey.spec.ts` walks one afternoon across every feature    |
+| Layer        | Where                        | Notes                                                                                                                                                                                                                                                                                                           |
+| ------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rules        | `lib/superapp/*.test.ts`     | Pure functions, fixed clocks                                                                                                                                                                                                                                                                                    |
+| Repositories | `lib/db/*.contract.test.ts`  | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                                                                                                                                                             |
+| Fake Sanity  | `test/fakeSanityClient.ts`   | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous`                                                                                                                                             |
+| Routes       | `test/routes/*.test.ts`      | `freshApi({ world })` and `loadRoute(path)`                                                                                                                                                                                                                                                                     |
+| Components   | `components/**/*.test.tsx`   | `renderWithStore` (`test/render.tsx`)                                                                                                                                                                                                                                                                           |
+| Whole world  | `lib/db/world.test.ts`       | The composed `superapp` world: balances, ledger invariants, cross-references, unique ids, private ids in the export, and the same reads from both stores                                                                                                                                                        |
+| Studio       | `test/studioSchemas.test.ts` | The full `seed:sanity` export against `sanity/schemaTypes`, loaded through `test/sanityStub.ts` (the app doesn't install `sanity`)                                                                                                                                                                              |
+| Docs         | `test/docsLinks.test.ts`     | Every relative link, image and `#anchor` in the READMEs and `docs/` resolves (GitHub heading slugs), and so do the app's links into the docs                                                                                                                                                                    |
+| End-to-end   | `e2e/`                       | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px; `e2e/journey.spec.ts` walks one afternoon across every feature; `e2e/responsive.spec.ts` loads every SuperApp route at 360 and 1280px and checks keyboard focus in sideways lists and above floating controls |
 
 Playwright runs three projects, each with its own server on the same build
 and the in-memory store:
@@ -510,6 +510,12 @@ and the in-memory store:
 The servers keep state between specs, so specs assert deltas and each seeded
 record that a test uses up (a payment request to pay or decline, a message
 to remove) belongs to exactly one spec.
+
+CI splits the suite into three shards by spec file
+(`npx playwright test --shard=1/3` and so on), because one runner takes over
+10 minutes. Each shard builds once and starts its own three servers, so a
+spec file must pass whether or not the files before it ran: on a fresh
+server, after the whole suite, or after a reused server's earlier runs.
 
 ## Live
 

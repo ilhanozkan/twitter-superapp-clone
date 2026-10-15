@@ -114,7 +114,8 @@ server restarts.
 `npm run test:e2e` runs against `npm run build` output. The first run needs a browser:
 `npx playwright install chromium`. It starts three servers on the in-memory store (the
 demo user, a second user and a read-only demo), on `E2E_PORT` (default 3005) and the
-two ports after it.
+two ports after it. CI runs it in three shards (`npx playwright test --shard=1/3` and so
+on), each with its own build and servers.
 
 ## Architecture
 

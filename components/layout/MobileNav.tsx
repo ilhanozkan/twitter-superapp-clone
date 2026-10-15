@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { useState } from "react";
 import { RiQuillPenLine } from "react-icons/ri";
 
 import { openCompose } from "../../slices/uiSlice";
@@ -11,6 +12,7 @@ import {
   useNavItems,
 } from "./Navigation";
 import { useShell } from "./shell";
+import { useBottomScrollPadding } from "./useBottomScrollPadding";
 
 /** The phone tab bar; everything else is in the header's avatar menu. */
 export const MOBILE_TABS: NavLabel[] = [
@@ -24,6 +26,8 @@ export const MOBILE_TABS: NavLabel[] = [
 /**
  * Phones (below 500px): a bottom tab bar and a floating compose button.
  * Pages can hide either through their shell (focus mode, money pages).
+ * The button floats over the page's right edge, so keyboard focus is kept
+ * clear of it like a sticky bottom bar.
  */
 export default function MobileNav() {
   const dispatch = useAppDispatch();
@@ -31,6 +35,10 @@ export default function MobileNav() {
   const { hideMobileNav, hideComposeButton } = useShell();
   const path = useCurrentPath();
   const items = useNavItems();
+  const [composeButton, setComposeButton] = useState<HTMLButtonElement | null>(
+    null
+  );
+  useBottomScrollPadding(composeButton);
   const tabs = MOBILE_TABS.map((label) =>
     items.find((item) => item.label === label)
   ).filter((item) => item !== undefined);
@@ -39,6 +47,7 @@ export default function MobileNav() {
     <>
       {!readOnly && !hideComposeButton && (
         <button
+          ref={setComposeButton}
           type="button"
           aria-label="Compose a Tweet"
           onClick={() => dispatch(openCompose())}
