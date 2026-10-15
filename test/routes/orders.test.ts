@@ -296,7 +296,11 @@ describe("POST /api/orders", () => {
 
 describe("GET /api/orders", () => {
   it("lists your orders, newest first, with the server clock", async () => {
+    // Orders placed in the same millisecond tie on placedAt and then sort
+    // by id, so a fast machine could list them either way round.
+    vi.useFakeTimers({ toFake: ["Date"], now: Date.now() });
     const first = await placed();
+    vi.setSystemTime(Date.now() + 1_000);
     const second = await placed({
       business: "superapp",
       items: [{ productId: "seed-p-sa-stickers", quantity: 1 }],
