@@ -16,18 +16,19 @@ built is in [docs/SUPERAPP.md](../SUPERAPP.md).
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | A business profile (`/kizilaykahve`)  | "Business · Café" as text with a storefront icon (never a badge that could pass for verification), whether it is open ("Open now · Closes 02:00", "Closed · Opens 11:00", "Not taking orders right now"), "Delivery 9–12 min · 1.50 credits fee · Min. 3.00", the address and **Order**. |
 | The **Menu** tab (`/<business>/menu`) | Sections ("Coffee", "Bakery") as headings, each product with its picture, description, price and "Sold out" when it is. A product's details open in a dialog with its own URL, `?product=<id>`.                                                                                          |
-| Product cards on Tweets               | Picture, name, price and "Kızılay Kahve · Open · 9–12 min", with **View menu** (and **Order now** once orders are on). The product's name opens its details on the menu.                                                                                                                 |
-| The composer                          | **Attach a product** (the bag icon) suggests products of businesses you manage. The attached product previews above the toolbar with a Remove button.                                                                                                                                    |
+| Product cards on Tweets               | Picture, name, price and "Kızılay Kahve · Open · 9–12 min", with **View menu** and **Order now** (the orders feature's quick order). The product's name opens its details on the menu.                                                                                                   |
+| The composer                          | **Attach a product** (the bag icon) suggests products of businesses you manage, then what you have had delivered. The attached product previews above the toolbar with a Remove button.                                                                                                  |
 | **Food** (`/food`)                    | Every business with its banner, category, open state, delivery estimate and fee, and its top three items. The category chips (All, Café, Restaurant, Healthy, Shop) filter on the page.                                                                                                  |
 | **Services**                          | "Order from": a row of businesses that scrolls sideways, and "See all" to Food.                                                                                                                                                                                                          |
-| **Business** (`/business`)            | For the people who run a business only (everyone else gets a 404): the **Accepting orders** switch; **Menu**, a switch per product ("Sold out" when off); **Settings**, the profile as customers see it.                                                                                 |
+| **Business** (`/business`)            | For the people who run a business only (everyone else gets a 404): the **Accepting orders** switch; **Orders**, the board (the orders feature, see [orders.md](orders.md)); **Menu**, a switch per product ("Sold out" when off); **Settings**, the profile as customers see it.         |
 
 - The Menu tab, Order, the business details on profiles, Food, the Services
   row and the Business page exist only while the shop is on. With it off,
   they are hidden and the pages answer 404, and Tweets carry no cards.
 - Business (in the sidebar, and in the avatar menu on phones) shows only to
   people who run a business. With several, the page switches between them
-  (`?business=<username>`); Settings is `?tab=settings`.
+  (`?business=<username>`). Orders is the default tab while orders are
+  on (Menu otherwise); Menu is `?tab=menu` and Settings `?tab=settings`.
 - Profiles and menus are edited in Sanity Studio (Food → Businesses, Food →
   Products), so the Settings tab is read-only and says so. The app changes
   two things only: Accepting orders and a product's availability.
@@ -35,8 +36,8 @@ built is in [docs/SUPERAPP.md](../SUPERAPP.md).
 ## Products on Tweets
 
 - Any Tweet can carry any **available** product, like sharing a link. The
-  composer only _suggests_ your own (and, once orders ship, what you
-  ordered). A sold-out product can't be attached (the post answers 422).
+  composer only _suggests_ your own and, while orders are on, what you
+  have had delivered (your last 50 deliveries, latest first). A sold-out product can't be attached (the post answers 422).
 - A product deleted since reads "This item is no longer available".
 - A closed or paused business shows why on the card ("Closed · Opens
   11:00", "Not taking orders right now"), and Order now is disabled with
@@ -65,7 +66,7 @@ has nowhere to go until then.
   they run. When storage is blocked or full, the cart still works on the
   page.
 - The cart remembers each product's price when it was added; checkout prices
-  the order again.
+  the order again from the menu (see [orders.md](orders.md)).
 
 ## States
 
@@ -113,7 +114,7 @@ With the default memory store:
 2. The Tweet "New on the menu: pistachio latte ☕" (`seed-t22`) carries its
    card; so do the Tweets of @lahmacunlab, @bowlandco and @superapp.
 3. **Food** (from Services) lists the four businesses; try the chips.
-4. The demo user manages **@superapp**: open **Business**, mark the
+4. The demo user manages **@superapp**: open **Business** → **Menu**, mark the
    SuperApp mug sold out, and its menu shows it. (The Hoodie is sold out
    already.) Turn **Accepting orders** off, and the profile reads "Not
    taking orders right now". Turn both back on.

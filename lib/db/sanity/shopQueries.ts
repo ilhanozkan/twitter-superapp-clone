@@ -27,3 +27,8 @@ export const PRODUCTS_BY_ID_QUERY = products("_id in $ids && ");
 export const PRODUCTS_OF_QUERY = products("lower(business) in $businesses && ");
 
 export const ALL_PRODUCTS_QUERY = products("");
+
+/** $businesses: lower-cased usernames; $ids: product ids (the composer's suggestions). */
+export const ATTACHABLE_QUERY = products(
+  "(lower(business) in $businesses || _id in $ids) && "
+);

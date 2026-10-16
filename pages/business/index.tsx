@@ -6,6 +6,9 @@ import Avatar from "../../components/common/Avatar";
 import { ButtonLink } from "../../components/common/Button";
 import EmptyState from "../../components/common/EmptyState";
 import PageHeader from "../../components/layout/PageHeader";
+import MerchantBoard, {
+  BoardData,
+} from "../../components/orders/MerchantBoard";
 import AcceptingOrders from "../../components/shop/AcceptingOrders";
 import BusinessSettings from "../../components/shop/BusinessSettings";
 import BusinessSwitcher from "../../components/shop/BusinessSwitcher";
@@ -13,12 +16,15 @@ import MenuSection from "../../components/shop/MenuSection";
 import {
   BusinessTab,
   businessPath,
+  businessTab,
   menuPath,
 } from "../../components/shop/paths";
 import ProductAvailability from "../../components/shop/ProductAvailability";
 import Notice from "../../components/superapp/Notice";
 import { withPageState } from "../../lib/server/pageState";
-import { useAppSelector } from "../../store";
+import { startOfLocalDay } from "../../lib/superapp/orders";
+import { ordersState } from "../../slices/ordersSlice";
+import { InitialState, useAppSelector } from "../../store";
 import { IBusiness } from "../../types/Business";
 import { PageShell } from "../../types/PageShell";
 import { IMenuSection } from "../../types/Shop";
@@ -31,25 +37,35 @@ interface BusinessPageProps {
   /** Every business the viewer runs, their own account first. */
   businesses: ManagedBusiness[];
   tab: BusinessTab;
+  /** The Orders tab's board (read only for that tab). */
+  board: BoardData | null;
 }
 
 const TABS: { id: BusinessTab; label: string }[] = [
+  { id: "orders", label: "Orders" },
   { id: "menu", label: "Menu" },
   { id: "settings", label: "Settings" },
 ];
 
+/** Completed orders the board shows before Show more. */
+const BOARD_PAST = 20;
+
 /**
  * Business tools, for the people who run a business (404 for everyone
- * else): "Accepting orders", each product's availability (Menu) and the
- * profile (Settings, edited in Studio).
+ * else): "Accepting orders", the orders (the board, the default while
+ * orders are on), each product's availability (Menu) and the profile
+ * (Settings, edited in Studio).
  */
 export default function Business({
   business,
   menu,
   businesses,
   tab,
+  board,
 }: BusinessPageProps) {
   const readOnly = useAppSelector((state) => state.session.readOnly);
+  const ordersOn = useAppSelector((state) => state.session.features.orders);
+  const tabs = TABS.filter((item) => item.id !== "orders" || ordersOn);
   const reasonId = useId();
   const first = businesses[0]?.username;
 
@@ -108,7 +124,7 @@ export default function Business({
       </div>
 
       <nav aria-label="Business tools" className="flex border-b border-line">
-        {TABS.map((item) => {
+        {tabs.map((item) => {
           const active = item.id === tab;
           return (
             <Link
@@ -135,7 +151,14 @@ export default function Business({
         })}
       </nav>
 
-      {tab === "settings" ? (
+      {tab === "orders" && board ? (
+        <MerchantBoard
+          key={business.username}
+          business={business}
+          data={board}
+          reasonId={readOnly ? reasonId : undefined}
+        />
+      ) : tab === "settings" ? (
         <BusinessSettings business={business} />
       ) : menu.length === 0 ? (
         <EmptyState title="This business hasn’t added a menu yet.">
@@ -179,9 +202,11 @@ export const getServerSideProps = withPageState<BusinessPageProps>(
     // Not yours (or nothing to run): as if the page weren't there.
     if (!username) return { notFound: true };
 
+    const ordersOn = repo.featureStatus("orders") === "on";
+    const tab = businessTab(ctx.query.tab, ordersOn);
     const [all, menu] = await Promise.all([
       repo.business.listBusinesses(),
-      repo.shop.getMenu(username),
+      tab === "menu" ? repo.shop.getMenu(username) : [],
     ]);
     const byKey = new Map(
       all.map((item) => [item.username.toLowerCase(), item])
@@ -201,9 +226,34 @@ export const getServerSideProps = withPageState<BusinessPageProps>(
           ]
         : [];
     });
-    const tab: BusinessTab = ctx.query.tab === "settings" ? "settings" : "menu";
 
-    return { props: { business, menu, businesses, tab } };
+    let board: BoardData | null = null;
+    let state: InitialState | undefined;
+    if (tab === "orders") {
+      const since = startOfLocalDay(new Date(), business.hours.timeZone);
+      const query = { business: business.username };
+      const [summary, wallet, active, past] = await Promise.all([
+        repo.orders.businessSummary(business.username, since),
+        repo.featureStatus("wallet") === "on"
+          ? repo.wallet.getWallet(business.username)
+          : null,
+        repo.orders.listOrders({ ...query, state: "active", limit: 50 }),
+        repo.orders.listOrders({ ...query, state: "past", limit: BOARD_PAST }),
+      ]);
+      const serverNow = new Date().toISOString();
+      const orders = [...active.items, ...past.items];
+      board = {
+        summary,
+        wallet,
+        since,
+        ids: orders.map((order) => order.id),
+        nextCursor: past.nextCursor,
+        serverNow,
+      };
+      state = { orders: ordersState(orders, serverNow) };
+    }
+
+    return { props: { business, menu, businesses, tab, board }, state };
   },
   { feature: "shop" }
 );

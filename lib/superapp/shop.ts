@@ -199,3 +199,20 @@ export function entriesFor(
     return entry ? [entry] : [];
   });
 }
+
+/**
+ * What the composer's picker suggests: the products of the businesses the
+ * user runs (`managed`), then the available ones they bought before
+ * (`purchasedIds`, most recent first), each once.
+ */
+export function withPurchasedProducts(
+  managed: IProduct[],
+  purchasedIds: string[],
+  entries: CatalogEntry[]
+): IProduct[] {
+  const listed = new Set(managed.map((product) => product.id));
+  const bought = entriesFor(purchasedIds, entries)
+    .map((entry) => entry.product)
+    .filter((product) => product.available && !listed.has(product.id));
+  return [...managed, ...bought];
+}

@@ -12,7 +12,7 @@ test("the Business page's switches are disabled with the reason", async ({
   page,
 }) => {
   const problems = watchConsole(page);
-  await page.goto("/business");
+  await page.goto("/business?tab=menu");
   const reason = "Changes are turned off on this read-only demo.";
   await expect(page.getByText(reason)).toBeVisible();
   for (const name of ["Accepting orders", "SuperApp mug"]) {
