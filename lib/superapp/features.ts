@@ -58,6 +58,40 @@ export function featureStatus(
   return feature.configured ? "on" : "unconfigured";
 }
 
+/**
+ * Features built on another one's data or money. Ordering sells the shop's
+ * products and is paid from the wallet; rides are paid and tipped from the
+ * wallet. Without them their pages, links and API would lead to 404s or
+ * move credits nobody can see, so they follow those switches too.
+ */
+export const FEATURE_REQUIRES: Readonly<
+  Partial<Record<FeatureId, readonly FeatureId[]>>
+> = {
+  orders: ["shop", "wallet"],
+  rides: ["wallet"],
+};
+
+const STATUS_RANK: Record<FeatureStatus, number> = {
+  off: 0,
+  unconfigured: 1,
+  on: 2,
+};
+
+/**
+ * A feature's status once the features it requires are counted: the least
+ * available of its own and theirs (off beats unconfigured beats on).
+ */
+export function requiredStatus(
+  id: FeatureId,
+  ownStatus: (id: FeatureId) => FeatureStatus
+): FeatureStatus {
+  return [id, ...(FEATURE_REQUIRES[id] ?? [])]
+    .map(ownStatus)
+    .reduce((least, status) =>
+      STATUS_RANK[status] < STATUS_RANK[least] ? status : least
+    );
+}
+
 /** Which features are on, given each feature's status. */
 export function featuresFrom(
   statusOf: (id: FeatureId) => FeatureStatus

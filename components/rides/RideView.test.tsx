@@ -5,13 +5,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { IDEMPOTENCY_KEY_PATTERN } from "../../lib/superapp/idempotency";
 import { rideActivity } from "../../lib/superapp/rides";
-import { initialActivityState } from "../../slices/activitySlice";
+import {
+  fetchActivity,
+  initialActivityState,
+} from "../../slices/activitySlice";
 import { rideReceived, ridesState } from "../../slices/ridesSlice";
 import { sessionState } from "../../slices/sessionSlice";
 import { featuresWith, renderWithStore, testViewer } from "../../test/render";
 import { IRide } from "../../types/Ride";
+import { ILiveActivity } from "../../types/Superapp";
 import { IAuthor } from "../../types/User";
 import { ITransfer, IWallet } from "../../types/Wallet";
+import AppShell from "../layout/AppShell";
 import RideView from "./RideView";
 import { ahmet, cancelledFields, rideAfter } from "./testFixtures";
 
@@ -73,30 +78,68 @@ function renderRide(
     viewer = testViewer,
     readOnly = false,
     live = false,
+    inShell = false,
   }: {
     viewer?: IAuthor;
     readOnly?: boolean;
     /** The ride is in the shell's live activity (the rider's ride in progress). */
     live?: boolean;
+    /** Inside the app's shell, with its live activity announcer. */
+    inShell?: boolean;
   } = {}
 ) {
-  return renderWithStore(<RideView id={ride.id} />, {
+  const view = <RideView id={ride.id} />;
+  return renderWithStore(inShell ? <AppShell>{view}</AppShell> : view, {
     path: `/rides/${ride.id}`,
     state: {
+      ...shellState,
       session: sessionState({
         viewer,
         readOnly,
         features: featuresWith("wallet", "rides"),
       }),
-      wallet: { wallet: wallet(30_860), limits: null, loaded: true },
       rides: ridesState(ride, serverNow),
       activity: {
         ...initialActivityState,
+        loaded: true,
         live: live ? [rideActivity(ride)] : [],
       },
     },
   });
 }
+
+/** What the shell needs to render without loading anything itself. */
+const shellState = {
+  session: sessionState({
+    viewer: testViewer,
+    readOnly: false,
+    features: featuresWith("wallet", "rides"),
+  }),
+  trends: { items: [], loaded: true, loading: false },
+  wallet: { wallet: wallet(30_860), limits: null, loaded: true },
+};
+
+/** The shell's polite region, which reads out live activity changes. */
+const shellRegion = () =>
+  document.querySelector<HTMLElement>('body > div > p[aria-live="polite"]')!;
+
+/** A poll of GET /api/activity answering `live`, as the shell makes. */
+const activityPolled = (
+  store: ReturnType<typeof renderRide>["store"],
+  live: ILiveActivity[]
+) =>
+  act(() => {
+    store.dispatch({
+      type: fetchActivity.fulfilled.type,
+      payload: {
+        serverNow: new Date().toISOString(),
+        unreadConversations: 0,
+        newNotifications: 0,
+        live,
+        since: null,
+      },
+    });
+  });
 
 /** RideStatus's polite region, where the page says a new stage. */
 const stageRegion = () =>
@@ -344,34 +387,67 @@ describe("RideView", () => {
 });
 
 describe("RideView announcements", () => {
-  it("leaves a live ride's pickup and trip to the shell's announcer, and says its arrival", async () => {
+  it("says each stage once on its own page, leaving the shell quiet", async () => {
     stubApi();
-    const { store } = renderRide(rideAfter(5), { live: true });
+    const { store } = renderRide(rideAfter(5), { live: true, inShell: true });
     expect(stageRegion().textContent).toBe("");
 
-    // The shell says "Ride to Atakule: Ahmet is on the way".
-    polled(store, rideAfter(15));
+    // The shell's poll and the page's both see the driver on the way.
+    const arriving = rideAfter(15);
+    activityPolled(store, [rideActivity(arriving.ride)]);
+    polled(store, arriving);
     await screen.findByRole("heading", {
       level: 2,
       name: "Ahmet is 3 min away",
     });
-    expect(stageRegion().textContent).toBe("");
+    expect(stageRegion().textContent).toBe(
+      "Ahmet is on the way to pick you up"
+    );
+    expect(shellRegion().textContent).toBe("");
 
-    // "Ride to Atakule: On the way to Atakule"
-    polled(store, rideAfter(200));
+    const onTrip = rideAfter(200);
+    activityPolled(store, [rideActivity(onTrip.ride)]);
+    polled(store, onTrip);
     await screen.findByRole("heading", {
       level: 2,
       name: /^On the way to Atakule/,
     });
-    expect(stageRegion().textContent).toBe("");
+    expect(stageRegion().textContent).toBe("Picked up. On the way to Atakule");
+    expect(shellRegion().textContent).toBe("");
 
-    // A finished ride leaves the live activity: only the page can say it.
+    // A finished ride leaves the live activity.
+    activityPolled(store, []);
     polled(store, rideAfter(700));
     await screen.findByRole("heading", { level: 2, name: "You’ve arrived" });
     expect(stageRegion().textContent).toBe("You’ve arrived at Atakule");
+    expect(shellRegion().textContent).toBe("");
   });
 
-  it("says each stage of a ride the shell doesn't announce", async () => {
+  it("is said by the shell on other pages", () => {
+    stubApi();
+    const { store } = renderWithStore(
+      <AppShell>
+        <h1>Services</h1>
+      </AppShell>,
+      {
+        path: "/services",
+        state: {
+          ...shellState,
+          activity: {
+            ...initialActivityState,
+            loaded: true,
+            live: [rideActivity(rideAfter(5).ride)],
+          },
+        },
+      }
+    );
+    activityPolled(store, [rideActivity(rideAfter(15).ride)]);
+    expect(shellRegion().textContent).toBe(
+      "Ride to Atakule: Ahmet is on the way"
+    );
+  });
+
+  it("says each stage of a ride outside the live activity", async () => {
     stubApi();
     const { store } = renderRide(rideAfter(5));
 

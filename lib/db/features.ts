@@ -1,5 +1,9 @@
 import { FeatureId, FeatureStatus, IFeatures } from "../../types/Superapp";
-import { featuresFrom, featureStatus } from "../superapp/features";
+import {
+  featuresFrom,
+  featureStatus,
+  requiredStatus,
+} from "../superapp/features";
 import { FeatureRepository, Repository } from "./types";
 
 export type SubRepositories = Pick<
@@ -29,13 +33,18 @@ export function featureRepositories(
   };
 }
 
-/** Feature statuses are fixed for a repository's lifetime, so they are computed once. */
+/**
+ * Feature statuses are fixed for a repository's lifetime, so they are
+ * computed once. A feature is only as available as the ones it requires
+ * (FEATURE_REQUIRES): DISABLED_FEATURES=wallet turns orders and rides off.
+ */
 export function resolveFeatures(
   subs: SubRepositories,
   disabled: ReadonlySet<FeatureId>
 ): { featureStatus(id: FeatureId): FeatureStatus; features: IFeatures } {
   const repositories = featureRepositories(subs);
-  const status = (id: FeatureId) =>
+  const own = (id: FeatureId) =>
     featureStatus(repositories[id], disabled.has(id));
+  const status = (id: FeatureId) => requiredStatus(id, own);
   return { featureStatus: status, features: featuresFrom(status) };
 }

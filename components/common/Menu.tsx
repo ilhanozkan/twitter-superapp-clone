@@ -34,6 +34,11 @@ interface MenuProps {
   strategy?: "absolute" | "fixed";
 }
 
+// Red on the grey tint the other items use falls under 4.5:1 in both
+// themes: a danger item gets a red tint with a stronger red on it.
+const DANGER_ITEM =
+  "text-danger hover:bg-danger/10 hover:text-danger-strong focus:bg-danger/10 focus:text-danger-strong";
+
 /**
  * A menu button following the WAI-ARIA menu pattern: Enter/Space/ArrowDown
  * open it, arrow keys move between items, Escape and outside clicks close it
@@ -166,8 +171,8 @@ export default function Menu({
                 close();
                 item.onSelect();
               }}
-              className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-bold outline-offset-[-2px] hover:bg-fg/5 focus:bg-fg/10 ${
-                item.danger ? "text-danger" : ""
+              className={`flex w-full items-center gap-3 px-4 py-3 text-left text-[15px] font-bold outline-offset-[-2px] ${
+                item.danger ? DANGER_ITEM : "hover:bg-fg/5 focus:bg-fg/10"
               }`}
             >
               {item.icon && (

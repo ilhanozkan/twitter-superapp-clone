@@ -25,6 +25,13 @@ import { FakeSanityClient } from "./fakeSanityClient";
 /** The time every subject starts at. */
 export const SUBJECT_NOW = new Date("2026-10-08T12:00:00.000Z");
 
+/**
+ * For suites that read a lot: the Sanity subject runs every read as GROQ
+ * (groq-js) over the whole seed, so a test of many reads takes seconds on a
+ * busy machine, past the default 5 s.
+ */
+export const SLOW = { timeout: 30_000 };
+
 export interface Subject {
   name: "memory" | "sanity";
   repo: Repository;

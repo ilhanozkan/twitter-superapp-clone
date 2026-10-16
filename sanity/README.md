@@ -43,21 +43,30 @@ The **Blocked tweets** list in the desk is a moderation view of tweets with `blo
 ### SuperApp types
 
 The SuperApp's documents are listed under the **SuperApp** divider in the
-desk, grouped as Money, Food, Rides, Stories and Channels. A group appears
-once its feature has shipped. Amounts are integer cents of demo credits
-(`450` is 4.50 credits), which have no cash value.
+desk, grouped as Money, Food, Rides, Stories and Channels. Amounts are
+integer cents of demo credits (`450` is 4.50 credits), which have no cash
+value.
 
-| Type              | What it is                                                                | In the Studio                                      |
-| ----------------- | ------------------------------------------------------------------------- | -------------------------------------------------- |
-| `wallet`          | One balance per user (`private.wallet-<username>`)                        | **Locked**: read-only, no actions. Desk: Wallets   |
-| `transfer`        | One movement of demo credits; only its refund is ever recorded on it      | **Locked**. Desk: Transfers                        |
-| `paymentRequest`  | A request for credits, paid or declined in the app                        | **Locked**. Desk: Payment requests                 |
-| `walletFreeze`    | Stops a wallet sending and receiving (refunds pass)                       | **Live-edited**, all actions. Desk: Frozen wallets |
-| `businessProfile` | Menu-side details of a business account (hours, fees, greeting, managers) | **Live-edited**. Desk: Businesses                  |
+| Type                 | What it is                                                                | In the Studio                                                    |
+| -------------------- | ------------------------------------------------------------------------- | ---------------------------------------------------------------- |
+| `wallet`             | One balance per user (`private.wallet-<username>`)                        | **Locked**: read-only, no actions. Desk: Wallets                 |
+| `transfer`           | One movement of demo credits; only its refund is ever recorded on it      | **Locked**. Desk: Transfers                                      |
+| `paymentRequest`     | A request for credits, paid or declined in the app                        | **Locked**. Desk: Payment requests                               |
+| `walletFreeze`       | Stops a wallet sending and receiving (refunds pass)                       | **Live-edited**, all actions. Desk: Frozen wallets               |
+| `businessProfile`    | Menu-side details of a business account (hours, fees, greeting, managers) | **Live-edited**. Desk: Businesses                                |
+| `product`            | A menu item: section, name, description, price, picture, availability     | **Live-edited**. Desk: Products                                  |
+| `order`              | An order, its lines and the schedule its stages are worked out from       | **Locked**. Desk: Orders                                         |
+| `driverProfile`      | A demo driver's car and plate, ride type, seats and whether they drive    | **Live-edited**. Desk: Drivers                                   |
+| `ride`               | A ride, its fare and the schedule its stages are worked out from          | **Locked**. Desk: Rides                                          |
+| `driverLock`         | Keeps a driver on one ride at a time                                      | **Locked**. Not in the desk                                      |
+| `story`              | A text or photo story, shown for 24 hours                                 | **Moderated** (`blocked`). Desk: Stories, Blocked stories        |
+| `storyView`          | One person's view of a story (only the story's author sees who watched)   | **Locked**. Not in the desk                                      |
+| `conversation`       | A direct conversation or a channel                                        | **Moderated** (a channel's name and description). Desk: Channels |
+| `conversationMember` | A person's place in a conversation: role and what they have read          | **Locked**. Not in the desk                                      |
+| `message`            | A chat message, or a payment or request in a conversation                 | **Moderated** (`removed`). Desk: Removed messages                |
 
-The feature PRs add `product`, `order`, `driverProfile`, `ride`,
-`driverLock`, `story`, `storyView`, `conversation`, `conversationMember` and
-`message` the same way (see [docs/SUPERAPP.md](../docs/SUPERAPP.md#studio)).
+See [docs/SUPERAPP.md](../docs/SUPERAPP.md#studio) for how each schema file
+declares these rules.
 
 What the three Studio rules mean:
 
@@ -70,11 +79,11 @@ What the three Studio rules mean:
   a moderator may only change the fields left open (such as a story's
   `blocked` or a message's `removed`) and publish them. No create,
   duplicate or delete.
-- **Live-edited** types (`walletFreeze`, `businessProfile`, and later
-  `product` and `driverProfile`) have no drafts: every change is published
-  as you type. The app patches some of their fields itself (a business's
-  "Accepting orders" switch, a product's availability), and a later publish
-  of an older draft would undo those changes.
+- **Live-edited** types (`walletFreeze`, `businessProfile`, `product` and
+  `driverProfile`) have no drafts: every change is published as you type.
+  The app patches some of their fields itself (a business's "Accepting
+  orders" switch, a product's availability), and a later publish of an
+  older draft would undo those changes.
 
 ### Moderation
 
@@ -93,10 +102,11 @@ What the three Studio rules mean:
 
 ## Privacy
 
-Wallets, transfers, payment requests, orders, rides, story views and
-conversations are **private documents**: their ids start with `private.`,
-and Sanity never returns documents under such a path to a request without a
-token, even from a public dataset. The app reads and writes them with
+Wallets, transfers, payment requests, orders, rides, driver locks, story
+views, conversations, their members and messages are **private
+documents**: their ids start with `private.`, and Sanity never returns
+documents under such a path to a request without a token, even from a
+public dataset. The app reads and writes them with
 `SANITY_API_TOKEN` through a `raw`-perspective client.
 
 - **Direct messages are stored unencrypted.** Anyone with access to the
@@ -130,8 +140,13 @@ cd sanity && npx sanity dataset import seed/demo.ndjson production --missing
 
 `--missing` only creates documents that do not exist yet. Use `--replace` to overwrite them.
 
+The app's `test/studioSchemas.test.ts` validates every exported document
+against these schemas (types, required fields, rules and references), so an
+import shows no validation errors in the Studio.
+
 The export includes private documents (`private.*` ids: wallets, transfers,
-payment requests). **Importing them needs a token**: the CLI uses your
+payment requests, orders, rides, story views and conversations).
+**Importing them needs a token**: the CLI uses your
 `npx sanity login` session, or set `SANITY_AUTH_TOKEN` to a token with write
 access. Import into a fresh dataset, or one the app hasn't written to: the
 seeded wallets only match the seeded transfers.

@@ -1,6 +1,7 @@
 import { APIRequestContext, expect, Page, test } from "@playwright/test";
 
 import {
+  coveredWhileTabbing,
   expectNoHorizontalScroll,
   expectNoSeriousViolations,
   features,
@@ -478,6 +479,69 @@ test.describe("layout", () => {
     await page.getByRole("link", { name: "Back to Messages" }).click();
     await expect(page).toHaveURL(/\/messages$/);
     await expect(tabs).toBeVisible();
+  });
+
+  test("focus stays clear of the composer at 390", async ({ page }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(conversationPath(SARAH));
+    const composer = page.getByRole("textbox", { name: "Message Sarah Chen" });
+    await expect(composer).toBeVisible();
+    // Through the header, the messages and their actions, to the composer.
+    await page.locator("main").focus();
+    expect(
+      await coveredWhileTabbing(page, {
+        presses: 60,
+        until: /^Message Sarah Chen$/,
+      })
+    ).toEqual([]);
+  });
+
+  test("a draft is in focus mode too, at 390 and 1280", async ({
+    page,
+    request,
+  }) => {
+    // Someone without a conversation yet; nothing here creates one.
+    const username = await firstWithout(request, [
+      "zeynep_xl",
+      "bowlandco",
+      "elif_rides",
+      "canwheels",
+      "lenaframes",
+      "foodie_ankara",
+      "nightowl_dev",
+    ]);
+    test.skip(!username, "Every candidate already has a conversation here");
+    const { fullname } = (
+      await (await request.get(`/api/users/${username}`)).json()
+    ).user;
+    const composer = page.getByRole("textbox", { name: `Message ${fullname}` });
+    const tabs = page.getByRole("navigation", { name: "Primary" });
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(`/messages?to=${username}`);
+    await expect(
+      page.getByRole("heading", { name: `Say hi to ${fullname} 👋` })
+    ).toBeVisible();
+    await expect(tabs).toHaveCount(0);
+    await expect(composer).toBeInViewport();
+    // The conversation fills the screen down to its bottom edge.
+    const box = await composer.boundingBox();
+    expect(844 - (box!.y + box!.height)).toBeLessThan(80);
+    await expectNoHorizontalScroll(page, "a draft at 390px");
+
+    // The inbox keeps its tab bar.
+    await page.getByRole("link", { name: "Back to Messages" }).click();
+    await expect(page).toHaveURL(/\/messages$/);
+    await expect(tabs).toBeVisible();
+
+    // Wide: the sidebar and the list beside the draft, as for /messages/[id].
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await page.goto(`/messages?to=${username}`);
+    await expect(tabs).toBeVisible();
+    await expect(
+      page.getByRole("region", { name: "Conversations" })
+    ).toBeVisible();
+    await expect(composer).toBeInViewport();
   });
 });
 

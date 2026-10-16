@@ -1,5 +1,4 @@
-import { useEffect, useLayoutEffect, useState } from "react";
-import { createPortal } from "react-dom";
+import { Ref, useState } from "react";
 import { HiCheck, HiOutlineShoppingBag } from "react-icons/hi2";
 
 import { errorMessage } from "../../lib/client/api";
@@ -8,9 +7,8 @@ import { formatCredits } from "../../lib/superapp/money";
 import { IProduct } from "../../types/Shop";
 import { TweetAttachmentInput } from "../../types/Tweet";
 import { Button, ButtonLink } from "../common/Button";
+import Dialog from "../common/Dialog";
 import Spinner from "../common/Spinner";
-import AttachmentPreview from "./AttachmentPreview";
-import NestedDialog from "./NestedDialog";
 import { FOOD_PATH } from "./paths";
 import ProductThumb from "./ProductThumb";
 
@@ -18,6 +16,8 @@ export interface ComposerProductPickerProps {
   /** The product attached to the Tweet being written, if any. */
   attachment: TweetAttachmentInput | null;
   onChange: (attachment: TweetAttachmentInput | null) => void;
+  /** The "Attach a product" button, for the composer to return focus to. */
+  buttonRef?: Ref<HTMLButtonElement>;
 }
 
 type List =
@@ -25,40 +25,20 @@ type List =
   | { state: "loaded"; items: IProduct[] }
   | { state: "failed"; message: string };
 
-// The server has no layout: layout effects only run in the browser.
-const useIsomorphicLayoutEffect =
-  typeof window === "undefined" ? useEffect : useLayoutEffect;
-
 /**
  * Slot (§12.3): "Attach a product" in the composer's toolbar. It suggests
  * the viewer's own products (businesses they manage; the orders feature
  * adds what they ordered), though the server lets any Tweet carry any
- * available product, like a link. The attached product previews above the
- * toolbar with a Remove button.
+ * available product, like a link. The composer previews the attached one
+ * above its toolbar (ComposerProductPreview).
  */
 export default function ComposerProductPicker({
   attachment,
   onChange,
+  buttonRef,
 }: ComposerProductPickerProps) {
   const [open, setOpen] = useState(false);
   const [list, setList] = useState<List>({ state: "loading" });
-  const [button, setButton] = useState<HTMLButtonElement | null>(null);
-  // The composer gives this slot a place in its toolbar only; a preview
-  // belongs above the toolbar, where an image field goes. It is rendered
-  // into this element, placed right before the toolbar row.
-  const [slot] = useState(() =>
-    typeof document === "undefined" ? null : document.createElement("div")
-  );
-  const toolbar = button?.closest("form")
-    ? (button.parentElement?.parentElement ?? null)
-    : null;
-  const attached = attachment !== null;
-
-  useIsomorphicLayoutEffect(() => {
-    if (!slot || !toolbar?.parentElement || !attached) return;
-    toolbar.before(slot);
-    return () => slot.remove();
-  }, [slot, toolbar, attached]);
 
   const load = () => {
     setList({ state: "loading" });
@@ -73,22 +53,10 @@ export default function ComposerProductPicker({
     setOpen(false);
   };
 
-  const preview =
-    attachment && button ? (
-      <AttachmentPreview
-        productId={attachment.productId}
-        onRemove={() => {
-          onChange(null);
-          // The preview is gone: keep focus in the toolbar.
-          button.focus();
-        }}
-      />
-    ) : null;
-
   return (
     <>
       <button
-        ref={setButton}
+        ref={buttonRef}
         type="button"
         aria-label="Attach a product"
         aria-haspopup="dialog"
@@ -100,12 +68,8 @@ export default function ComposerProductPicker({
       >
         <HiOutlineShoppingBag aria-hidden="true" />
       </button>
-      {preview &&
-        (slot && toolbar?.parentElement
-          ? createPortal(preview, slot)
-          : preview)}
 
-      <NestedDialog
+      <Dialog
         open={open}
         onClose={() => setOpen(false)}
         title="Attach a product"
@@ -172,7 +136,7 @@ export default function ComposerProductPicker({
             })}
           </ul>
         )}
-      </NestedDialog>
+      </Dialog>
     </>
   );
 }

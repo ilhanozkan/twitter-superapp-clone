@@ -25,7 +25,7 @@ export default createHandler(
 
       const [{ viewer }, message] = await Promise.all([
         findChannel(handle, actor),
-        channels.findMessage?.(handle, messageId) ?? null,
+        channels.findMessage(handle, messageId),
       ]);
       if (!message) throw notFound("Message not found");
       const by = removalBy(

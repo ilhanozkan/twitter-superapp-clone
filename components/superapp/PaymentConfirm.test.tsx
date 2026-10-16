@@ -71,6 +71,55 @@ describe("PaymentConfirm", () => {
     expect(onConfirm).not.toHaveBeenCalled();
   });
 
+  it("reviews a request: who is asked, without a balance to check", async () => {
+    // Asking for more than the viewer has is fine: nothing leaves the wallet.
+    const { onConfirm, onDone } = renderConfirm({
+      kind: "request",
+      action: "Request",
+      available: 800,
+      explanation: "Sarah Chen gets a notification and can pay or decline.",
+    });
+    const confirm = screen.getByRole("button", {
+      name: "Request 10.00 credits from Sarah Chen",
+    });
+    expect(document.activeElement).toBe(confirm);
+    expect(screen.getByText("@sarahcodes")).toBeTruthy();
+    expect(screen.getByText("Coffee ☕")).toBeTruthy();
+    expect(
+      screen.getByText("Sarah Chen gets a notification and can pay or decline.")
+    ).toBeTruthy();
+    expect(screen.queryByText("Available")).toBeNull();
+    expect(screen.queryByText("Balance after")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(confirm.getAttribute("aria-disabled")).toBe("false");
+
+    await userEvent.setup().click(confirm);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows a refused request's reason as it is", async () => {
+    renderConfirm({
+      kind: "request",
+      action: "Request",
+      onConfirm: async () => {
+        throw new ApiRequestError(
+          429,
+          "rate_limited",
+          "You already have 10 pending requests"
+        );
+      },
+    });
+    await userEvent.setup().click(
+      screen.getByRole("button", {
+        name: "Request 10.00 credits from Sarah Chen",
+      })
+    );
+    expect((await screen.findByRole("alert")).textContent).toBe(
+      "You already have 10 pending requests"
+    );
+  });
+
   it("uses the wallet in the store when no amount available is given", () => {
     renderWithStore(
       <PaymentConfirm

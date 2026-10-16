@@ -16,22 +16,53 @@ an API page under [`api/`](api/) and a feature page under
 
 ## Features
 
-| Feature              | What you can do                                                           | Ships in                         | Docs                                                     |
-| -------------------- | ------------------------------------------------------------------------- | -------------------------------- | -------------------------------------------------------- |
-| Wallet and tips      | Balance, activity, receipts, payment requests; send, request, add, tip    | foundation (API) + `wallet` (UI) | [API](api/wallet.md) · [feature](features/wallet.md)     |
-| Messages             | Direct conversations with payments, requests and shared Tweets            | `messages` PR                    | [API](api/messages.md) · [feature](features/messages.md) |
-| Channels             | Public group conversations with roles and moderation                      | `channels` PR                    | [API](api/channels.md) · [feature](features/channels.md) |
-| Businesses and menus | Business profiles (foundation), menus, product cards on Tweets, Food hub  | foundation (data) + `business`   | [API](api/shop.md) · [feature](features/shop.md)         |
-| Orders               | Order from a Tweet or a menu, track it, cancel and refund; Business board | `orders` PR                      | [API](api/orders.md) · [feature](features/orders.md)     |
-| Rides                | Quotes, booking, a schematic map, trip progress, cancel and refund, tips  | `rides` PR                       | [API](api/rides.md) · [feature](features/rides.md)       |
-| Stories              | A tray on Home, an accessible viewer, a composer, viewers, replies in DMs | `stories` PR                     | [API](api/stories.md) · [feature](features/stories.md)   |
-| Live broadcasts      | Not built: it needs a video streaming service                             | —                                | [Live](#live)                                            |
+| Feature              | What you can do                                                                    | Switch     | Docs                                                     |
+| -------------------- | ---------------------------------------------------------------------------------- | ---------- | -------------------------------------------------------- |
+| Wallet and tips      | Balance, activity, receipts, payment requests; send, request, add, tip             | `wallet`   | [API](api/wallet.md) · [feature](features/wallet.md)     |
+| Messages             | Direct conversations with payments, requests and shared Tweets                     | `messages` | [API](api/messages.md) · [feature](features/messages.md) |
+| Channels             | Public group conversations with roles and moderation                               | `channels` | [API](api/channels.md) · [feature](features/channels.md) |
+| Businesses and menus | Business profiles, menus, availability switches, product cards on Tweets, Food hub | `shop`     | [API](api/shop.md) · [feature](features/shop.md)         |
+| Orders               | Order from a Tweet or a menu, track it, cancel and refund; the Business board      | `orders`   | [API](api/orders.md) · [feature](features/orders.md)     |
+| Rides                | Quotes, booking, a schematic map, trip progress, cancel and refund, tips           | `rides`    | [API](api/rides.md) · [feature](features/rides.md)       |
+| Stories              | A tray on Home, an accessible viewer, a composer, viewers, replies in DMs          | `stories`  | [API](api/stories.md) · [feature](features/stories.md)   |
+| Live broadcasts      | Not built: it needs a video streaming service                                      | —          | [Live](#live)                                            |
 
-A feature whose PR has not shipped is **off**: its navigation, tiles and
-buttons are hidden, and its pages and API answer 404. Nothing half-built is
-ever shown. Messages is the one exception, because the app already had it:
-its navigation item and today's placeholder `/messages` page stay whatever
-its status, and only the unread badge and the messaging UI depend on it.
+Services (`/services`) is the hub: the wallet card, "Happening now" (the
+orders and rides in progress, from `GET /api/activity`), a tile for each
+feature that is on, businesses to order from, and the Live note.
+
+### Feature switches
+
+Each feature is **on**, **off** or **unconfigured**, and the switch in the
+table names it:
+
+- **Off:** listed in `DISABLED_FEATURES`, a kill switch of feature names
+  separated by commas or spaces. Its navigation, tiles and buttons are
+  hidden, its pages answer 404 and every one of its API routes answers 404
+  "This feature is turned off". An unknown name is a configuration error,
+  so a typo can't leave a feature on: pages and API calls fail until it is
+  fixed.
+- **Unconfigured:** on Sanity without `SANITY_API_TOKEN`, the private
+  features (wallet, messages, channels, orders, rides) can't read their
+  documents. They are hidden like off features, and their API answers 503
+  "Wallet needs SANITY_API_TOKEN on this deployment". Shop and stories stay
+  readable.
+- **On:** everything else. `GET /api/me` reports which features are on.
+
+Two features can't work without others, so they follow those switches too
+(`FEATURE_REQUIRES` in `lib/superapp/features.ts`): orders sells the shop's
+products for wallet credits, so it is off while the shop or the wallet is,
+and rides are paid and tipped from the wallet, so they are off while the
+wallet is. Turning the wallet off therefore stops every movement of
+credits, and turning the shop off leaves no order, board or "Order again"
+leading to a missing menu. `GET /api/me` reports the result.
+
+Other features that use another one hide only what they need from it:
+without the wallet there are no Tweet tips or chat payments, without orders
+the menus have no Add buttons, without stories Home has no tray and a story
+reply sent to a chat arrives as plain text. Messages keeps its
+navigation item, which the app had before the SuperApp: while it is off,
+`/messages` says so, and the unread badge and conversations are gone.
 
 ## Architecture
 
@@ -56,7 +87,8 @@ interface lives in `lib/db/<feature>/types.ts`.
 
 Every feature's sub-repository is a `FeatureRepository`:
 
-- `implemented`: the feature's PR has shipped. Stubs say `false`.
+- `implemented`: `false` only for the stubs in `lib/db/stubs.ts`, which a
+  new feature starts from ([Adding a feature](#adding-a-feature)).
 - `configured`: the data source can serve it. On Sanity the private
   features (wallet, messages, channels, orders, rides) need
   `SANITY_API_TOKEN`; shop and stories are public and always readable.
@@ -64,8 +96,9 @@ Every feature's sub-repository is a `FeatureRepository`:
   shared notifications timeline and the app shell merge.
 
 `repo.featureStatus(id)` combines these with `DISABLED_FEATURES` into
-**off** (not built, or disabled), **unconfigured** (built, but Sanity has no
-token) or **on**. `repo.features` and `GET /api/me` report which are on.
+**off** (a stub, or disabled), **unconfigured** (built, but Sanity has no
+token) or **on** (see [Feature switches](#feature-switches)).
+`repo.features` and `GET /api/me` report which are on.
 
 ### Pure rules, two stores
 
@@ -114,10 +147,14 @@ always comes from `lib/auth.ts`.
   page.
 - A page sets `Page.shell` (`types/PageShell.ts`) for the wide layout (990px
   main, no right column), focus mode (no tab bar on phones) or no compose
-  button.
+  button. `getServerSideProps` can adjust it for one request by returning
+  `shell` in its props (a draft at `/messages?to=` is in focus mode; the
+  inbox on the same page is not).
 - `AppShell` polls `GET /api/activity` every 30 seconds while the page is
   visible and online, and early at the next known change (`nextChangeAt`).
-  Badges and the "Happening now" card come from it.
+  Badges and the "Happening now" card come from it, and a polite region
+  reads out live items' status changes, except on the item's own page,
+  which says them itself.
 
 ### Client
 
@@ -147,11 +184,13 @@ created, and every read derives the current stage from them and the server's
 clock (`lib/superapp/timeline.ts`). Time-derived responses include
 `serverNow`; clients poll.
 
-`SUPERAPP_TIME_SCALE` (1 to 600, default 1) speeds up new orders and rides
-for demos and tests. It is applied when a record is created, so old records
-never change speed, and windows people act in never shrink below real-time
-floors: at least 15 seconds to cancel an order and 30 seconds to cancel a
-ride for free. Seeds always use scale 1.
+`SUPERAPP_TIME_SCALE` (an integer from 1 to 600, default 1; anything else
+is a configuration error) speeds up new orders and rides for demos and
+tests. It is applied when a record is created, so old records never change
+speed, and windows people act in never shrink below real-time floors: at
+least 15 seconds to cancel an order and 30 seconds to cancel a ride for
+free. Stories always last 24 real hours, payment requests 7 days, and seeds
+always use scale 1.
 
 ### Seed worlds
 
@@ -166,6 +205,12 @@ ride for free. Seeds always use scale 1.
   seeded world obeys the same rules as the app.
 
 `npm run seed:sanity` exports the world for `sanity dataset import`.
+`lib/db/world.test.ts` checks that the parts fit together: the demo user
+ends at 308.60 credits (325.00 from the wallet seed, less the Kızılay Kahve
+order and the ride to Atakule), every cross-reference between features
+resolves, ids are unique, and a Sanity store built from the export serves
+the same world as memory. `test/studioSchemas.test.ts` validates every
+exported document against the Studio's schemas.
 
 ## Ledger and holds
 
@@ -295,6 +340,9 @@ All in `lib/superapp/limits.ts` (and mirrored in `sanity/env.ts`):
 | Pending outgoing requests | 10; a request expires after 7 days                          |
 | Order                     | at most 200.00 credits, 10 lines, 20 of an item; 5 active   |
 | Ride                      | fare at most 200.00 credits; 1 active ride                  |
+| Chat message              | 1,000 characters                                            |
+| Story                     | 10 live per author; text 200 characters                     |
+| Channel                   | 3 created per person                                        |
 | Memory ledger             | 50,000 transfers                                            |
 
 ## Privacy
@@ -355,12 +403,13 @@ privacy notes.
 
 ## Extension points
 
-The foundation edits every shared file once and points it at a file each
-feature owns. Until a feature ships, its file is a stub: sub-repositories
-report `implemented: false`, read as empty and refuse writes with 501;
-components render nothing; hooks return `[]`; seeds return nothing.
+Each shared file calls or renders a file that one feature owns, so a
+feature's work stays in its own files. A new feature starts from stubs:
+sub-repositories that report `implemented: false`, read as empty and refuse
+writes with 501 `not_implemented` (`lib/db/stubs.ts`), slot components that
+render nothing, hooks that return `[]` and seeds that return nothing.
 
-| Shared file (foundation only)                                                                    | Calls or renders                                                                                                                    | Feature-owned file                                                                                                                                                                      |
+| Shared file                                                                                      | Calls or renders                                                                                                                    | Feature-owned file                                                                                                                                                                      |
 | ------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `lib/db/types.ts`                                                                                | the sub-repository interfaces                                                                                                       | `lib/db/<feature>/types.ts`                                                                                                                                                             |
 | `lib/db/memory.ts`                                                                               | `create<Feature>MemoryState`, `createMemory<Feature>`                                                                               | `lib/db/memory/{shop,orders,rides,stories,messages,channels}.ts`                                                                                                                        |
@@ -372,7 +421,7 @@ components render nothing; hooks return `[]`; seeds return nothing.
 | `components/tweet/TweetActions.tsx`                                                              | `<TipAction>`                                                                                                                       | `components/wallet/TipAction.tsx`                                                                                                                                                       |
 | `components/tweet/TweetMenu.tsx`                                                                 | `useWalletTweetMenuItems(tweet)`, then `useMessageTweetMenuItems(tweet)`, always in this order                                      | `components/wallet/walletTweetMenuItems.ts`, `components/messages/messageTweetMenuItems.ts`                                                                                             |
 | `components/tweet/{TweetCard,TweetDetail}.tsx`                                                   | `<ProductAttachment tweet variant>`                                                                                                 | `components/shop/ProductAttachment.tsx`                                                                                                                                                 |
-| `components/tweet/Composer.tsx`                                                                  | attachment state, `<ComposerProductPicker>`                                                                                         | `components/shop/ComposerProductPicker.tsx`                                                                                                                                             |
+| `components/tweet/Composer.tsx`                                                                  | attachment state, `<ComposerProductPicker>` in the toolbar, `<ComposerProductPreview>` above it                                     | `components/shop/ComposerProductPicker.tsx`, `components/shop/ComposerProductPreview.tsx`                                                                                               |
 | `components/layout/AppShell.tsx`                                                                 | `WalletDialogs`, `MessageDialogs`, `OrderDialogs`, `StoryDialogs` (loaded with `next/dynamic`)                                      | `components/{wallet,messages,orders,stories}/*Dialogs.tsx`                                                                                                                              |
 | `pages/wallet/index.tsx`                                                                         | `<WalletActions>`, `<WalletRequests>`                                                                                               | `components/wallet/{WalletActions,WalletRequests}.tsx`                                                                                                                                  |
 | `pages/services.tsx`                                                                             | `<BusinessCarousel>`                                                                                                                | `components/shop/BusinessCarousel.tsx`                                                                                                                                                  |
@@ -382,16 +431,17 @@ components render nothing; hooks return `[]`; seeds return nothing.
 | `docs/API.md`                                                                                    | links                                                                                                                               | `docs/api/<feature>.md`, `docs/features/<feature>.md`                                                                                                                                   |
 | `playwright.config.ts`                                                                           | projects by file name                                                                                                               | `e2e/<feature>*.spec.ts`                                                                                                                                                                |
 
-**The contract is frozen.** The types and signatures in the shared files are
-what every feature builds on in parallel. A feature may add exports to its
-own files, but a change to a shared signature goes in as a foundation fix-up
-that every feature branch then rebases onto.
+**Shared contracts change on purpose.** Every feature builds on the types
+and signatures in the shared files. A feature adds exports to its own files;
+a change to a shared signature is a change of its own, with every
+implementation and caller updated together.
 
 ## Adding a feature
 
-The steps for a planned feature (its id, stubs and slots already exist). A
-new feature first needs a foundation change: a `FeatureId`, its
-sub-repository on `Repository`, stub files and any slots it needs.
+A new feature (Live, say) first needs its shared parts: a `FeatureId`, its
+sub-repository on `Repository` (starting from a stub in `lib/db/stubs.ts`),
+stub files for its memory and Sanity implementations and seed, and any
+slots it needs. Then:
 
 1. **Types.** Fill in `types/<Feature>.ts` and `lib/db/<feature>/types.ts`.
    Add exports; don't change the declared ones.
@@ -438,21 +488,24 @@ sub-repository on `Repository`, stub files and any slots it needs.
     balances; top up first with the `topUp` helper; create your own records.
     A test that needs another feature checks `features(request)` and skips
     while it is off.
-13. **Before the PR:** lint, format, typecheck, `npm test`, `npm run build`,
-    all three Playwright projects, the Studio checks and `npm audit`, plus
-    the manual keyboard and screen-reader checklist in the pull request
-    template.
+13. **Before a pull request:** lint, format, typecheck, `npm test`,
+    `npm run build`, all three Playwright projects, the Studio checks and
+    `npm audit`, plus the manual keyboard and screen-reader checklist in the
+    pull request template.
 
 ## Testing
 
-| Layer        | Where                       | Notes                                                                                                                                                               |
-| ------------ | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Rules        | `lib/superapp/*.test.ts`    | Pure functions, fixed clocks                                                                                                                                        |
-| Repositories | `lib/db/*.contract.test.ts` | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                 |
-| Fake Sanity  | `test/fakeSanityClient.ts`  | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous` |
-| Routes       | `test/routes/*.test.ts`     | `freshApi({ world })` and `loadRoute(path)`                                                                                                                         |
-| Components   | `components/**/*.test.tsx`  | `renderWithStore` (`test/render.tsx`)                                                                                                                               |
-| End-to-end   | `e2e/`                      | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px                                                                    |
+| Layer        | Where                        | Notes                                                                                                                                                                                                                                                                                                           |
+| ------------ | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Rules        | `lib/superapp/*.test.ts`     | Pure functions, fixed clocks                                                                                                                                                                                                                                                                                    |
+| Repositories | `lib/db/*.contract.test.ts`  | `subjects()` runs every case on memory and on Sanity through a fake client that executes the real GROQ with groq-js                                                                                                                                                                                             |
+| Fake Sanity  | `test/fakeSanityClient.ts`   | Transactions, `ifRevisionID`, ClientError-shaped 409/404s, and hooks: `beforeMutate`, `fetchDelay`, `mutationLog`, `failNextMutate`, `injectConflicts`, `anonymous`                                                                                                                                             |
+| Routes       | `test/routes/*.test.ts`      | `freshApi({ world })` and `loadRoute(path)`                                                                                                                                                                                                                                                                     |
+| Components   | `components/**/*.test.tsx`   | `renderWithStore` (`test/render.tsx`)                                                                                                                                                                                                                                                                           |
+| Whole world  | `lib/db/world.test.ts`       | The composed `superapp` world: balances, ledger invariants, cross-references, unique ids, private ids in the export, and the same reads from both stores                                                                                                                                                        |
+| Studio       | `test/studioSchemas.test.ts` | The full `seed:sanity` export against `sanity/schemaTypes`, loaded through `test/sanityStub.ts` (the app doesn't install `sanity`)                                                                                                                                                                              |
+| Docs         | `test/docsLinks.test.ts`     | Every relative link, image and `#anchor` in the READMEs and `docs/` resolves (GitHub heading slugs), and so do the app's links into the docs                                                                                                                                                                    |
+| End-to-end   | `e2e/`                       | Against a production build, with axe in both themes and no sideways scrolling from 360 to 1440px; `e2e/journey.spec.ts` walks one afternoon across every feature; `e2e/responsive.spec.ts` loads every SuperApp route at 360 and 1280px and checks keyboard focus in sideways lists and above floating controls |
 
 Playwright runs three projects, each with its own server on the same build
 and the in-memory store:
@@ -466,6 +519,12 @@ and the in-memory store:
 The servers keep state between specs, so specs assert deltas and each seeded
 record that a test uses up (a payment request to pay or decline, a message
 to remove) belongs to exactly one spec.
+
+CI splits the suite into three shards by spec file
+(`npx playwright test --shard=1/3` and so on), because one runner takes over
+10 minutes. Each shard builds once and starts its own three servers, so a
+spec file must pass whether or not the files before it ran: on a fresh
+server, after the whole suite, or after a reused server's earlier runs.
 
 ## Live
 

@@ -24,7 +24,7 @@ import LocalTime from "../superapp/LocalTime";
 import Money from "../superapp/Money";
 import PaymentConfirm from "../superapp/PaymentConfirm";
 import PlaceSelect from "../superapp/PlaceSelect";
-import { orderBlocker } from "./blockers";
+import { orderBlocker, unavailableProducts } from "./blockers";
 import { useDeliverTo, writeDeliverTo } from "./deliverTo";
 import { orderNumber, orderPath } from "./format";
 import PriceSummary from "./PriceSummary";
@@ -213,8 +213,16 @@ export default function QuickOrderSheet({
       );
     } catch (reason) {
       // Prices or availability moved on: show them as they are now (the
-      // review stays open with the server's message).
-      if (
+      // review stays open with the server's message). A sold-out item is
+      // named in the error; anything else (new prices, the business closed
+      // meanwhile) is read again.
+      if (unavailableProducts(reason).includes(productId)) {
+        setLoad((current) =>
+          current.state === "loaded"
+            ? { ...current, product: { ...current.product, available: false } }
+            : current
+        );
+      } else if (
         reason instanceof ApiRequestError &&
         (reason.code === "price_changed" || reason.code === "unavailable")
       ) {

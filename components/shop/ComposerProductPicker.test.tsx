@@ -10,8 +10,8 @@ import ComposeDialog from "../tweet/ComposeDialog";
 import Composer from "../tweet/Composer";
 import { card, product, stubFetch, tweet } from "./testing";
 
-// The picker inside the real composer, whose toolbar is its only slot: the
-// preview must land above the toolbar, and the posted Tweet must carry it.
+// The picker and the preview inside the real composer: the preview lands
+// above the toolbar, and the posted Tweet carries the product.
 
 const stickers = product({
   id: "seed-p-sa-stickers",

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import {
   expectLedgerInvariants,
   expectStoresAgree,
+  SLOW,
   Subject,
   subjects,
 } from "../../test/repositorySubjects";
@@ -104,7 +105,7 @@ describe.each(subjects())("%s repository composition", (_name, create) => {
     });
   });
 
-  it("keeps the core notifications on the full world", async () => {
+  it("keeps the core notifications on the full world", SLOW, async () => {
     const notifications = await repo.listNotifications(DEMO_USERNAME);
     expect(notifications.map((n) => n.type)).toEqual(
       expect.arrayContaining(["like", "retweet", "reply"])
@@ -142,7 +143,7 @@ describe.each(subjects({ disabled: ["shop"] }))(
   }
 );
 
-describe("stores agree on the superapp world", () => {
+describe("stores agree on the superapp world", SLOW, () => {
   it("for Tweets, users, search and notifications", async () => {
     await expectStoresAgree((repo: Repository) =>
       Promise.all([

@@ -19,6 +19,7 @@ import { TweetAttachmentInput } from "../../types/Tweet";
 import Avatar from "../common/Avatar";
 import { Button } from "../common/Button";
 import ComposerProductPicker from "../shop/ComposerProductPicker";
+import ComposerProductPreview from "../shop/ComposerProductPreview";
 import { statusPath } from "./paths";
 
 interface ComposerProps {
@@ -114,6 +115,7 @@ export default function Composer({
   const [error, setError] = useState<string | null>(null);
   const fieldId = useId();
   const textarea = useRef<HTMLTextAreaElement>(null);
+  const attachButton = useRef<HTMLButtonElement>(null);
 
   // Grow with the text instead of scrolling inside a small box. Empty, the
   // rows attribute sizes it; a closed dialog (display: none) has nothing to
@@ -252,6 +254,17 @@ export default function Composer({
           </p>
         )}
 
+        {!replyTo && shopOn && attachment && (
+          <ComposerProductPreview
+            attachment={attachment}
+            onRemove={() => {
+              setAttachment(null);
+              // The preview is gone: keep focus in the toolbar.
+              attachButton.current?.focus();
+            }}
+          />
+        )}
+
         <div className="flex items-center justify-between border-t border-line pt-3">
           <div className="flex items-center">
             {!replyTo && (
@@ -271,6 +284,7 @@ export default function Composer({
               <ComposerProductPicker
                 attachment={attachment}
                 onChange={setAttachment}
+                buttonRef={attachButton}
               />
             )}
           </div>

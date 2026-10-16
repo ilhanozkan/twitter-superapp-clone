@@ -10,11 +10,16 @@ import { IFeatures } from "../../types/Superapp";
 import { TweetAttachmentInput } from "../../types/Tweet";
 import ComposeDialog from "./ComposeDialog";
 
-// A stand-in for the shop lane's slot, to see what the dialog hands it (the
-// real picker may fetch the attached product).
+// Stand-ins for the shop lane's slots, to see what the dialog hands them
+// (the real preview fetches the attached product).
 vi.mock("../shop/ComposerProductPicker", () => ({
   default: ({ attachment }: { attachment: TweetAttachmentInput | null }) => (
     <p>Attached {attachment?.productId ?? "nothing"}</p>
+  ),
+}));
+vi.mock("../shop/ComposerProductPreview", () => ({
+  default: ({ attachment }: { attachment: TweetAttachmentInput }) => (
+    <p>Previewing {attachment.productId}</p>
   ),
 }));
 
@@ -82,6 +87,7 @@ describe("ComposeDialog prefill", () => {
       "Just had the Pistachio latte ☕"
     );
     expect(screen.getByText("Attached seed-p-kk-latte")).toBeTruthy();
+    expect(screen.getByText("Previewing seed-p-kk-latte")).toBeTruthy();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Tweet" }));
@@ -98,6 +104,7 @@ describe("ComposeDialog prefill", () => {
     const body = postedBody();
     renderDialog(featuresWith());
     expect(screen.queryByText(/^Attached/)).toBeNull();
+    expect(screen.queryByText(/^Previewing/)).toBeNull();
     await userEvent
       .setup()
       .click(screen.getByRole("button", { name: "Tweet" }));

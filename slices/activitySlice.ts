@@ -8,6 +8,13 @@ import { startAppListening } from "./listeners";
 /** When Notifications was last opened on this device (per device, documented). */
 export const NOTIFICATIONS_SEEN_KEY = "notificationsSeenAt";
 
+/** A live item whose status changed in the last poll, and where it lives. */
+export interface LiveActivityChange {
+  href: string;
+  /** "Order from Kızılay Kahve: On the way" */
+  text: string;
+}
+
 export interface ActivityState {
   unreadConversations: number;
   /** Notifications newer than this device's last visit to Notifications. */
@@ -23,10 +30,11 @@ export interface ActivityState {
   /** Set when Notifications is opened here: counts from before it are stale. */
   seenAt: string | null;
   /**
-   * What changed in the last poll ("Order from Kızılay Kahve: On the way"),
-   * for a polite live region. Only status changes are announced.
+   * Status changes of live items in the last poll, for the shell's polite
+   * live region, which skips the one whose own page is open (that page says
+   * it). Only status changes are announced.
    */
-  announcement: string;
+  changes: LiveActivityChange[];
 }
 
 export const initialActivityState: ActivityState = {
@@ -36,7 +44,7 @@ export const initialActivityState: ActivityState = {
   serverNow: null,
   loaded: false,
   seenAt: null,
-  announcement: "",
+  changes: [],
 };
 
 export function readNotificationsSeenAt(): string | null {
@@ -76,13 +84,15 @@ const activitySlice = createSlice({
       const before = new Map(
         state.live.map((item) => [`${item.kind}:${item.id}`, item.status])
       );
-      state.announcement = activity.live
+      state.changes = activity.live
         .filter((item) => {
           const status = before.get(`${item.kind}:${item.id}`);
           return status !== undefined && status !== item.status;
         })
-        .map((item) => `${item.title}: ${item.status}`)
-        .join(". ");
+        .map((item) => ({
+          href: item.href,
+          text: `${item.title}: ${item.status}`,
+        }));
       state.unreadConversations = activity.unreadConversations;
       state.live = activity.live;
       state.serverNow = activity.serverNow;

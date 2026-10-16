@@ -2,6 +2,7 @@ import Link from "next/link";
 
 import { IBusiness } from "../../types/Business";
 import Avatar from "../common/Avatar";
+import { revealFocusedItem } from "../common/revealFocusedItem";
 import { BusinessTab, businessPath } from "./paths";
 
 /**
@@ -23,7 +24,10 @@ export default function BusinessSwitcher({
 
   return (
     <nav aria-label="Your businesses" className="border-b border-line">
-      <ul className="flex gap-2 overflow-x-auto px-4 py-3">
+      <ul
+        onFocus={revealFocusedItem}
+        className="flex gap-2 overflow-x-auto px-4 py-3"
+      >
         {businesses.map((business) => {
           const active =
             business.username.toLowerCase() === current.toLowerCase();

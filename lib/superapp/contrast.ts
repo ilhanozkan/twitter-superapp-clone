@@ -37,3 +37,16 @@ export function contrastRatio(a: Rgb | string, b: Rgb | string): number {
   const lb = relativeLuminance(typeof b === "string" ? parseColor(b) : b);
   return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05);
 }
+
+/** `color` at `alpha` over `backdrop`, as a translucent background paints. */
+export function overlay(
+  color: Rgb | string,
+  backdrop: Rgb | string,
+  alpha: number
+): Rgb {
+  const top = typeof color === "string" ? parseColor(color) : color;
+  const bottom = typeof backdrop === "string" ? parseColor(backdrop) : backdrop;
+  return top.map((value, index) =>
+    Math.round(value * alpha + bottom[index] * (1 - alpha))
+  ) as Rgb;
+}

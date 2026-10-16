@@ -362,8 +362,9 @@ businesses you run.
 
 ## Turned off
 
-With `orders` in `DISABLED_FEATURES` every endpoint here answers 404 "This
-feature is turned off", `GET /api/me` reports `"orders": false`, and order
+With `orders` in `DISABLED_FEATURES`, or `shop` or `wallet` (an order
+sells the shop's products for wallet credits), every endpoint here answers
+404 "This feature is turned off", `GET /api/me` reports `"orders": false`, and order
 notifications and live activity disappear. On Sanity orders are private
 documents: without `SANITY_API_TOKEN` the endpoints answer 503 "Orders
 needs SANITY_API_TOKEN on this deployment".

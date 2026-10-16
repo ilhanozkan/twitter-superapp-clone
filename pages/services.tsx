@@ -2,6 +2,7 @@ import Head from "next/head";
 import { IconType } from "react-icons";
 import {
   HiOutlineChatBubbleLeftRight,
+  HiOutlineReceiptPercent,
   HiOutlineShoppingBag,
   HiOutlineSparkles,
   HiOutlineUserGroup,
@@ -37,6 +38,13 @@ const TILES: Tile[] = [
     title: "Food",
     description: "Order from places in Ankara",
     icon: HiOutlineShoppingBag,
+  },
+  {
+    feature: "orders",
+    href: "/orders",
+    title: "Orders",
+    description: "Track an order or order again",
+    icon: HiOutlineReceiptPercent,
   },
   {
     feature: "rides",

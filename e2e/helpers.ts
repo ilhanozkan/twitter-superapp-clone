@@ -70,11 +70,17 @@ async function settleTransitions(page: Page) {
 /** The widths every page must fit without scrolling sideways. */
 export const WIDTHS = [360, 390, 768, 1024, 1280, 1440];
 
-export async function expectNoHorizontalScroll(page: Page, label: string) {
-  const overflow = await page.evaluate(
-    () => document.documentElement.scrollWidth - window.innerWidth
+/** How far the page scrolls sideways, in CSS pixels (0 or less when it fits). */
+export function horizontalOverflow(page: Page): Promise<number> {
+  return page.evaluate(
+    () =>
+      (document.scrollingElement ?? document.documentElement).scrollWidth -
+      window.innerWidth
   );
-  expect(overflow, label).toBeLessThanOrEqual(0);
+}
+
+export async function expectNoHorizontalScroll(page: Page, label: string) {
+  expect(await horizontalOverflow(page), label).toBeLessThanOrEqual(0);
 }
 
 /** Which SuperApp features this server has on (a test skips while its feature is off). */
@@ -100,4 +106,43 @@ export async function topUp(request: APIRequestContext, cents: number) {
     data: { amount: 10_000 },
   });
   expect(response.status()).toBe(201);
+}
+
+/**
+ * Presses Tab up to `presses` times and returns the controls something
+ * else covered (a sticky bottom bar, the tab bar) as they took focus: the
+ * middle and the top and bottom edges of each are hit-tested. Stops after
+ * the control whose name matches `until`.
+ */
+export async function coveredWhileTabbing(
+  page: Page,
+  { presses, until }: { presses: number; until?: RegExp }
+): Promise<string[]> {
+  const covered: string[] = [];
+  for (let press = 0; press < presses; press++) {
+    await page.keyboard.press("Tab");
+    const focused = await page.evaluate(() => {
+      const element = document.activeElement as HTMLElement | null;
+      if (!element || element === document.body) return null;
+      const box = element.getBoundingClientRect();
+      const x = box.left + box.width / 2;
+      const hidden = [box.top + 2, box.top + box.height / 2, box.bottom - 2]
+        .map((y) => document.elementFromPoint(x, y))
+        .some(
+          (hit) =>
+            !hit ||
+            !(element.contains(hit) || element.closest("label")?.contains(hit))
+        );
+      const name =
+        element.getAttribute("aria-label") ??
+        (element as HTMLInputElement).labels?.[0]?.textContent ??
+        element.textContent ??
+        element.tagName;
+      return { name: name.trim().slice(0, 60), hidden };
+    });
+    if (!focused) continue;
+    if (focused.hidden) covered.push(focused.name);
+    if (until?.test(focused.name)) break;
+  }
+  return covered;
 }

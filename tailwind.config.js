@@ -26,6 +26,8 @@ module.exports = {
         like: token("like"),
         retweet: token("retweet"),
         danger: token("danger"),
+        // Danger text on a danger tint (a hovered or focused Delete item).
+        "danger-strong": token("danger-strong"),
         warning: token("warning"),
         // Tips (amber) and received credits (green).
         tip: token("tip"),

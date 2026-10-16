@@ -197,6 +197,19 @@ describe("MobileNav", () => {
       screen.queryByRole("button", { name: "Compose a Tweet" })
     ).toBeNull();
   });
+
+  it("keeps keyboard focus clear of the compose button while it shows", () => {
+    const padding = () =>
+      document.documentElement.style.getPropertyValue("scroll-padding-bottom");
+    const { unmount } = renderWithStore(<MobileNav />, { state: stateWith() });
+    // jsdom lays nothing out: the gap alone stands for the button's footprint.
+    expect(padding()).toBe("16px");
+    unmount();
+    expect(padding()).toBe("");
+
+    renderWithStore(<MobileNav />, { state: stateWith({ readOnly: true }) });
+    expect(padding()).toBe("");
+  });
 });
 
 describe("PageHeader account menu (phones)", () => {
