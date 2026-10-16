@@ -109,6 +109,8 @@ export const useAppDispatch = useDispatch.withTypes<AppDispatch>();
 export const useAppSelector = useSelector.withTypes<RootState>();
 
 let clientStore: AppStore | undefined;
+// Every store initializeStore made in this browser, newest in clientStore.
+const clientStores = new WeakSet<AppStore>();
 let lastInitialState: InitialState | undefined;
 let historyNavigation = false;
 
@@ -207,7 +209,17 @@ export function initializeStore(initialState?: InitialState): AppStore {
     );
   }
   lastInitialState = initialState;
+  clientStores.add(clientStore);
   return clientStore;
+}
+
+/**
+ * The store a navigation replaced `store` with, if any. React renders the
+ * new store only once the page commits; an await that resumes before that
+ * (a tip confirmed right after Back) must still act on the new one.
+ */
+export function latestStore(store: AppStore): AppStore {
+  return clientStore && clientStores.has(store) ? clientStore : store;
 }
 
 export function useStore(initialState?: InitialState): AppStore {

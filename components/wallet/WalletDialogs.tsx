@@ -1,11 +1,27 @@
-import { ReactNode } from "react";
+import { useAppSelector } from "../../store";
+import RequestDialog from "./RequestDialog";
+import SendDialog from "./SendDialog";
+import TipDialog from "./TipDialog";
+import TopUpDialog from "./TopUpDialog";
 
 /**
- * Slot (§12.3): the wallet lane's global dialogs, Send, Request, Add
- * credits and Tip (ui.dialog "send", "request", "topUp", "tip"; their
- * arguments are in ui.dialogArgs).
- * AppShell loads it on demand (next/dynamic, no SSR). This stub renders
- * nothing.
+ * Slot (§12.3): the wallet's global dialogs, Send, Request, Add credits and
+ * Tip (ui.dialog "send", "request", "topUp", "tip"; their arguments are in
+ * ui.dialogArgs, see dialogArgs.ts and TipDialog). AppShell loads this on
+ * demand (next/dynamic, no SSR). Nothing renders while the wallet is off or
+ * the demo is read-only: no money moves there.
  */
-const WalletDialogs: () => ReactNode = () => null;
-export default WalletDialogs;
+export default function WalletDialogs() {
+  const on = useAppSelector((state) => state.session.features.wallet);
+  const readOnly = useAppSelector((state) => state.session.readOnly);
+  if (!on || readOnly) return null;
+
+  return (
+    <>
+      <SendDialog />
+      <RequestDialog />
+      <TopUpDialog />
+      <TipDialog />
+    </>
+  );
+}
