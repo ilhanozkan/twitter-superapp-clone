@@ -152,6 +152,9 @@ test("a posted text story shows first in the tray and can be deleted", async ({
   await yours.getByRole("button", { name: "Your story", exact: true }).click();
   await expect(viewer(page)).toBeVisible();
   await viewer(page).getByRole("button", { name: "Pause" }).click();
+  // → does nothing until the viewer has this account's stories: wait for
+  // them, or every press below can land before they arrive.
+  await expect(position(page)).toHaveText(/^Story \d+ of \d+ by Ilhan Ozkan/);
   for (let step = 0; step < 10; step += 1) {
     if (await viewer(page).getByText(text).isVisible()) break;
     await page.keyboard.press("ArrowRight");
@@ -356,6 +359,9 @@ for (const theme of ["light", "dark"] as const) {
   test(`Home, the viewer and the composer have no serious axe violations (${theme})`, async ({
     page,
   }) => {
+    // Five full-page axe scans over Home (timeline, sidebars, tray) plus two
+    // page loads: about 15-20 s on a quiet machine, past 30 s on a slow runner.
+    test.setTimeout(90_000);
     await setTheme(page, theme);
     await page.goto("/");
     await expect(tray(page)).toBeVisible();
