@@ -70,3 +70,27 @@ export function compareOldestFirst(
   if (byDate !== 0) return byDate;
   return a.id < b.id ? -1 : a.id > b.id ? 1 : 0;
 }
+
+const CHANNEL_PREFIX = "channel-";
+
+/** Channel handles: 3 to 30 lower-case letters, digits or "_" (§4.6). */
+export const CHANNEL_HANDLE_PATTERN = /^[a-z0-9_]{3,30}$/;
+
+/**
+ * A channel's conversation: `channel-<handle>`. The handle is the id, so
+ * creating the conversation is what makes a handle unique.
+ */
+export function channelConversationId(handle: string): string {
+  return `${CHANNEL_PREFIX}${handle}`;
+}
+
+export function isChannelConversationId(id: string): boolean {
+  return id.startsWith(CHANNEL_PREFIX);
+}
+
+/** The handle a URL names, in the one case handles are stored in; null for anything else. */
+export function parseChannelHandle(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const handle = value.toLowerCase();
+  return CHANNEL_HANDLE_PATTERN.test(handle) ? handle : null;
+}

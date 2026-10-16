@@ -8,7 +8,7 @@ import { REQUEST_FIELDS } from "./walletQueries";
 // count are always computed here, never stored, so sending a message never
 // patches the conversation document (no hot spot).
 
-const party = (field: string) =>
+export const party = (field: string) =>
   `${field}{ "username": username, "fullname": coalesce(fullname, username), "image": image }`;
 
 /** A message document as `messageFromRow` reads it; `id` is the private id. */

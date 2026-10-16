@@ -80,7 +80,7 @@ requester (such fields are ignored).
 | `text`    | `text`, `tweet`, `story`           | Text. `tweet` is a shared Tweet `{ id, author, text }`, `null` once it is deleted or moderated. `story` is the story it replies to, `{ id, author, preview }`; `preview` is `null` once the story is gone. |
 | `payment` | `transferId`, `amount`, `note`     | Credits the author sent; the receipt is `/api/wallet/transfers/<transferId>`.                                                                                                                              |
 | `request` | `request`                          | A payment request as it is now: its `status` changes when it is paid, declined, cancelled or expires.                                                                                                      |
-| `removed` | `by` (`"author"` or `"moderator"`) | A removed channel message (channels ship in their own PR).                                                                                                                                                 |
+| `removed` | `by` (`"author"` or `"moderator"`) | A deleted channel message ([Channels API](channels.md)): "Message deleted" by its author, or "Message removed by a moderator".                                                                             |
 
 ## Reading
 
@@ -139,9 +139,12 @@ the first message is sent.
 
 Sends a message. `text` is sanitized like Tweet text and is 1–1,000
 characters, or empty when sharing a Tweet with `tweetId`. `storyId` makes
-it a reply to that story, which must be one you can see. Retrying with the
-same key answers the original `201` with `Idempotent-Replayed: true` and
-posts nothing again.
+it a reply to that story, which must be one you can see (a channel's
+`channel-<handle>` id drops it, as [its own route](channels.md) does).
+Retrying with the same key answers the original `201` with
+`Idempotent-Replayed: true` and posts nothing again. For a channel id,
+this route and `GET` follow the `channels` switch as well (404 while it is
+off, 503 while unconfigured).
 
 | Status | `code`                   | When                                             |
 | ------ | ------------------------ | ------------------------------------------------ |

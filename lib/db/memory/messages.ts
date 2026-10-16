@@ -84,6 +84,53 @@ interface Summary {
   unread: number;
 }
 
+/** A Tweet a message can show: it exists and isn't moderated. */
+function visibleTweetIn(
+  state: MemoryDeps["state"],
+  id: string
+): TweetRef | null {
+  const tweet = state.tweets.get(id);
+  return tweet && !tweet.blocked
+    ? { id: tweet.id, author: toAuthor(tweet.author), text: tweet.text }
+    : null;
+}
+
+/**
+ * Turns stored messages into what `viewer` sees, reading what they point at
+ * (Tweets, stories, payment requests) once. Channels resolve theirs with it
+ * too.
+ */
+export function createMemoryMessageResolver(
+  deps: MemoryDeps
+): (records: MessageRecord[], viewer: string) => Promise<IMessage[]> {
+  const { state, now } = deps;
+  return async (records, viewer) => {
+    const { tweetIds, storyIds, requestIds } = referencedIds(records);
+    const stories = await Promise.all(
+      storyIds.map((id) => deps.self().stories.getStory(id, viewer))
+    );
+    const at = now();
+    const refs: MessageRefs = {
+      tweets: new Map(
+        tweetIds.flatMap((id) => {
+          const tweet = visibleTweetIn(state, id);
+          return tweet ? [[id, tweet] as const] : [];
+        })
+      ),
+      stories: new Map(
+        stories.flatMap((story) => (story ? [[story.id, story] as const] : []))
+      ),
+      requests: new Map(
+        requestIds.flatMap((id) => {
+          const record = state.wallet.requests.get(id);
+          return record ? [[id, toPaymentRequest(record, at)] as const] : [];
+        })
+      ),
+    };
+    return toMessages(records, refs);
+  };
+}
+
 /**
  * Direct messages in memory. Writes that move money run inside the ledger's
  * synchronous critical section, so the transfer or request and its bubble
@@ -141,45 +188,10 @@ export const createMemoryMessages: (deps: MemoryDeps) => MessagesRepository = (
     return toAuthor(other.user);
   };
 
-  const visibleTweet = (id: string): TweetRef | null => {
-    const tweet = state.tweets.get(id);
-    return tweet && !tweet.blocked
-      ? { id: tweet.id, author: toAuthor(tweet.author), text: tweet.text }
-      : null;
-  };
-
+  const resolve = createMemoryMessageResolver(deps);
+  const visibleTweet = (id: string) => visibleTweetIn(state, id);
   const readStory = (id: string, viewer: string): Promise<IStory | null> =>
     deps.self().stories.getStory(id, viewer);
-
-  /** Resolves stored messages for `viewer`, reading what they point at once. */
-  const resolve = async (
-    records: MessageRecord[],
-    viewer: string
-  ): Promise<IMessage[]> => {
-    const { tweetIds, storyIds, requestIds } = referencedIds(records);
-    const stories = await Promise.all(
-      storyIds.map((id) => readStory(id, viewer))
-    );
-    const at = now();
-    const refs: MessageRefs = {
-      tweets: new Map(
-        tweetIds.flatMap((id) => {
-          const tweet = visibleTweet(id);
-          return tweet ? [[id, tweet] as const] : [];
-        })
-      ),
-      stories: new Map(
-        stories.flatMap((story) => (story ? [[story.id, story] as const] : []))
-      ),
-      requests: new Map(
-        requestIds.flatMap((id) => {
-          const record = state.wallet.requests.get(id);
-          return record ? [[id, toPaymentRequest(record, at)] as const] : [];
-        })
-      ),
-    };
-    return toMessages(records, refs);
-  };
 
   const resolveOne = async (record: MessageRecord, viewer: string) => {
     const [message] = await resolve([record], viewer);
