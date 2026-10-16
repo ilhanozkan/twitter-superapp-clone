@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1080" height="1920" viewBox="0 0 1080 1920" role="img" aria-label="A pistachio latte in a tall glass, a leaf drawn in the green foam">
+  <rect width="1080" height="1920" fill="#ecfccb"/>
+  <circle cx="540" cy="900" r="430" fill="#d9f99d"/>
+  <ellipse cx="540" cy="1370" rx="330" ry="56" fill="#3f6212" fill-opacity=".2"/>
+  <ellipse cx="540" cy="1340" rx="300" ry="44" fill="#f8fafc"/>
+  <path d="M370 640 H710 L670 1310 Q540 1350 410 1310Z" fill="#fefce8" fill-opacity=".9"/>
+  <path d="M378 760 H702 L672 1300 Q540 1338 408 1300Z" fill="#a3b18a"/>
+  <path d="M374 700 H706 L702 760 H378Z" fill="#f5f5dc"/>
+  <ellipse cx="540" cy="640" rx="170" ry="30" fill="#bef264"/>
+  <g fill="none" stroke="#f7fee7" stroke-width="10" stroke-linecap="round">
+    <path d="M540 668 V612"/><path d="M540 650 q-40 -6 -56 -26 M540 650 q40 -6 56 -26 M540 630 q-28 -6 -38 -20 M540 630 q28 -6 38 -20"/>
+  </g>
+  <g fill="#65a30d"><circle cx="300" cy="1240" r="16"/><circle cx="790" cy="1180" r="12"/><circle cx="820" cy="1250" r="9"/></g>
+</svg>
