@@ -35,7 +35,7 @@ async function placeOrder(
   request: APIRequestContext,
   business: string,
   productId: string
-): Promise<{ id: string; code: string; total: number }> {
+): Promise<{ id: string; code: string; total: number; acceptAt: string }> {
   const menu = await (await request.get(`/api/businesses/${business}`)).json();
   const product = menu.menu
     .flatMap(
@@ -56,7 +56,12 @@ async function placeOrder(
   });
   expect(response.status()).toBe(201);
   const { order } = await response.json();
-  return { id: order.id, code: order.code, total: order.total };
+  return {
+    id: order.id,
+    code: order.code,
+    total: order.total,
+    acceptAt: order.acceptAt,
+  };
 }
 
 /** Cancels (and refunds) an order still in progress, as the business. */
@@ -220,29 +225,49 @@ test("cancelling within the window refunds in full", async ({
   page,
   request,
 }) => {
-  await topUp(request, 650);
-  const before = await available(request);
-  const order = await placeOrder(request, "kizilaykahve", "seed-p-kk-latte");
-  expect(await available(request)).toBe(before - order.total);
-
-  await page.goto(`/orders/${order.id}`);
-  await page.getByRole("button", { name: "Cancel order" }).click();
+  // The buyer's window is 15 s of real time (it does not scale), so a
+  // stalled runner can see it close before the confirm lands. Only then,
+  // refund that order as the business and try again with a fresh one.
+  test.setTimeout(90_000);
   const dialog = page.getByRole("dialog", { name: "Cancel this order?" });
-  await expect(dialog).toContainText("You get 6.50 credits back in full.");
-  await dialog.getByRole("button", { name: "Cancel order" }).click();
-
   const headline = page.getByRole("heading", {
     level: 2,
     name: "You cancelled",
   });
-  await expect(headline).toBeFocused();
-  await expect(
-    page.getByText("6.50 credits refunded to your wallet")
-  ).toBeVisible();
-  await expect(page.getByRole("button", { name: "Cancel order" })).toHaveCount(
-    0
-  );
-  expect(await available(request)).toBe(before);
+  for (let attempt = 1; ; attempt++) {
+    await topUp(request, 650);
+    const before = await available(request);
+    const order = await placeOrder(request, "kizilaykahve", "seed-p-kk-latte");
+    expect(await available(request)).toBe(before - order.total);
+    const acceptAt = Date.parse(order.acceptAt);
+
+    try {
+      await page.goto(`/orders/${order.id}`);
+      await page
+        .getByRole("button", { name: "Cancel order" })
+        .click({ timeout: Math.max(1, acceptAt - Date.now()) });
+      await expect(dialog).toContainText("You get 6.50 credits back in full.");
+      await dialog.getByRole("button", { name: "Cancel order" }).click();
+      await expect(headline.or(dialog.getByRole("alert"))).toBeVisible();
+      if (!(await headline.isVisible())) {
+        throw new Error(await dialog.getByRole("alert").innerText());
+      }
+    } catch (error) {
+      if (attempt === 3 || Date.now() < acceptAt) throw error;
+      await cancelAsBusiness(request, order.id);
+      continue;
+    }
+
+    await expect(headline).toBeFocused();
+    await expect(
+      page.getByText("6.50 credits refunded to your wallet")
+    ).toBeVisible();
+    await expect(
+      page.getByRole("button", { name: "Cancel order" })
+    ).toHaveCount(0);
+    expect(await available(request)).toBe(before);
+    return;
+  }
 });
 
 test("an order to @superapp is cancelled and refunded on the Business board", async ({
@@ -294,10 +319,12 @@ test("the Demo bot button adds an order to the board", async ({ page }) => {
   await page
     .getByRole("button", { name: "Simulate a customer order · Demo bot" })
     .click();
-  await expect(demoRows).toHaveCount(before + 1);
+  // The toast dismisses itself after 4 s of real time: check it first, before
+  // the row count's retry backoff can use up that window on a slow runner.
   await expect(
     page.getByRole("status").filter({ hasText: /Demo bot placed order #/ })
   ).toBeVisible();
+  await expect(demoRows).toHaveCount(before + 1);
   await expect(demoRows.first()).toContainText("Demo Customer (bot)");
 });
 

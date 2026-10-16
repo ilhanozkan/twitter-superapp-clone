@@ -18,13 +18,17 @@ const DEFAULT_ENV = {
   SUPERAPP_TIME_SCALE: "",
 };
 
-function server(projectPort: number, env: Record<string, string>) {
+function server(
+  projectPort: number,
+  env: Record<string, string>,
+  readyPath = "/api/health"
+) {
   return {
     // Playwright's request agent reuses idle sockets indefinitely, but next
     // start closes them after 5 s: a request sent at that moment fails with
     // "socket hang up". Keep connections open longer than any idle gap.
     command: `npx next start -p ${projectPort} --keepAliveTimeout 600000`,
-    url: `${baseURL(projectPort)}/api/health`,
+    url: `${baseURL(projectPort)}${readyPath}`,
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
     env: { ...DEFAULT_ENV, ...env },
@@ -72,6 +76,11 @@ export default defineConfig({
       DEMO_USERNAME: "sarahcodes",
       SUPERAPP_TIME_SCALE: "60",
     }),
-    server(ports.readonly, { READ_ONLY: "true" }),
+    // The demo store is seeded, and its clock starts, on the first request
+    // that opens it; /api/health does. This server runs at scale 1 and its
+    // specs run last, so a probe that seeds it at job start lets the seeded
+    // orders deliver (seed-o03 after ~141 min) before they're checked. The
+    // places list answers without opening the store.
+    server(ports.readonly, { READ_ONLY: "true" }, "/api/places"),
   ],
 });
